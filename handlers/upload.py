@@ -106,10 +106,12 @@ async def batch_done_cmd(client: Client, message: Message):
             )
             return
 
+        bot = client.me or await client.get_me()
         await database.save_file_link(
             token=token,
             files=files,
             owner_id=user_id,
+            bot_id=bot.id,
         )
 
         # Delete status message
@@ -188,6 +190,13 @@ async def batch_cancel_cmd(client: Client, message: Message):
 )
 async def file_uploader(client: Client, message: Message):
     user_id = message.from_user.id
+
+    # Intercept marketplace product upload files
+    user_doc = await database.get_user(user_id)
+    if user_doc and user_doc.get("state", "").startswith("market_"):
+        from handlers.marketplace import handle_marketplace_state
+        await handle_marketplace_state(client, message, user_id, user_doc["state"], user_doc)
+        return
 
     # Extract file details
     file_id, file_unique_id, file_name, file_type, file_size, caption = (

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -35,7 +37,7 @@ async def editlink_cmd_handler(client: Client, message: Message):
         return
 
     is_owner = file_doc.get("owner_id") == user_id
-    is_admin = await database.is_admin(user_id)
+    is_admin = await database.is_admin(user_id, client)
     if not is_owner and not is_admin:
         await message.reply_text("❌ You do not have permission to edit this link.")
         return
@@ -67,7 +69,9 @@ async def edit_link_handler(client: Client, message: Message):
                 "- View details: `/edit_link <token>`\n"
                 "- Append files: `/edit_link <token> add`\n"
                 "- Delete index: `/edit_link <token> del <index>`\n"
-                "- Delete link: `/edit_link <token> delete`"
+                "- Delete link: `/edit_link <token> delete`\n"
+                "- Set Stars price: `/edit_link <token> price <stars>`\n"
+                "- Toggle Premium-only: `/edit_link <token> premium <true/false>`"
             )
             return
 
@@ -80,6 +84,13 @@ async def edit_link_handler(client: Client, message: Message):
             await message.reply_text(f"❌ Share link with token `{token}` not found.")
             return
 
+        # Double check permissions
+        is_owner = file_doc.get("owner_id") == user_id
+        is_admin = await database.is_admin(user_id, client)
+        if not is_owner and not is_admin:
+            await message.reply_text("❌ You do not have permission to edit this link.")
+            return
+
         # Handle simple view
         if len(args) == 2:
             files = file_doc.get("files", [])
@@ -88,11 +99,18 @@ async def edit_link_handler(client: Client, message: Message):
             username = bot.username or "bot"
             link = f"https://t.me/{username}?start={token}"
 
+            price = file_doc.get("price", 0)
+            is_premium_only = file_doc.get("is_premium_only", False)
+            price_text = f"{price} ⭐️" if price > 0 else "Free"
+            premium_text = "Yes 🌟" if is_premium_only else "No"
+
             text = (
                 f"🔗 **Link Info (`{token}`)**\n"
                 f"URL: `{link}`\n"
                 f"👁 **Views/Downloads:** `{file_doc.get('views', 0)}`\n"
-                f"📦 **Total Files:** `{len(files)}`\n\n"
+                f"📦 **Total Files:** `{len(files)}`\n"
+                f"💰 **Price:** `{price_text}`\n"
+                f"🌟 **Premium Only:** `{premium_text}`\n\n"
                 f"**File List:**\n"
             )
 
@@ -107,7 +125,9 @@ async def edit_link_handler(client: Client, message: Message):
                 "\n🛠 **Actions:**\n"
                 f"• Append file: `/edit_link {token} add`\n"
                 f"• Delete file at index: `/edit_link {token} del <index>`\n"
-                f"• Delete whole link: `/edit_link {token} delete`"
+                f"• Delete whole link: `/edit_link {token} delete`\n"
+                f"• Set Stars price: `/edit_link {token} price <stars>`\n"
+                f"• Toggle Premium-only: `/edit_link {token} premium <true/false>`"
             )
             await message.reply_text(text)
             return
@@ -184,6 +204,44 @@ async def edit_link_handler(client: Client, message: Message):
                 f"📦 **Total Files remaining:** {len(files)}\n"
                 f"🔗 Link remains permanent: `/edit_link {token}`"
             )
+            return
+
+        # Handle set price
+        if action == "price":
+            if len(args) < 4:
+                await message.reply_text(f"⚠️ Usage: `/edit_link {token} price <stars>`")
+                return
+            try:
+                price = int(args[3])
+                if price < 0:
+                    raise ValueError
+            except ValueError:
+                await message.reply_text("❌ Price must be a valid positive integer.")
+                return
+
+            await database.set_link_price(token, price)
+            price_text = f"{price} Stars ⭐️" if price > 0 else "Free"
+            await message.reply_text(f"✅ **Price updated successfully!**\nLink price is now: **{price_text}**.")
+            return
+
+        # Handle toggle premium
+        if action == "premium":
+            if len(args) < 4:
+                await message.reply_text(f"⚠️ Usage: `/edit_link {token} premium <true/false>`")
+                return
+
+            val = args[3].lower().strip()
+            if val in ["true", "yes", "on", "1"]:
+                is_prem = True
+            elif val in ["false", "no", "off", "0"]:
+                is_prem = False
+            else:
+                await message.reply_text("❌ Value must be true or false.")
+                return
+
+            await database.set_link_premium_only(token, is_prem)
+            status_text = "Premium Only 🌟" if is_prem else "All Users (Free/Regular)"
+            await message.reply_text(f"✅ **Premium access updated!**\nLink access is now: **{status_text}**.")
             return
 
         await message.reply_text(

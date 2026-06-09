@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 async def check_sub_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     raw_token = callback_query.matches[0].group(1)
+    bypass_monetization = False
+
+    if raw_token.startswith("unl_"):
+        raw_token = raw_token.replace("unl_", "", 1)
+        bypass_monetization = True
 
     # Robust token parsing if the token in the callback_data contains a URL or parameter
     if "start=" in raw_token:
@@ -65,7 +70,7 @@ async def check_sub_callback(client: Client, callback_query: CallbackQuery):
 
     # Delete the sub join message and send files
     await callback_query.message.delete()
-    await deliver_files(client, callback_query.message.chat.id, file_doc)
+    await deliver_files(client, callback_query.message.chat.id, file_doc, bypass_monetization=bypass_monetization)
 
 
 @app.on_callback_query(filters.regex(r"^batch_(add|close|generate)$"))
@@ -132,10 +137,12 @@ async def batch_callback_handler(client: Client, callback_query: CallbackQuery):
             else:
                 token = secrets.token_urlsafe(8)
 
+            bot = client.me or await client.get_me()
             await database.save_file_link(
                 token=token,
                 files=files,
                 owner_id=user_id,
+                bot_id=bot.id,
             )
             await database.delete_batch(user_id)
             await callback_query.answer("✅ Share link generated successfully!")
@@ -145,7 +152,6 @@ async def batch_callback_handler(client: Client, callback_query: CallbackQuery):
             except Exception:
                 pass
 
-            bot = client.me or await client.get_me()
             username = bot.username or "bot"
             share_link = f"https://t.me/{username}?start={token}"
             await client.send_message(

@@ -10,6 +10,9 @@ async def save_file_link(
     token: str,
     files: list,
     owner_id: int,
+    price: int = 0,
+    is_premium_only: bool = False,
+    bot_id: int | None = None,
 ):
     """Save a new shareable link with associated files metadata."""
     file_doc = {
@@ -23,6 +26,9 @@ async def save_file_link(
         "expires_at": None,
         "password_hash": None,
         "label": None,
+        "price": price,
+        "is_premium_only": is_premium_only,
+        "bot_id": bot_id,
     }
     await files_col.insert_one(file_doc)
 
@@ -102,7 +108,7 @@ async def set_link_expiry(token: str, expires_at: datetime.datetime | None):
 # --- FORCE JOIN CHAT HELPERS ---
 
 
-async def add_force_sub_channel(chat_id_or_username, title: str, invite_link: str):
+async def add_force_sub_channel(chat_id_or_username, title: str, invite_link: str, bot_id: int | None = None):
     """Add a channel to the force subscribe list in DB."""
     await channels_col.update_one(
         {"_id": chat_id_or_username},
@@ -110,6 +116,7 @@ async def add_force_sub_channel(chat_id_or_username, title: str, invite_link: st
             "$set": {
                 "title": title,
                 "invite_link": invite_link,
+                "bot_id": bot_id,
                 "added_at": datetime.datetime.now(datetime.timezone.utc),
             }
         },
@@ -117,9 +124,14 @@ async def add_force_sub_channel(chat_id_or_username, title: str, invite_link: st
     )
 
 
-async def get_force_sub_channels() -> list:
+async def get_force_sub_channels(bot_id: int | None = None) -> list:
     """Get all force subscription channels."""
-    cursor = channels_col.find({})
+    # Find channels where bot_id matches or is missing (if bot_id is None)
+    if bot_id is None:
+        query = {"bot_id": {"$in": [None, False]}}
+    else:
+        query = {"bot_id": bot_id}
+    cursor = channels_col.find(query)
     return [doc async for doc in cursor]
 
 
@@ -127,3 +139,13 @@ async def delete_force_sub_channel(chat_id_or_username) -> bool:
     """Remove a channel from force subscribe list."""
     result = await channels_col.delete_one({"_id": chat_id_or_username})
     return result.deleted_count > 0
+
+
+async def set_link_price(token: str, price: int):
+    """Set custom price in Stars for a shared link."""
+    await files_col.update_one({"token": token}, {"$set": {"price": price}})
+
+
+async def set_link_premium_only(token: str, is_premium_only: bool):
+    """Toggle premium-only access for a shared link."""
+    await files_col.update_one({"token": token}, {"$set": {"is_premium_only": is_premium_only}})

@@ -9,6 +9,7 @@ from database.mongo import (
     password_settings_col,
     password_entries_col,
     active_deliveries_col,
+    ad_drafts_col,
 )
 
 logger = logging.getLogger(__name__)
@@ -158,11 +159,17 @@ async def delete_password_setting_session(user_id: int):
     await password_settings_col.delete_one({"_id": user_id})
 
 
-async def create_password_entry_session(user_id: int, code: str):
+async def create_password_entry_session(user_id: int, code: str, bypass_monetization: bool = False):
     """Save that this user is entering a password for a specific code."""
     await password_entries_col.update_one(
         {"_id": user_id},
-        {"$set": {"code": code, "created_at": datetime.datetime.now(datetime.timezone.utc)}},
+        {
+            "$set": {
+                "code": code,
+                "bypass_monetization": bypass_monetization,
+                "created_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        },
         upsert=True,
     )
 
@@ -241,6 +248,25 @@ async def finish_delivery(user_id: int, code: str):
         logger.error(
             f"Failed to finish delivery for user {user_id} and code {code}: {e}"
         )
+
+
+# --- AD DRAFT SESSION HELPERS ---
+
+
+async def upsert_ad_draft(user_id: int, data: dict) -> None:
+    await ad_drafts_col.update_one(
+        {"_id": user_id},
+        {"$set": data},
+        upsert=True,
+    )
+
+
+async def get_ad_draft(user_id: int) -> dict | None:
+    return await ad_drafts_col.find_one({"_id": user_id})
+
+
+async def clear_ad_draft(user_id: int) -> None:
+    await ad_drafts_col.delete_one({"_id": user_id})
 
 
 async def clear_active_deliveries():

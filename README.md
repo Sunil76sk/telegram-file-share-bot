@@ -1,8 +1,10 @@
-# Telegram File Share Bot
+# Telegram File Share Bot — Creator Content Delivery Platform
 
-A production-ready Telegram bot built with **Python 3.11+**, **Pyrogram 2.x**, **MongoDB (Motor)**, and **AsyncIO**. It allows administrators to upload single files or create grouped file batches, generate permanent shareable links, enforce access controls (such as channel subscriptions), track download/view analytics, and manage existing shared links dynamically without changing their tokens.
+> [!NOTE]
+> **Vision**: Build a creator-focused content delivery platform that combines **File Sharing**, **Audience Growth**, **Analytics**, **Subscription Revenue**, and **Digital Commerce** into one scalable Telegram ecosystem capable of generating recurring revenue while remaining compliant with platform policies.
 
 ---
+
 
 ## Features
 

@@ -1,5 +1,8 @@
 import re
 import logging
+import urllib.request
+import json
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant
@@ -9,13 +12,14 @@ import database
 logger = logging.getLogger(__name__)
 
 
-def format_size(bytes_size: int) -> str:
+def format_size(bytes_size: int | float) -> str:
     """Format bytes into human-readable size."""
+    size = float(bytes_size)
     for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if bytes_size < 1024.0:
-            return f"{bytes_size:.2f} {unit}"
-        bytes_size /= 1024.0
-    return f"{bytes_size:.2f} PB"
+        if size < 1024.0:
+            return f"{size:.2f} {unit}"
+        size /= 1024.0
+    return f"{size:.2f} PB"
 
 
 def is_valid_token(token: str) -> bool:
@@ -78,16 +82,25 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
     Returns a list of dicts: [{"chat_id": ..., "title": ..., "invite_link": ...}] for channels they haven't joined.
     """
     # Exclude admins from force join checks
-    if await database.is_admin(user_id):
+    if await database.is_admin(user_id, client):
         return []
 
     not_joined = []
 
-    # 1. Fetch static channels from config
-    static_channels = config.FORCE_SUB_CHATS
+    # Get bot details to determine if we are running the main bot or a sub-bot
+    bot_me = client.me or await client.get_me()
+    is_main_bot = True
+    bot_id = bot_me.id
+    
+    sub_bot_doc = await database.sub_bots_col.find_one({"username": bot_me.username})
+    if sub_bot_doc:
+        is_main_bot = False
 
-    # 2. Fetch dynamic channels from database
-    db_channels = await database.get_force_sub_channels()
+    # 1. Fetch static channels from config (only for main bot)
+    static_channels = config.FORCE_SUB_CHATS if is_main_bot else []
+
+    # 2. Fetch dynamic channels from database (specific to this bot)
+    db_channels = await database.get_force_sub_channels(None if is_main_bot else bot_id)
 
     # Combine lists. Ensure no duplicate checking by using a set of IDs/usernames
     checked_chats = set()
@@ -136,10 +149,10 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
                 not_joined.append(
                     {
                         "chat_id": chat_id_or_username,
-                        "title": chat_info.title,
+                        "title": getattr(chat_info, "title", str(chat_id_or_username)),
                         "invite_link": invite_link
-                        or chat_info.invite_link
-                        or f"https://t.me/{chat_info.username}",
+                        or getattr(chat_info, "invite_link", None)
+                        or (f"https://t.me/{getattr(chat_info, 'username')}" if getattr(chat_info, "username", None) else ""),
                     }
                 )
         except UserNotParticipant:
@@ -149,14 +162,14 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
                     f"https://t.me/{chat_id_or_username.replace('@', '')}"
                     if isinstance(chat_id_or_username, str)
                     and not chat_id_or_username.startswith("-")
-                    else chat_info.invite_link
+                    else getattr(chat_info, "invite_link", None)
                 )
                 not_joined.append(
                     {
                         "chat_id": chat_id_or_username,
-                        "title": chat_info.title,
+                        "title": getattr(chat_info, "title", str(chat_id_or_username)),
                         "invite_link": invite_link
-                        or f"https://t.me/{chat_info.username}",
+                        or (f"https://t.me/{getattr(chat_info, 'username')}" if getattr(chat_info, "username", None) else ""),
                     }
                 )
             except Exception as get_chat_err:
@@ -187,11 +200,11 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
     return not_joined
 
 
-async def admin_check(_, __, message):
+async def admin_check(_, client: Client, message: Message):
     """Custom filter to check if the sender is an administrator (static or dynamic)."""
     if not message or not message.from_user:
         return False
-    return await database.is_admin(message.from_user.id)
+    return await database.is_admin(message.from_user.id, client)
 
 
 async def banned_check(_, __, message):
@@ -203,3 +216,51 @@ async def banned_check(_, __, message):
 
 admin_filter = filters.create(admin_check)
 banned_filter = filters.create(banned_check)
+
+
+async def call_telegram_api(client: Client, method: str, params: dict) -> dict:
+    """Make an asynchronous HTTP POST request to the Telegram Bot API."""
+    bot_token = getattr(client, "bot_token", None) or config.BOT_TOKEN
+    url = f"https://api.telegram.org/bot{bot_token}/{method}"
+    
+    def _call():
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(params).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+            
+    try:
+        return await asyncio.to_thread(_call)
+    except Exception as e:
+        logger.error(f"Error calling Telegram API method {method}: {e}")
+        return {"ok": False, "description": str(e)}
+
+
+async def send_stars_invoice(client: Client, chat_id: int, title: str, description: str, payload: str, amount: int) -> bool:
+    """Send a Telegram Stars invoice to the user."""
+    params = {
+        "chat_id": chat_id,
+        "title": title,
+        "description": description,
+        "payload": payload,
+        "provider_token": "",  # Empty for Telegram Stars
+        "currency": "XTR",
+        "prices": [{"label": title, "amount": amount}]
+    }
+    res = await call_telegram_api(client, "sendInvoice", params)
+    return res.get("ok", False)
+
+
+async def answer_pre_checkout(client: Client, pre_checkout_query_id: str, ok: bool, error_message: str | None = None) -> bool:
+    """Answer pre checkout query."""
+    params = {
+        "pre_checkout_query_id": pre_checkout_query_id,
+        "ok": ok
+    }
+    if error_message:
+        params["error_message"] = error_message
+    res = await call_telegram_api(client, "answerPreCheckoutQuery", params)
+    return res.get("ok", False)
