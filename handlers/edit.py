@@ -72,6 +72,8 @@ async def edit_link_handler(client: Client, message: Message):
             return
 
         token = args[1].strip()
+        if "start=" in token:
+            token = token.split("start=")[1].split("&")[0]
         file_doc = await database.get_file_link(token)
 
         if not file_doc:

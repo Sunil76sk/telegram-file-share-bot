@@ -147,6 +147,7 @@ async def broadcast_handler(client: Client, message: Message):
     if not reply:
         text_parts = message.text.split(None, 1)
         if len(text_parts) < 2:
+            is_broadcasting = False
             await message.reply_text(
                 "⚠️ Please reply to a message or provide text to broadcast.\nUsage: `/broadcast Hello Users` or reply to a post with `/broadcast`."
             )
@@ -157,6 +158,7 @@ async def broadcast_handler(client: Client, message: Message):
     total_users = len(all_users)
 
     if total_users == 0:
+        is_broadcasting = False
         await message.reply_text("❌ No registered users to broadcast to.")
         return
 
