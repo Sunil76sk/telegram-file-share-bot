@@ -19,7 +19,15 @@ logger = logging.getLogger(__name__)
 @app.on_callback_query(filters.regex(r"^checksub_(.+)"))
 async def check_sub_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
-    token = callback_query.matches[0].group(1)
+    raw_token = callback_query.matches[0].group(1)
+
+    # Robust token parsing if the token in the callback_data contains a URL or parameter
+    if "start=" in raw_token:
+        token = raw_token.split("start=")[1].split("&")[0]
+    elif "/" in raw_token:
+        token = raw_token.split("/")[-1].split("?")[0]
+    else:
+        token = raw_token
 
     # Check if user is banned
     if await database.is_banned(user_id):

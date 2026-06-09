@@ -101,8 +101,9 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
 
         try:
             member = await client.get_chat_member(chat_id, user_id)
-            # Check if user is kicked or left
-            if member.status in ["kicked", "left"]:
+            # Check if user is kicked or left (using string conversion for compatibility with Pyrogram v1/v2 enums)
+            member_status = str(member.status).split(".")[-1].lower()
+            if member_status in ["kicked", "left", "banned"]:
                 not_joined.append(
                     {"chat_id": chat_id, "title": title, "invite_link": invite_link}
                 )
@@ -123,7 +124,8 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
 
         try:
             member = await client.get_chat_member(chat_id_or_username, user_id)
-            if member.status in ["kicked", "left"]:
+            member_status = str(member.status).split(".")[-1].lower()
+            if member_status in ["kicked", "left", "banned"]:
                 invite_link = (
                     f"https://t.me/{chat_id_or_username.replace('@', '')}"
                     if isinstance(chat_id_or_username, str)

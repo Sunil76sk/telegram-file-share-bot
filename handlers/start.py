@@ -7,7 +7,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from bot import app
 import database
 import config
-from utils.helpers import get_not_subscribed_channels
+from utils.helpers import get_not_subscribed_channels, is_valid_token
 from utils.locks import user_locks
 from utils.security import verify_password, hash_password
 from utils.delivery import deliver_files
@@ -68,7 +68,14 @@ async def start_handler(client: Client, message: Message):
         return
 
     # Handle /start <token> payload
-    token = text_split[1].strip()
+    payload = text_split[1].strip()
+    if "start=" in payload:
+        token = payload.split("start=")[1].split("&")[0]
+    elif "/" in payload:
+        token = payload.split("/")[-1].split("?")[0]
+    else:
+        token = payload
+
     file_doc = await database.get_file_link(token)
 
     if not file_doc:
@@ -236,3 +243,65 @@ async def text_message_handler(client: Client, message: Message):
                 reply_markup=buttons,
             )
             return
+
+        # 3. Check if user sent a shareable link or raw token
+        token = None
+        if "start=" in text:
+            token = text.split("start=")[1].split("&")[0].strip()
+        elif "t.me/" in text:
+            token = text.split("/")[-1].split("?")[0].strip()
+        elif is_valid_token(text):
+            if await database.get_file_link(text):
+                token = text
+
+        if token:
+            file_doc = await database.get_file_link(token)
+            if file_doc:
+                # Check if expired
+                expires_at = file_doc.get("expires_at")
+                if expires_at and datetime.datetime.now(datetime.timezone.utc) > expires_at:
+                    await message.reply_text("❌ This file link has expired.")
+                    return
+
+                # Increment view counter
+                await database.increment_link_views(token, user_id)
+
+                # Check if password protected
+                password_hash = file_doc.get("password_hash")
+                if password_hash:
+                    await database.create_password_entry_session(user_id, token)
+                    await message.reply_text(
+                        "🔒 **Password Protected Link**\n\n"
+                        "This link is protected by a password. Please enter the password below to access the files."
+                    )
+                    return
+
+                # Check force subscription
+                not_joined = await get_not_subscribed_channels(client, user_id)
+                if not_joined:
+                    buttons = []
+                    for index, channel in enumerate(not_joined, start=1):
+                        btn_label = (
+                            "📢 Join Channel"
+                            if len(not_joined) == 1
+                            else f"📢 Join Channel {index}"
+                        )
+                        buttons.append(
+                            [InlineKeyboardButton(btn_label, url=channel["invite_link"])]
+                        )
+
+                    buttons.append(
+                        [InlineKeyboardButton("🔄 Try Again", callback_data=f"checksub_{token}")]
+                    )
+
+                    await message.reply_text(
+                        "⚠️ **Access Denied!**\n\n"
+                        "You must join our channel before you can download this file. "
+                        "Please join the channel below and click Try Again to proceed.",
+                        reply_markup=InlineKeyboardMarkup(buttons),
+                    )
+                    return
+
+                # Deliver the files
+                await deliver_files(client, message.chat.id, file_doc)
+                return
