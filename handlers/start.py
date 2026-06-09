@@ -130,7 +130,7 @@ async def start_handler(client: Client, message: Message):
 @app.on_message(
     filters.private
     & filters.text
-    & ~filters.command(["start", "batch", "done", "cancel", "editlink", "edit_link"])
+    & ~filters.command(["start", "batch", "done", "cancel", "editlink", "edit_link", "stats", "broadcast", "ban", "unban", "add_channel", "del_channel", "channels", "add_admin", "del_admin"])
 )
 async def text_message_handler(client: Client, message: Message):
     user_id = message.from_user.id
