@@ -1,0 +1,38 @@
+name: Run Bot (Long-lived)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run Bot
+      env:
+        API_ID: ${{ secrets.API_ID }}
+        API_HASH: ${{ secrets.API_HASH }}
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        MONGO_URI: ${{ secrets.MONGO_URI }}
+        DB_NAME: ${{ secrets.DB_NAME }}
+        ADMIN_IDS: ${{ secrets.ADMIN_IDS }}
+        FORCE_SUB_CHATS: ${{ secrets.FORCE_SUB_CHATS }}
+        AUTO_DELETE_SECONDS: ${{ secrets.AUTO_DELETE_SECONDS }}
+      run: |
+        python app.py
