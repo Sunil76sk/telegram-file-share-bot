@@ -63,8 +63,6 @@ async def premium_command_handler(client: Client, message: Message):
         return
 
     expiry_str = await database.get_premium_expiry_str(user_id)
-    await database.get_user_premium_tier(user_id)
-
     benefits = (
         "🌟 **Premium Membership Perks:**\n\n"
         "🥈 **Silver Tier Perks:**\n"

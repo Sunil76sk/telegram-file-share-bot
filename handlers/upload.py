@@ -127,7 +127,6 @@ async def batch_done_cmd(client: Client, message: Message):
 
         await database.delete_batch(user_id)
 
-        bot = client.me or await client.get_me()
         username = bot.username or "bot"
         share_link = f"https://t.me/{username}?start={token}"
 

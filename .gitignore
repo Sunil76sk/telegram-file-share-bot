@@ -28,3 +28,6 @@ Thumbs.db
 
 # Agent files
 .agents/
+
+# Scratch files
+scratch/

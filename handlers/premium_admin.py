@@ -268,7 +268,6 @@ async def catalog_command_handler(client: Client, message: Message):
 
     for item in items:
         status_symbol = "🟢" if item.get("is_active", True) else "🔴"
-        "Active" if item.get("is_active", True) else "Inactive"
         req_tier = item.get("tier_required") or "None"
 
         info = (
