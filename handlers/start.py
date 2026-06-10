@@ -742,3 +742,14 @@ async def text_message_handler(client: Client, message: Message):
                     bypass_monetization=bypass_monetization,
                 )
                 return
+
+    # Fallback: unrecognized text
+    await message.reply_text(
+        "👋 **Hello!**\n\n"
+        "I am the File Share Bot. I can generate permanent shareable links for files stored on Telegram.\n\n"
+        "📤 **Send me a file** to generate a sharing link.\n"
+        "📋 Use **/batch** to upload multiple files.\n"
+        "💰 Use **/premium** to view subscription plans.\n"
+        "🛍 Use **/store** to browse the premium catalog.\n\n"
+        "Type **/start** to see all available commands."
+    )
