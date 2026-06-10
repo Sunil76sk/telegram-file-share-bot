@@ -21,15 +21,10 @@ class SaaSRunner:
         )  # Yield control to let Pyrogram tasks register handlers
 
         EXCLUDED_MODULES = {
-            "handlers.payment",
-            "handlers.premium",
-            "handlers.referral",
-            "handlers.saas",
             "handlers.funnel",
             "handlers.ads",
             "handlers.analytics",
             "handlers.premium_admin",
-            "handlers.marketplace",
         }
 
         for group, handlers in source_client.dispatcher.groups.items():
