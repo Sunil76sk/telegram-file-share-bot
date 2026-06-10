@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 @app.on_message(
     filters.command("start")
     & filters.private
-    & ~filters.create(lambda _, __, m: m.text is None)
+    & ~filters.create(lambda _, __, m: m.text is None),
+    group=0,
 )
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
@@ -46,6 +47,7 @@ async def start_handler(client: Client, message: Message):
     # 2. Check if user is banned
     if await database.is_banned(user_id):
         await message.reply_text("⛔️ You have been banned from using this bot.")
+        message.stop_propagation()
         return
 
     # Parse arguments
@@ -96,6 +98,7 @@ async def start_handler(client: Client, message: Message):
         campaign = await database.get_campaign(campaign_id)
         if campaign:
             await show_campaign_detail(client, message, campaign_id)
+            message.stop_propagation()
             return
         # If campaign not found, fall through to normal payload handling
 
@@ -146,6 +149,7 @@ async def start_handler(client: Client, message: Message):
             )
 
         await message.reply_text(welcome_text)
+        message.stop_propagation()
         return
 
     # Handle /start <token> payload
@@ -172,9 +176,11 @@ async def start_handler(client: Client, message: Message):
             from handlers.marketplace import show_product_card
 
             await show_product_card(client, message.chat.id, product, user_id)
+            message.stop_propagation()
             return
         else:
             await message.reply_text("❌ Product not found or deleted.")
+            message.stop_propagation()
             return
 
     file_doc = await database.get_file_link(token)
@@ -183,12 +189,14 @@ async def start_handler(client: Client, message: Message):
         await message.reply_text(
             "❌ The file link you followed is invalid, expired, or has been deleted by an administrator."
         )
+        message.stop_propagation()
         return
 
     # Check if expired
     expires_at = file_doc.get("expires_at")
     if expires_at and datetime.datetime.now(datetime.timezone.utc) > expires_at:
         await message.reply_text("❌ This file link has expired.")
+        message.stop_propagation()
         return
 
     # Increment view counter
@@ -219,6 +227,7 @@ async def start_handler(client: Client, message: Message):
                             ]
                         ),
                     )
+                    message.stop_propagation()
                     return
 
                 # Check tier requirement if there's a catalog item linked to this token
@@ -243,6 +252,7 @@ async def start_handler(client: Client, message: Message):
                                 ]
                             ),
                         )
+                        message.stop_propagation()
                         return
                     elif req_tier == "silver" and user_tier not in ["silver", "gold"]:
                         await message.reply_text(
@@ -259,6 +269,7 @@ async def start_handler(client: Client, message: Message):
                                 ]
                             ),
                         )
+                        message.stop_propagation()
                         return
 
             # 2. Pay-to-unlock check
@@ -280,6 +291,7 @@ async def start_handler(client: Client, message: Message):
                         await message.reply_text(
                             "❌ Failed to generate payment invoice. Please try again."
                         )
+                    message.stop_propagation()
                     return
 
     # Check if password protected
@@ -292,6 +304,7 @@ async def start_handler(client: Client, message: Message):
             "🔒 **Password Protected Link**\n\n"
             "This link is protected by a password. Please enter the password below to access the files."
         )
+        message.stop_propagation()
         return
 
     # 3. Check force subscription
@@ -319,15 +332,17 @@ async def start_handler(client: Client, message: Message):
             "Please join the channel below and click Try Again to proceed.",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
+        message.stop_propagation()
         return
 
     # 4. Deliver the files
     await deliver_files(
         client, message.chat.id, file_doc, bypass_monetization=bypass_monetization
     )
+    message.stop_propagation()
 
 
-@app.on_message(filters.private & filters.text & ~filters.regex(r"^/"))
+@app.on_message(filters.private & filters.text & ~filters.regex(r"^/"), group=1)
 async def text_message_handler(client: Client, message: Message):
     user_id = message.from_user.id
     text = message.text.strip()

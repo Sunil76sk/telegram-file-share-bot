@@ -673,7 +673,7 @@ async def store_buy_callback(client: Client, callback_query: CallbackQuery):
 # ─── UPI SCREENSHOT HANDLER ─────────────────────────────────────────
 
 
-@app.on_message(filters.photo & filters.private)
+@app.on_message(filters.photo & filters.private, group=2)
 async def upi_screenshot_handler(client: Client, message: Message):
     """Receive and forward UPI transaction screenshots to administrators."""
     user_id = message.from_user.id

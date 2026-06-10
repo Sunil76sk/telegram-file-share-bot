@@ -34,5 +34,11 @@ jobs:
         ADMIN_IDS: ${{ secrets.ADMIN_IDS }}
         FORCE_SUB_CHATS: ${{ secrets.FORCE_SUB_CHATS }}
         AUTO_DELETE_SECONDS: ${{ secrets.AUTO_DELETE_SECONDS }}
+        SHORTENER_API_URL: ${{ secrets.SHORTENER_API_URL }}
+        SHORTENER_API_KEY: ${{ secrets.SHORTENER_API_KEY }}
+        REDIRECT_BASE_URL: ${{ secrets.REDIRECT_BASE_URL }}
+        WEB_SERVER_PORT: ${{ secrets.WEB_SERVER_PORT }}
+        UPI_ID: ${{ secrets.UPI_ID }}
+        UPI_QR_IMAGE: ${{ secrets.UPI_QR_IMAGE }}
       run: |
         python app.py

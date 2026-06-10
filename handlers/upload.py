@@ -222,7 +222,8 @@ async def batch_cancel_cmd(client: Client, message: Message):
         | filters.photo
         | filters.voice
         | filters.animation
-    )
+    ),
+    group=1,
 )
 async def file_uploader(client: Client, message: Message):
     user_id = message.from_user.id
