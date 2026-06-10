@@ -276,7 +276,8 @@ async def ad_create_text_handler(client: Client, message: Message):
     user_id = message.from_user.id
     draft = await database.get_ad_draft(user_id)
     if not draft or draft.get("step") != "awaiting_details":
-        return
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
 
     ad_type = draft.get("ad_type")
     text = message.text.strip()
