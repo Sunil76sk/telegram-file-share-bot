@@ -4,6 +4,27 @@ from dotenv import load_dotenv
 # Load environmental variables from .env file
 load_dotenv()
 
+
+def get_env_int(key: str, default: int) -> int:
+    val = os.getenv(key)
+    if val is None or val.strip() == "":
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        return default
+
+
+def get_env_float(key: str, default: float) -> float:
+    val = os.getenv(key)
+    if val is None or val.strip() == "":
+        return default
+    try:
+        return float(val)
+    except ValueError:
+        return default
+
+
 # Telegram Bot API Credentials
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
@@ -54,30 +75,26 @@ if raw_force_sub:
                 FORCE_SUB_CHATS.append(chat)
 
 # Auto-delete settings
-AUTO_DELETE_SECONDS = os.getenv("AUTO_DELETE_SECONDS", "300")
-try:
-    AUTO_DELETE_SECONDS = int(AUTO_DELETE_SECONDS)
-except ValueError:
-    AUTO_DELETE_SECONDS = 300
+AUTO_DELETE_SECONDS = get_env_int("AUTO_DELETE_SECONDS", 300)
 
 # Monetization Settings (Telegram Stars & Custom Pricing)
-PREMIUM_PRICE_WEEKLY = int(os.getenv("PREMIUM_PRICE_WEEKLY", "100"))  # Stars
-PREMIUM_PRICE_MONTHLY = int(os.getenv("PREMIUM_PRICE_MONTHLY", "300"))  # Stars
-PREMIUM_PRICE_LIFETIME = int(os.getenv("PREMIUM_PRICE_LIFETIME", "1000"))  # Stars
+PREMIUM_PRICE_WEEKLY = get_env_int("PREMIUM_PRICE_WEEKLY", 100)  # Stars
+PREMIUM_PRICE_MONTHLY = get_env_int("PREMIUM_PRICE_MONTHLY", 300)  # Stars
+PREMIUM_PRICE_LIFETIME = get_env_int("PREMIUM_PRICE_LIFETIME", 1000)  # Stars
 
 # Premium Tier Pricing (Telegram Stars)
-PREMIUM_SILVER_WEEKLY = int(os.getenv("PREMIUM_SILVER_WEEKLY", "75"))
-PREMIUM_SILVER_MONTHLY = int(os.getenv("PREMIUM_SILVER_MONTHLY", "200"))
-PREMIUM_GOLD_WEEKLY = int(os.getenv("PREMIUM_GOLD_WEEKLY", "150"))
-PREMIUM_GOLD_MONTHLY = int(os.getenv("PREMIUM_GOLD_MONTHLY", "400"))
-PREMIUM_GOLD_LIFETIME = int(os.getenv("PREMIUM_GOLD_LIFETIME", "1500"))
+PREMIUM_SILVER_WEEKLY = get_env_int("PREMIUM_SILVER_WEEKLY", 75)
+PREMIUM_SILVER_MONTHLY = get_env_int("PREMIUM_SILVER_MONTHLY", 200)
+PREMIUM_GOLD_WEEKLY = get_env_int("PREMIUM_GOLD_WEEKLY", 150)
+PREMIUM_GOLD_MONTHLY = get_env_int("PREMIUM_GOLD_MONTHLY", 400)
+PREMIUM_GOLD_LIFETIME = get_env_int("PREMIUM_GOLD_LIFETIME", 1500)
 
 # UPI Payment Settings
 UPI_ID = os.getenv("UPI_ID", "merchant@upi")
 UPI_QR_IMAGE = os.getenv("UPI_QR_IMAGE", "")  # File path or URL to QR code image
-UPI_PRICE_WEEKLY = float(os.getenv("UPI_PRICE_WEEKLY", "49"))  # INR
-UPI_PRICE_MONTHLY = float(os.getenv("UPI_PRICE_MONTHLY", "149"))  # INR
-UPI_PRICE_LIFETIME = float(os.getenv("UPI_PRICE_LIFETIME", "499"))  # INR
+UPI_PRICE_WEEKLY = get_env_float("UPI_PRICE_WEEKLY", 49.0)  # INR
+UPI_PRICE_MONTHLY = get_env_float("UPI_PRICE_MONTHLY", 149.0)  # INR
+UPI_PRICE_LIFETIME = get_env_float("UPI_PRICE_LIFETIME", 499.0)  # INR
 
 # Premium Content Categories
 PREMIUM_CATEGORIES = {
@@ -90,14 +107,10 @@ PREMIUM_CATEGORIES = {
 
 
 # Referral System Rewards
-REFERRAL_REWARD_POINTS = int(
-    os.getenv("REFERRAL_REWARD_POINTS", "1")
-)  # Points per referral
+REFERRAL_REWARD_POINTS = get_env_int("REFERRAL_REWARD_POINTS", 1)  # Points per referral
 
 # Waiting Countdown and Ad Settings
-WAIT_TIMER_SECONDS = int(
-    os.getenv("WAIT_TIMER_SECONDS", "10")
-)  # Timer duration for free users
+WAIT_TIMER_SECONDS = get_env_int("WAIT_TIMER_SECONDS", 10)  # Timer duration for free users
 
 # URL Shortener Integration
 SHORTENER_API_URL = os.getenv("SHORTENER_API_URL", "")  # e.g., https://gplinks.in/api
@@ -105,17 +118,15 @@ SHORTENER_API_KEY = os.getenv("SHORTENER_API_KEY", "")
 REDIRECT_BASE_URL = os.getenv(
     "REDIRECT_BASE_URL", ""
 )  # e.g., http://localhost:8080 or domain
-WEB_SERVER_PORT = int(os.getenv("WEB_SERVER_PORT", "8080"))
+WEB_SERVER_PORT = get_env_int("WEB_SERVER_PORT", 8080)
 
 # SaaS Licensing Platform Settings
-PLATFORM_FEE_PERCENT = int(
-    os.getenv("PLATFORM_FEE_PERCENT", "10")
-)  # Commission fee on sub-bot sales
+PLATFORM_FEE_PERCENT = get_env_int("PLATFORM_FEE_PERCENT", 10)  # Commission fee on sub-bot sales
 
 # SaaS Plan Pricing (INR)
-SAAS_STARTER_PRICE = int(os.getenv("SAAS_STARTER_PRICE", "999"))
-SAAS_PRO_PRICE = int(os.getenv("SAAS_PRO_PRICE", "2499"))
-SAAS_AGENCY_PRICE = int(os.getenv("SAAS_AGENCY_PRICE", "4999"))
+SAAS_STARTER_PRICE = get_env_int("SAAS_STARTER_PRICE", 999)
+SAAS_PRO_PRICE = get_env_int("SAAS_PRO_PRICE", 2499)
+SAAS_AGENCY_PRICE = get_env_int("SAAS_AGENCY_PRICE", 4999)
 
 # SaaS Subscription UPI Payment
 SAAS_UPI_ID = os.getenv("SAAS_UPI_ID", "")  # Falls back to UPI_ID if empty

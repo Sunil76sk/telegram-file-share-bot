@@ -895,7 +895,7 @@ async def show_product_card(
     chat_id: int,
     product: dict,
     user_id: int,
-    edit_message_id: int = None,
+    edit_message_id: int | None = None,
 ):
     """Render and display product details card to the user."""
     # Determine product type display name and icon

@@ -1,5 +1,6 @@
 import secrets
 import logging
+import config
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from bot import app
@@ -254,7 +255,7 @@ async def file_uploader(client: Client, message: Message):
             plan=f"saas_{plan_id}",
             amount_inr=plan["price_inr"],
         )
-        await set_upi_screenshot(payment_id_str, file_id)
+        await set_upi_screenshot(payment_id_str, message.id)
 
         await database.users_col.update_one(
             {"_id": user_id},
@@ -289,7 +290,6 @@ async def file_uploader(client: Client, message: Message):
 
     # 2. Intercept premium/store UPI screenshot upload
     import datetime
-    import config
     from bson import ObjectId
     pending = await database.get_pending_upi(user_id)
     if pending and pending.get("screenshot_msg_id") is None:

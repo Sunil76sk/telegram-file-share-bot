@@ -238,11 +238,7 @@ class RedirectHandler(BaseHTTPRequestHandler):
 
             if not bot_username:
                 # Main bot fallback
-                bot_username = config.BOT_TOKEN.split(":")[0]
-                # To resolve actual bot username, we can fallback to the client username configured later or default to a place holder.
-                # But since we have config, we can fetch username during boot. Let's make sure it is dynamic.
-                # In custom_start, we store the bot username globally. Let's check config or store it.
-                bot_username = getattr(config, "BOT_USERNAME", "file_share_bot")
+                bot_username = getattr(config, "BOT_USERNAME", "file_share_bot") or "file_share_bot"
 
             # Final destination deep link back to Telegram bot
             tg_redirect = f"https://t.me/{bot_username}?start=unl_{token}"

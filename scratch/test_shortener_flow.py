@@ -146,13 +146,14 @@ async def run_tests():
             response = await asyncio.to_thread(opener.open, req)
         except urllib.error.HTTPError as e:
             response = e
-        status_code = response.getcode()
+        status_code = getattr(response, "status", None) or getattr(response, "code", None)
         redirect_target = response.headers.get("Location")
 
         logger.info(f"Response Code: {status_code}")
         logger.info(f"Redirect Target: {redirect_target}")
 
         assert status_code in [301, 302], f"Expected redirect, got {status_code}"
+        assert redirect_target is not None, "Location header not found"
         assert (
             "/verify/test_token_123/9999" in redirect_target
         ), f"Expected verify endpoint redirect fallback, got {redirect_target}"
@@ -160,13 +161,15 @@ async def run_tests():
         # Get the shortener ID (sid) from redirect target
         parsed = urllib.parse.urlparse(redirect_target)
         queries = urllib.parse.parse_qs(parsed.query)
-        sid = queries.get("sid", [None])[0]
+        sid_list = queries.get("sid")
+        sid = sid_list[0] if sid_list else None
         assert (
             sid is not None
         ), "Redirect URL does not contain shortener ID (sid) query parameter"
 
         # Check views stats updated
         file_doc = await database.get_file_link("test_token_123")
+        assert file_doc is not None, "File document not found"
         assert (
             file_doc.get("monetization_views", 0) > 0
         ), "File monetization views did not increment"
@@ -178,9 +181,10 @@ async def run_tests():
         verify_url = redirect_target  # This contains the sid
 
         response_verify = await asyncio.to_thread(urllib.request.urlopen, verify_url)
+        status_code_verify = getattr(response_verify, "status", None) or getattr(response_verify, "code", None)
         assert (
-            response_verify.getcode() == 200
-        ), f"Expected 200, got {response_verify.getcode()}"
+            status_code_verify == 200
+        ), f"Expected 200, got {status_code_verify}"
 
         html_body = response_verify.read().decode("utf-8")
         assert (
@@ -192,6 +196,7 @@ async def run_tests():
 
         # Verify stats updated
         file_doc_after = await database.get_file_link("test_token_123")
+        assert file_doc_after is not None, "File document after verify not found"
         assert (
             file_doc_after.get("monetization_clicks", 0) == 1
         ), "File monetization clicks did not increment"

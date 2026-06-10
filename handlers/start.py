@@ -476,7 +476,7 @@ async def text_message_handler(client: Client, message: Message):
         )
         payment = {"_id": payment_id_str}
         if file_id:
-            await set_upi_screenshot(payment["_id"], file_id)
+            await set_upi_screenshot(payment["_id"], message.id)
 
         await database.users_col.update_one(
             {"_id": user_id},

@@ -939,7 +939,7 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
 
         await callback_query.answer("Payment Approved successfully!", show_alert=True)
         # Update admin message
-        await callback_query.message.edit_reply_markup(reply_markup=None)
+        await callback_query.message.edit_reply_markup(reply_markup=None)  # type: ignore
         await callback_query.message.reply_text(
             f"✅ **UPI Payment Approved** by {callback_query.from_user.mention} (`{admin_id}`).",
             quote=True,
@@ -965,7 +965,7 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
 
         await callback_query.answer("Payment Rejected successfully.", show_alert=True)
         # Update admin message
-        await callback_query.message.edit_reply_markup(reply_markup=None)
+        await callback_query.message.edit_reply_markup(reply_markup=None)  # type: ignore
         await callback_query.message.reply_text(
             f"❌ **UPI Payment Rejected** by {callback_query.from_user.mention} (`{admin_id}`).",
             quote=True,
