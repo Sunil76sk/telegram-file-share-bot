@@ -1,0 +1,13 @@
+﻿python : 2026-06-10 12:44:40,595 - __main__ - INFO - Starting Telegram File Share Bot...
+    + CategoryInfo          : NotSpecified: (2026-06-10 12:4...le Share Bot...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+2026-06-10 12:44:55,027 - database.mongo - INFO - Database indexes initialized successfully.
+2026-06-10 12:44:55,249 - database.saas_plans - INFO - SaaS plans seeded.
+2026-06-10 12:44:55,783 - database.state - INFO - Cleared all active deliveries from the database.
+2026-06-10 12:44:55,916 - bot - INFO - Cleared stale batch and edit sessions from the database.
+2026-06-10 12:44:55,967 - bot - INFO - Shortener from .env config already registered in database.
+2026-06-10 12:44:55,968 - utils.expiry - INFO - Background deletion worker started.
+2026-06-10 12:44:56,067 - utils.expiry - INFO - Background expiry cleaner worker started.
+2026-06-10 12:44:56,067 - utils.saas - INFO - Found 0 active sub-bots to start.
+2026-06-10 12:44:56,183 - utils.web_server - INFO - Local Redirect Server started on port 8080.

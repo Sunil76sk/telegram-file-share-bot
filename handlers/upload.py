@@ -235,13 +235,13 @@ async def file_uploader(client: Client, message: Message):
     if user_doc and user_doc.get("state") == "saas_awaiting_screenshot":
         plan_id = user_doc.get("saas_pending_plan", "pro")
         plan = database.PLAN_DEFINITIONS.get(plan_id, database.PLAN_DEFINITIONS["pro"])
-        
+
         file_id = None
         if message.photo:
             file_id = message.photo.file_id
         elif message.document:
             file_id = message.document.file_id
-            
+
         if not file_id:
             await message.reply_text(
                 "📸 **Please send a screenshot** of your UPI payment as a photo or document."
@@ -291,6 +291,7 @@ async def file_uploader(client: Client, message: Message):
     # 2. Intercept premium/store UPI screenshot upload
     import datetime
     from bson import ObjectId
+
     pending = await database.get_pending_upi(user_id)
     if pending and pending.get("screenshot_msg_id") is None:
         file_id = None
@@ -313,11 +314,17 @@ async def file_uploader(client: Client, message: Message):
             if plan_desc.startswith("item_"):
                 item_id = plan_desc.split("_")[1]
                 item = await database.get_catalog_item(item_id)
-                plan_desc = f"Store Item: {item['title']}" if item else f"Item ID {item_id}"
+                plan_desc = (
+                    f"Store Item: {item['title']}" if item else f"Item ID {item_id}"
+                )
             elif plan_desc.startswith("prod_"):
                 product_id = plan_desc.split("_")[1]
                 product = await database.get_product_by_id(ObjectId(product_id))
-                plan_desc = f"Marketplace Product: {product['name']}" if product else f"Product ID {product_id}"
+                plan_desc = (
+                    f"Marketplace Product: {product['name']}"
+                    if product
+                    else f"Product ID {product_id}"
+                )
             else:
                 plan_desc = f"Subscription: {plan_desc.replace('_', ' ').title()}"
 
@@ -333,17 +340,26 @@ async def file_uploader(client: Client, message: Message):
             buttons = InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Approve ✅", callback_data=f"admin_upi_approve_{payment_id}"),
-                        InlineKeyboardButton("Reject ❌", callback_data=f"admin_upi_reject_{payment_id}"),
+                        InlineKeyboardButton(
+                            "Approve ✅",
+                            callback_data=f"admin_upi_approve_{payment_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "Reject ❌", callback_data=f"admin_upi_reject_{payment_id}"
+                        ),
                     ]
                 ]
             )
 
             for admin_id in config.ADMIN_IDS:
                 try:
-                    await message.copy(chat_id=admin_id, caption=admin_msg, reply_markup=buttons)
+                    await message.copy(
+                        chat_id=admin_id, caption=admin_msg, reply_markup=buttons
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to forward UPI screenshot to admin {admin_id}: {e}")
+                    logger.error(
+                        f"Failed to forward UPI screenshot to admin {admin_id}: {e}"
+                    )
             return
 
     # 3. Intercept marketplace product upload files

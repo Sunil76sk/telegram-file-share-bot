@@ -110,7 +110,9 @@ PREMIUM_CATEGORIES = {
 REFERRAL_REWARD_POINTS = get_env_int("REFERRAL_REWARD_POINTS", 1)  # Points per referral
 
 # Waiting Countdown and Ad Settings
-WAIT_TIMER_SECONDS = get_env_int("WAIT_TIMER_SECONDS", 10)  # Timer duration for free users
+WAIT_TIMER_SECONDS = get_env_int(
+    "WAIT_TIMER_SECONDS", 10
+)  # Timer duration for free users
 
 # URL Shortener Integration
 SHORTENER_API_URL = os.getenv("SHORTENER_API_URL", "")  # e.g., https://gplinks.in/api
@@ -121,7 +123,9 @@ REDIRECT_BASE_URL = os.getenv(
 WEB_SERVER_PORT = get_env_int("WEB_SERVER_PORT", 8080)
 
 # SaaS Licensing Platform Settings
-PLATFORM_FEE_PERCENT = get_env_int("PLATFORM_FEE_PERCENT", 10)  # Commission fee on sub-bot sales
+PLATFORM_FEE_PERCENT = get_env_int(
+    "PLATFORM_FEE_PERCENT", 10
+)  # Commission fee on sub-bot sales
 
 # SaaS Plan Pricing (INR)
 SAAS_STARTER_PRICE = get_env_int("SAAS_STARTER_PRICE", 999)

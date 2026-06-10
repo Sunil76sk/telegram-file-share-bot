@@ -232,28 +232,28 @@ async def ads_create_callback(client: Client, callback_query: CallbackQuery):
 
     if ad_type == "broadcast":
         usage += (
-        "`[title] | [description] | [cpm]`\n\n"
-        "Example:\n"
-        "`Summer Sale | Check out our premium plans! | 5.0`\n\n"
-        "You can also reply to a message with media (photo/video/document) to attach it."
+            "`[title] | [description] | [cpm]`\n\n"
+            "Example:\n"
+            "`Summer Sale | Check out our premium plans! | 5.0`\n\n"
+            "You can also reply to a message with media (photo/video/document) to attach it."
         )
     elif ad_type == "pinned":
         usage += (
-        "`[title] | [description] | [channel_id] | [invite_link] | [cpm]`\n\n"
-        "Example:\n"
-        "`Sponsored Channel | Best tech news daily | -100123456789 | https://t.me/joinchat/... | 3.0`"
+            "`[title] | [description] | [channel_id] | [invite_link] | [cpm]`\n\n"
+            "Example:\n"
+            "`Sponsored Channel | Best tech news daily | -100123456789 | https://t.me/joinchat/... | 3.0`"
         )
     elif ad_type == "force_join":
         usage += (
-        "`[title] | [description] | [channel_id] | [invite_link] | [cpm]`\n\n"
-        "Example:\n"
-        "`Premium Group | Join our exclusive group | -100123456789 | https://t.me/joinchat/... | 4.0`"
+            "`[title] | [description] | [channel_id] | [invite_link] | [cpm]`\n\n"
+            "Example:\n"
+            "`Premium Group | Join our exclusive group | -100123456789 | https://t.me/joinchat/... | 4.0`"
         )
     elif ad_type == "sponsored_page":
         usage += (
-        "`[title] | [description] | [brand_name] | [brand_message] | [cpm]`\n\n"
-        "Example:\n"
-        "`Acme Corp | Powered by Acme | Acme Corp | Thanks for using our service! | 5.0`"
+            "`[title] | [description] | [brand_name] | [brand_message] | [cpm]`\n\n"
+            "Example:\n"
+            "`Acme Corp | Powered by Acme | Acme Corp | Thanks for using our service! | 5.0`"
         )
 
     buttons = InlineKeyboardMarkup(
@@ -277,6 +277,7 @@ async def ad_create_text_handler(client: Client, message: Message):
     draft = await database.get_ad_draft(user_id)
     if not draft or draft.get("step") != "awaiting_details":
         from pyrogram import ContinuePropagation
+
         raise ContinuePropagation
 
     ad_type = draft.get("ad_type")

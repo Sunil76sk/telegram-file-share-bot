@@ -66,10 +66,10 @@ async def edit_link_handler(client: Client, message: Message):
             await message.reply_text(
                 "🛠 **Link Editor**\n\n"
                 "Usage:\n"
-            "- View details: `/edit_link [token]`\n"
-            "- Append files: `/edit_link [token] add`\n"
-            "- Delete index: `/edit_link [token] del [index]`\n"
-            "- Delete link: `/edit_link [token] delete`\n"
+                "- View details: `/edit_link [token]`\n"
+                "- Append files: `/edit_link [token] add`\n"
+                "- Delete index: `/edit_link [token] del [index]`\n"
+                "- Delete link: `/edit_link [token] delete`\n"
                 "- Set Stars price: `/edit_link [token] price [stars]`\n"
                 "- Toggle Premium-only: `/edit_link [token] premium [true/false]`"
             )
