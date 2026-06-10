@@ -104,12 +104,16 @@ async def get_active_subscription(user_id: int) -> dict | None:
     if not sub:
         return None
     now = datetime.datetime.now(datetime.timezone.utc)
-    if sub.get("expires_at") and sub["expires_at"] < now:
-        await saas_subscriptions_col.update_one(
-            {"_id": sub["_id"]},
-            {"$set": {"status": "expired"}},
-        )
-        return None
+    expires_at = sub.get("expires_at")
+    if expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+        if expires_at < now:
+            await saas_subscriptions_col.update_one(
+                {"_id": sub["_id"]},
+                {"$set": {"status": "expired"}},
+            )
+            return None
     return sub
 
 

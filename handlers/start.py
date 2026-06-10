@@ -104,49 +104,79 @@ async def start_handler(client: Client, message: Message):
 
     # Simple /start with no payload
     if not payload:
-        welcome_text = (
-            f"👋 Hello {message.from_user.mention}!\n\n"
-            "I am the **File Share Bot**.\n"
-            "I can generate permanent shareable links for files stored on Telegram.\n\n"
-            "📤 **How to use:**\n"
-            "• Send me any file directly to generate a single-file sharing link.\n"
-            "• Use `/batch` to start uploading multiple files, and `/done` when finished to generate a combined batch sharing link.\n"
-            "• Use `/cancel` to abort an active batch session.\n\n"
-            "💰 **Monetization & SaaS:**\n"
-            "• `/premium` - View subscription plans & upgrade\n"
-            "• `/store` - Browse & purchase premium catalog items\n"
-            "• `/referral` - View your referral link and redeem rewards\n"
-            "• `/createbot` - Build your own custom file share bot\n"
-            "• `/marketplace` - Browse & purchase digital products\n"
-            "• `/sell` - List your own digital products for sale\n"
-            "• `/my_products` - Manage your listed products\n"
-            "• `/seller` - View your seller dashboard"
-        )
-        # Add admin helper text if user is admin of this bot
-        if await database.is_admin(user_id, client):
-            welcome_text += (
-                "\n\n🛠 **Admin Commands:**\n"
-                "• `/stats` - View bot statistics\n"
-                "• `/broadcast` - Broadcast a message to all users\n"
-                "• `/channels` - List force subscription channels\n"
-                "• `/add_channel [channel_id_or_username] [invite_link]` - Add force-join channel\n"
-                "• `/del_channel [channel_id_or_username]` - Remove force-join channel\n"
-                "• `/edit_link [code]` - Edit/manage files in a shared link\n"
-                "• `/add_admin [user_id]` - Add dynamic admin\n"
-                "• `/del_admin [user_id]` - Remove dynamic admin\n"
-                "• `/addcatalog` - Add premium catalog item\n"
-                "• `/catalog` - Manage premium catalog items\n"
-                "• `/upi_pending` - View pending UPI payments\n"
-                "• `/accesslogs [user_id|token]` - View content access logs\n"
-                "• `/grantpremium [user_id] [days] [tier]` - Grant premium status\n"
-                "• `/revokepremium [user_id]` - Revoke premium status\n"
-                "• `/ads` - Sponsored promotions dashboard\n"
-                "• `/mycampaigns` - Manage audience funnel campaigns\n"
-                "• `/addcampaign [id] [src] [type] [chat] [link] [title] [desc]` - Add audience campaign\n"
-                "• `/delcampaign [id]` - Delete audience campaign\n"
-                "• `/analytics [dau|growth|top|geo|sources|funnel]` - View analytics dashboard\n"
-                "• `/advertise` - View advertiser portal"
+        # Check if the current client is a sub-bot
+        is_sub_bot = False
+        bot_me = client.me or await client.get_me()
+        if (
+            config.BOT_USERNAME
+            and bot_me.username.lower() != config.BOT_USERNAME.lower()
+        ):
+            is_sub_bot = True
+
+        if is_sub_bot:
+            welcome_text = (
+                f"👋 Hello {message.from_user.mention}!\n\n"
+                "I am a **File Share Bot**.\n"
+                "I can generate permanent shareable links for files stored on Telegram.\n\n"
+                "📤 **How to use:**\n"
+                "• Send me any file directly to generate a single-file sharing link.\n"
+                "• Use `/batch` to start uploading multiple files, and `/done` when finished to generate a combined batch sharing link.\n"
+                "• Use `/cancel` to abort an active batch session."
             )
+            # Add admin helper text if user is admin/owner of this sub-bot
+            if await database.is_admin(user_id, client):
+                welcome_text += (
+                    "\n\n🛠 **Admin Commands:**\n"
+                    "• `/stats` - View bot statistics\n"
+                    "• `/broadcast` - Broadcast a message to all users\n"
+                    "• `/channels` - List force subscription channels\n"
+                    "• `/add_channel [channel_id_or_username] [invite_link]` - Add force-join channel\n"
+                    "• `/del_channel [channel_id_or_username]` - Remove force-join channel"
+                )
+        else:
+            welcome_text = (
+                f"👋 Hello {message.from_user.mention}!\n\n"
+                "I am the **File Share Bot**.\n"
+                "I can generate permanent shareable links for files stored on Telegram.\n\n"
+                "📤 **How to use:**\n"
+                "• Send me any file directly to generate a single-file sharing link.\n"
+                "• Use `/batch` to start uploading multiple files, and `/done` when finished to generate a combined batch sharing link.\n"
+                "• Use `/cancel` to abort an active batch session.\n\n"
+                "💰 **Monetization & SaaS:**\n"
+                "• `/premium` - View subscription plans & upgrade\n"
+                "• `/store` - Browse & purchase premium catalog items\n"
+                "• `/referral` - View your referral link and redeem rewards\n"
+                "• `/createbot` - Build your own custom file share bot\n"
+                "• `/marketplace` - Browse & purchase digital products\n"
+                "• `/sell` - List your own digital products for sale\n"
+                "• `/my_products` - Manage your listed products\n"
+                "• `/seller` - View your seller dashboard"
+            )
+            # Add admin helper text if user is admin of this bot
+            if await database.is_admin(user_id, client):
+                welcome_text += (
+                    "\n\n🛠 **Admin Commands:**\n"
+                    "• `/stats` - View bot statistics\n"
+                    "• `/broadcast` - Broadcast a message to all users\n"
+                    "• `/channels` - List force subscription channels\n"
+                    "• `/add_channel [channel_id_or_username] [invite_link]` - Add force-join channel\n"
+                    "• `/del_channel [channel_id_or_username]` - Remove force-join channel\n"
+                    "• `/edit_link [code]` - Edit/manage files in a shared link\n"
+                    "• `/add_admin [user_id]` - Add dynamic admin\n"
+                    "• `/del_admin [user_id]` - Remove dynamic admin\n"
+                    "• `/addcatalog` - Add premium catalog item\n"
+                    "• `/catalog` - Manage premium catalog items\n"
+                    "• `/upi_pending` - View pending UPI payments\n"
+                    "• `/accesslogs [user_id|token]` - View content access logs\n"
+                    "• `/grantpremium [user_id] [days] [tier]` - Grant premium status\n"
+                    "• `/revokepremium [user_id]` - Revoke premium status\n"
+                    "• `/ads` - Sponsored promotions dashboard\n"
+                    "• `/mycampaigns` - Manage audience funnel campaigns\n"
+                    "• `/addcampaign [id] [src] [type] [chat] [link] [title] [desc]` - Add audience campaign\n"
+                    "• `/delcampaign [id]` - Delete audience campaign\n"
+                    "• `/analytics [dau|growth|top|geo|sources|funnel]` - View analytics dashboard\n"
+                    "• `/advertise` - View advertiser portal"
+                )
 
         await message.reply_text(welcome_text)
         message.stop_propagation()
@@ -194,10 +224,13 @@ async def start_handler(client: Client, message: Message):
 
     # Check if expired
     expires_at = file_doc.get("expires_at")
-    if expires_at and datetime.datetime.now(datetime.timezone.utc) > expires_at:
-        await message.reply_text("❌ This file link has expired.")
-        message.stop_propagation()
-        return
+    if expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+        if datetime.datetime.now(datetime.timezone.utc) > expires_at:
+            await message.reply_text("❌ This file link has expired.")
+            message.stop_propagation()
+            return
 
     # Increment view counter
     await database.increment_link_views(token, user_id)
@@ -526,10 +559,13 @@ async def text_message_handler(client: Client, message: Message):
 
             # Check if expired
             expires_at = file_doc.get("expires_at")
-            if expires_at and datetime.datetime.now(datetime.timezone.utc) > expires_at:
-                await database.delete_password_entry_session(user_id)
-                await message.reply_text("❌ This file link has expired.")
-                return
+            if expires_at:
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+                if datetime.datetime.now(datetime.timezone.utc) > expires_at:
+                    await database.delete_password_entry_session(user_id)
+                    await message.reply_text("❌ This file link has expired.")
+                    return
 
             password_hash = file_doc.get("password_hash")
             if not password_hash or verify_password(password_hash, text):
@@ -646,12 +682,12 @@ async def text_message_handler(client: Client, message: Message):
             if file_doc:
                 # Check if expired
                 expires_at = file_doc.get("expires_at")
-                if (
-                    expires_at
-                    and datetime.datetime.now(datetime.timezone.utc) > expires_at
-                ):
-                    await message.reply_text("❌ This file link has expired.")
-                    return
+                if expires_at:
+                    if expires_at.tzinfo is None:
+                        expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+                    if datetime.datetime.now(datetime.timezone.utc) > expires_at:
+                        await message.reply_text("❌ This file link has expired.")
+                        return
 
                 # Increment view counter
                 await database.increment_link_views(token, user_id)

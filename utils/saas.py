@@ -19,8 +19,27 @@ class SaaSRunner:
         await asyncio.sleep(
             0.2
         )  # Yield control to let Pyrogram tasks register handlers
+
+        EXCLUDED_MODULES = {
+            "handlers.payment",
+            "handlers.premium",
+            "handlers.referral",
+            "handlers.saas",
+            "handlers.funnel",
+            "handlers.ads",
+            "handlers.analytics",
+            "handlers.premium_admin",
+            "handlers.marketplace",
+        }
+
         for group, handlers in source_client.dispatcher.groups.items():
             for handler in handlers:
+                # Restrict platform command handlers from being copied to sub-bots
+                callback = getattr(handler, "callback", None)
+                if callback:
+                    module_name = getattr(callback, "__module__", "")
+                    if module_name in EXCLUDED_MODULES:
+                        continue
                 target_client.add_handler(handler, group)
         logger.info(
             f"Copied all handlers to sub-bot client @{target_client.me.username}"

@@ -60,10 +60,15 @@ async def check_sub_callback(client: Client, callback_query: CallbackQuery):
 
     # Check if expired
     expires_at = file_doc.get("expires_at")
-    if expires_at and datetime.datetime.now(datetime.timezone.utc) > expires_at:
-        await callback_query.answer("❌ This file link has expired.", show_alert=True)
-        await callback_query.message.edit_text("❌ This file link has expired.")
-        return
+    if expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+        if datetime.datetime.now(datetime.timezone.utc) > expires_at:
+            await callback_query.answer(
+                "❌ This file link has expired.", show_alert=True
+            )
+            await callback_query.message.edit_text("❌ This file link has expired.")
+            return
 
     # Acknowledge the callback
     await callback_query.answer("✅ Subscription verified! Delivering files...")
