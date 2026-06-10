@@ -196,7 +196,7 @@ async def start_handler(client: Client, message: Message):
         if "start=" in token:
             token = token.split("start=")[1].split("&")[0]
         else:
-            token = token[len("unl_"):]
+            token = token[len("unl_") :]
         bypass_monetization = True
 
     # Check for marketplace product link
