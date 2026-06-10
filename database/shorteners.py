@@ -20,7 +20,7 @@ async def add_shortener(
 ) -> str:
     """
     Add a new URL shortener configuration.
-    
+
     geo_countries: List of country codes (e.g. ['US', 'IN', 'GB']) or ['ALL'].
     bot_id: None for global bot shorteners, or sub-bot user ID/bot ID for SaaS.
     """
@@ -49,7 +49,9 @@ async def add_shortener(
     return str(res.inserted_id)
 
 
-async def get_shorteners(bot_id: int | None = None, active_only: bool = False) -> list[dict]:
+async def get_shorteners(
+    bot_id: int | None = None, active_only: bool = False
+) -> list[dict]:
     """Retrieve all shortener configurations for a bot."""
     query: dict = {"bot_id": bot_id}
     if active_only:
@@ -87,8 +89,7 @@ async def update_shortener(shortener_id: str, fields: dict) -> bool:
                 fields["geo_countries"] = ["ALL"]
 
         res = await shorteners_col.update_one(
-            {"_id": ObjectId(shortener_id)},
-            {"$set": fields}
+            {"_id": ObjectId(shortener_id)}, {"$set": fields}
         )
         return res.modified_count > 0
     except Exception as e:
@@ -101,7 +102,9 @@ async def increment_shortener_stats(
 ):
     """Increment views, clicks, and revenue metrics for a shortener."""
     try:
-        obj_id = ObjectId(shortener_id) if isinstance(shortener_id, str) else shortener_id
+        obj_id = (
+            ObjectId(shortener_id) if isinstance(shortener_id, str) else shortener_id
+        )
         await shorteners_col.update_one(
             {"_id": obj_id},
             {
@@ -117,7 +120,9 @@ async def increment_shortener_stats(
 
 
 async def get_best_shortener(
-    bot_id: int | None = None, user_country: str | None = None, user_lang: str | None = None
+    bot_id: int | None = None,
+    user_country: str | None = None,
+    user_lang: str | None = None,
 ) -> dict | None:
     """
     Select the best shortener using geo-targeting and weighted rotation.
@@ -140,18 +145,20 @@ async def get_best_shortener(
         if "ALL" in geo:
             matched.append(s)
             continue
-        
+
         # Check if country matches
         if user_country_upper and user_country_upper in geo:
             matched.append(s)
             continue
-            
+
         # Check if language matches (e.g. user_lang is 'en' or 'ru')
         if user_lang_upper:
             # Match languages like RU or EN
             lang_match = False
             for country_code in geo:
-                if country_code == user_lang_upper or user_lang_upper.startswith(country_code):
+                if country_code == user_lang_upper or user_lang_upper.startswith(
+                    country_code
+                ):
                     lang_match = True
                     break
             if lang_match:
@@ -180,6 +187,7 @@ async def get_best_shortener(
 
 
 # --- LINK LEVEL MONETIZATION STATS ---
+
 
 async def increment_link_monetization_stats(
     token: str, views: int = 0, clicks: int = 0, revenue: float = 0.0

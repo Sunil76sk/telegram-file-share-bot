@@ -8,7 +8,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import database
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,7 @@ async def main():
             "file_unique_id": "unique_1",
             "media_type": "document",
             "file_name": "preset.dng",
-            "file_size": 102400
+            "file_size": 102400,
         }
     ]
 
@@ -62,20 +64,26 @@ async def main():
         category_id=category_id,
         product_type=product_type,
         files=files,
-        price_upi=price_upi
+        price_upi=price_upi,
     )
-    logger.info(f"Product created successfully: {product['name']} (token: {product['token']}, price_upi: {product.get('price_upi')})")
+    logger.info(
+        f"Product created successfully: {product['name']} (token: {product['token']}, price_upi: {product.get('price_upi')})"
+    )
 
     # Verify retrieval
     retrieved = await database.get_product_by_token(token)
-    if not retrieved or retrieved["name"] != name or retrieved["price_upi"] != price_upi:
+    if (
+        not retrieved
+        or retrieved["name"] != name
+        or retrieved["price_upi"] != price_upi
+    ):
         raise ValueError("Product retrieval verification failed!")
     logger.info("Product retrieval verification passed!")
 
     # Verify purchase recording
     logger.info("Testing purchase recording...")
     payment_id = "test_charge_id_123"
-    
+
     # Clean up pre-existing purchase
     existing_purchase = await database.get_purchase_by_payment_id(payment_id)
     if existing_purchase:
@@ -88,9 +96,11 @@ async def main():
         amount_paid=price,
         payment_id=payment_id,
         status="completed",
-        files_delivered=files
+        files_delivered=files,
     )
-    logger.info(f"Purchase recorded: {purchase['_id']} (amount: {purchase['amount_paid']})")
+    logger.info(
+        f"Purchase recorded: {purchase['_id']} (amount: {purchase['amount_paid']})"
+    )
 
     # Verify purchase check
     has_purchased = await database.verify_purchase(111111, product["_id"])
@@ -104,7 +114,7 @@ async def main():
         purchase_id=purchase["_id"],
         user_id=111111,
         product_id=product["_id"],
-        file_id=files[0]["file_id"]
+        file_id=files[0]["file_id"],
     )
     logger.info(f"Download tracked: {download['_id']}")
 
@@ -120,7 +130,9 @@ async def main():
     await database.purchases_col.delete_one({"_id": purchase["_id"]})
     await database.downloads_col.delete_one({"_id": download["_id"]})
 
-    logger.info("Marketplace verification script run successfully. All checks passed! 🎉")
+    logger.info(
+        "Marketplace verification script run successfully. All checks passed! 🎉"
+    )
 
 
 if __name__ == "__main__":

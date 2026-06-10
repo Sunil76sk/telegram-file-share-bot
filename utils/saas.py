@@ -9,17 +9,22 @@ from bot import app
 
 logger = logging.getLogger(__name__)
 
+
 class SaaSRunner:
     def __init__(self):
         self.clients: dict[str, Client] = {}
 
     async def copy_handlers(self, source_client: Client, target_client: Client):
         """Wait for handlers to register, then copy all handlers from source to target."""
-        await asyncio.sleep(0.2)  # Yield control to let Pyrogram tasks register handlers
+        await asyncio.sleep(
+            0.2
+        )  # Yield control to let Pyrogram tasks register handlers
         for group, handlers in source_client.dispatcher.groups.items():
             for handler in handlers:
                 target_client.add_handler(handler, group)
-        logger.info(f"Copied all handlers to sub-bot client @{target_client.me.username}")
+        logger.info(
+            f"Copied all handlers to sub-bot client @{target_client.me.username}"
+        )
 
     async def start_bot(self, bot_token: str, username: str) -> bool:
         """Start a Pyrogram client for the given sub-bot token."""
@@ -37,7 +42,7 @@ class SaaSRunner:
                 workdir=".",  # Store session files in project root
             )
             await client.start()
-            
+
             # Ensure client.me is populated
             if not client.me:
                 client.me = await client.get_me()
@@ -76,6 +81,7 @@ class SaaSRunner:
         tokens = list(self.clients.keys())
         for token in tokens:
             await self.stop_bot(token)
+
 
 # Global singleton
 saas_runner = SaaSRunner()

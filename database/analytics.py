@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from database.mongo import analytics_events_col, users_col, files_col, shorteners_col, access_logs_col
+from database.mongo import analytics_events_col, users_col, files_col
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,12 @@ async def get_top_files(metric: str = "views", limit: int = 10) -> list[dict]:
 async def get_geo_distribution(days: int = 30) -> list[dict]:
     since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
     pipeline = [
-        {"$match": {"timestamp": {"$gte": since}, "country": {"$exists": True, "$ne": None}}},
+        {
+            "$match": {
+                "timestamp": {"$gte": since},
+                "country": {"$exists": True, "$ne": None},
+            }
+        },
         {"$group": {"_id": "$country", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
         {"$limit": 20},
@@ -84,7 +89,12 @@ async def get_geo_distribution(days: int = 30) -> list[dict]:
 async def get_traffic_sources(days: int = 30) -> list[dict]:
     since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
     pipeline = [
-        {"$match": {"timestamp": {"$gte": since}, "source": {"$exists": True, "$ne": None}}},
+        {
+            "$match": {
+                "timestamp": {"$gte": since},
+                "source": {"$exists": True, "$ne": None},
+            }
+        },
         {"$group": {"_id": "$source", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}},
     ]
@@ -149,7 +159,9 @@ async def get_daily_events(days: int = 7) -> list[dict]:
 
 async def get_advertiser_analytics(user_id: int) -> dict:
     total_views = await analytics_events_col.count_documents({"event": "file_view"})
-    total_downloads = await analytics_events_col.count_documents({"event": "file_download"})
+    total_downloads = await analytics_events_col.count_documents(
+        {"event": "file_download"}
+    )
     dau = await get_dau(1)
     mau = await get_mau(30)
     total_users = await users_col.count_documents({})

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import logging
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 from bot import app
 import database
 
@@ -11,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 @app.on_message(filters.command("analytics") & filters.private)
 async def analytics_handler(client: Client, message: Message):
-    user_id = message.from_user.id
     args = message.text.split(None, 1)
     sub = args[1].strip().lower() if len(args) > 1 else ""
 
@@ -45,19 +49,33 @@ async def show_analytics_menu(client: Client, message: Message):
         "💼 **Advertiser Portal**\n"
         "`/advertise` — View audience stats and ad opportunities"
     )
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📈 DAU/MAU", callback_data="analytics_dau"),
-         InlineKeyboardButton("🏆 Top Files", callback_data="analytics_top")],
-        [InlineKeyboardButton("🌍 Geography", callback_data="analytics_geo"),
-         InlineKeyboardButton("🔗 Sources", callback_data="analytics_sources")],
-        [InlineKeyboardButton("🔄 Funnel", callback_data="analytics_funnel"),
-         InlineKeyboardButton("📈 Growth", callback_data="analytics_growth")],
-        [InlineKeyboardButton("💼 Advertiser Portal", callback_data="analytics_advertise")],
-    ])
+    buttons = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("📈 DAU/MAU", callback_data="analytics_dau"),
+                InlineKeyboardButton("🏆 Top Files", callback_data="analytics_top"),
+            ],
+            [
+                InlineKeyboardButton("🌍 Geography", callback_data="analytics_geo"),
+                InlineKeyboardButton("🔗 Sources", callback_data="analytics_sources"),
+            ],
+            [
+                InlineKeyboardButton("🔄 Funnel", callback_data="analytics_funnel"),
+                InlineKeyboardButton("📈 Growth", callback_data="analytics_growth"),
+            ],
+            [
+                InlineKeyboardButton(
+                    "💼 Advertiser Portal", callback_data="analytics_advertise"
+                )
+            ],
+        ]
+    )
     await message.reply_text(text, reply_markup=buttons)
 
 
-@app.on_callback_query(filters.regex(r"^analytics_(dau|top|geo|sources|funnel|growth|advertise|menu)$"))
+@app.on_callback_query(
+    filters.regex(r"^analytics_(dau|top|geo|sources|funnel|growth|advertise|menu)$")
+)
 async def analytics_callback(client: Client, callback_query: CallbackQuery):
     section = callback_query.matches[0].group(1)
     if section == "dau":
@@ -92,7 +110,9 @@ async def show_dau_mau(client: Client, msg: Message, edit: bool = False):
         f"**Engagement Ratio:** `{(dau / mau * 100) if mau > 0 else 0:.1f}%` DAU/MAU\n\n"
         "📊 *Higher DAU/MAU ratio means better user retention.*"
     )
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]])
+    buttons = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]]
+    )
     if edit:
         await msg.edit_text(text, reply_markup=buttons)
     else:
@@ -110,7 +130,9 @@ async def show_user_growth(client: Client, msg: Message, edit: bool = False):
         for entry in growth["daily"][-14:]:
             text += f"  `{entry['_id']}` — **+{entry['count']}**\n"
 
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]])
+    buttons = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]]
+    )
     if edit:
         await msg.edit_text(text, reply_markup=buttons)
     else:
@@ -139,7 +161,9 @@ async def show_top_files(client: Client, msg: Message, edit: bool = False):
     else:
         text += "  _No data yet._\n"
 
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]])
+    buttons = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]]
+    )
     if edit:
         await msg.edit_text(text, reply_markup=buttons)
     else:
@@ -159,7 +183,9 @@ async def show_geo_distribution(client: Client, msg: Message, edit: bool = False
         text += "  _No geographic data collected yet._\n\n"
         text += "🌐 *Geographic data is collected when users access files through the web server.*"
 
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]])
+    buttons = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]]
+    )
     if edit:
         await msg.edit_text(text, reply_markup=buttons)
     else:
@@ -177,9 +203,13 @@ async def show_traffic_sources(client: Client, msg: Message, edit: bool = False)
             text += f"  • **{src_name}** — {s['count']} visits ({pct:.1f}%)\n"
     else:
         text += "  _No traffic source data collected._\n\n"
-        text += "🔗 *Sources are tracked via funnel campaigns and web server referrals.*"
+        text += (
+            "🔗 *Sources are tracked via funnel campaigns and web server referrals.*"
+        )
 
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]])
+    buttons = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]]
+    )
     if edit:
         await msg.edit_text(text, reply_markup=buttons)
     else:
@@ -198,7 +228,9 @@ async def show_conversion_funnel(client: Client, msg: Message, edit: bool = Fals
         f"  View → Click: `{funnel['view_to_click_ctr']:.1f}%`\n"
         f"  Click → Download: `{funnel['click_to_download_rate']:.1f}%`\n"
     )
-    buttons = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]])
+    buttons = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 Back", callback_data="analytics_menu")]]
+    )
     if edit:
         await msg.edit_text(text, reply_markup=buttons)
     else:
@@ -237,10 +269,12 @@ async def show_advertiser_portal(client: Client, msg: Message, edit: bool = Fals
     text += "🖼 Sponsored Pages — Brand on download pages\n\n"
     text += "📩 *Contact the bot admin to purchase ad placements.*"
 
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Full Analytics", callback_data="analytics_menu")],
-        [InlineKeyboardButton("📢 View Ad Types", callback_data="ads_main_menu")],
-    ])
+    buttons = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("📊 Full Analytics", callback_data="analytics_menu")],
+            [InlineKeyboardButton("📢 View Ad Types", callback_data="ads_main_menu")],
+        ]
+    )
 
     if edit:
         await msg.edit_text(text, reply_markup=buttons)
@@ -250,9 +284,25 @@ async def show_advertiser_portal(client: Client, msg: Message, edit: bool = Fals
 
 def country_flag(code: str) -> str:
     flags = {
-        "US": "🇺🇸", "IN": "🇮🇳", "GB": "🇬🇧", "CA": "🇨🇦", "AU": "🇦🇺",
-        "DE": "🇩🇪", "FR": "🇫🇷", "BR": "🇧🇷", "JP": "🇯🇵", "KR": "🇰🇷",
-        "RU": "🇷🇺", "CN": "🇨🇳", "SG": "🇸🇬", "AE": "🇦🇪", "SA": "🇸🇦",
-        "NL": "🇳🇱", "IT": "🇮🇹", "ES": "🇪🇸", "SE": "🇸🇪", "NO": "🇳🇴",
+        "US": "🇺🇸",
+        "IN": "🇮🇳",
+        "GB": "🇬🇧",
+        "CA": "🇨🇦",
+        "AU": "🇦🇺",
+        "DE": "🇩🇪",
+        "FR": "🇫🇷",
+        "BR": "🇧🇷",
+        "JP": "🇯🇵",
+        "KR": "🇰🇷",
+        "RU": "🇷🇺",
+        "CN": "🇨🇳",
+        "SG": "🇸🇬",
+        "AE": "🇦🇪",
+        "SA": "🇸🇦",
+        "NL": "🇳🇱",
+        "IT": "🇮🇹",
+        "ES": "🇪🇸",
+        "SE": "🇸🇪",
+        "NO": "🇳🇴",
     }
     return flags.get(code, "🌍")

@@ -20,13 +20,17 @@ logger = logging.getLogger(__name__)
 @app.on_raw_update()
 async def payment_raw_update_handler(client: Client, update, users, chats):
     """Handle raw pre-checkout and successful payment updates directly from Telegram."""
-    
+
     # 1. Handle Pre-Checkout Query
     if isinstance(update, UpdateBotPrecheckoutQuery):
         query_id = str(update.query_id)
-        logger.info(f"Received raw pre-checkout query {query_id} from user {update.user_id}")
+        logger.info(
+            f"Received raw pre-checkout query {query_id} from user {update.user_id}"
+        )
         try:
-            await answer_pre_checkout(client=client, pre_checkout_query_id=query_id, ok=True)
+            await answer_pre_checkout(
+                client=client, pre_checkout_query_id=query_id, ok=True
+            )
         except Exception as e:
             logger.error(f"Error answering pre-checkout query {query_id}: {e}")
         return
@@ -41,7 +45,7 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                 user_id = getattr(message.peer_id, "user_id", None)
                 if not user_id:
                     user_id = getattr(message.from_id, "user_id", None)
-                    
+
                 if not user_id:
                     logger.error("Could not determine user_id for successful payment")
                     return
@@ -50,7 +54,7 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                 payload = action.payload
                 if isinstance(payload, bytes):
                     payload = payload.decode("utf-8")
-                
+
                 amount = action.total_amount
                 charge_id = action.charge_id
 
@@ -70,7 +74,7 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                             "created_at": datetime.datetime.now(datetime.timezone.utc),
                         }
                     },
-                    upsert=True
+                    upsert=True,
                 )
 
                 if payload.startswith("premium_"):
@@ -92,9 +96,16 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                         days = 0  # 0 signals lifetime premium
 
                     await database.set_user_premium(user_id, days, tier)
-                    await database.log_access(user_id, token="", action="subscription_activate", method="stars", amount=amount, extra=payload)
+                    await database.log_access(
+                        user_id,
+                        token="",
+                        action="subscription_activate",
+                        method="stars",
+                        amount=amount,
+                        extra=payload,
+                    )
                     expiry_str = await database.get_premium_expiry_str(user_id)
-                    
+
                     try:
                         await client.send_message(
                             chat_id=user_id,
@@ -103,15 +114,18 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                                 f"Thank you for supporting us! Your account has been upgraded.\n"
                                 f"Status: **{expiry_str}**\n\n"
                                 f"You can now enjoy instant downloads without timers, ads, or URL shortener checks!"
-                            )
+                            ),
                         )
                     except Exception as e:
-                        logger.error(f"Failed to send premium confirmation to {user_id}: {e}")
+                        logger.error(
+                            f"Failed to send premium confirmation to {user_id}: {e}"
+                        )
 
                 elif payload.startswith("prod_buy_"):
                     # Handle digital marketplace product purchase
                     prod_id = payload.split("prod_buy_")[1]
                     from bson import ObjectId
+
                     product = await database.get_product_by_id(ObjectId(prod_id))
                     if product:
                         purchase = await database.record_purchase(
@@ -121,24 +135,25 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                             amount_paid=amount,
                             payment_id=charge_id,
                             status="completed",
-                            files_delivered=product["files"]
+                            files_delivered=product["files"],
                         )
                         await database.increment_product_sales(product["_id"])
                         try:
                             await client.send_message(
                                 chat_id=user_id,
-                                text=f"🎉 **Purchase Successful!**\n\nYou successfully bought **{product['name']}**! Delivering your files now..."
+                                text=f"🎉 **Purchase Successful!**\n\nYou successfully bought **{product['name']}**! Delivering your files now...",
                             )
                         except Exception:
                             pass
-                        
+
                         from handlers.marketplace import deliver_product_files
+
                         await deliver_product_files(client, user_id, purchase, product)
                     else:
                         try:
                             await client.send_message(
                                 chat_id=user_id,
-                                text="❌ **Product Not Found!**\n\nWe could not find the product associated with your payment."
+                                text="❌ **Product Not Found!**\n\nWe could not find the product associated with your payment.",
                             )
                         except Exception:
                             pass
@@ -151,8 +166,15 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                         token = item["token"]
                         await database.unlock_link_for_user(user_id, token)
                         await database.increment_catalog_purchases(item_id, amount)
-                        await database.log_access(user_id, token, action="purchase", method="stars", catalog_item_id=item_id, amount=amount)
-                        
+                        await database.log_access(
+                            user_id,
+                            token,
+                            action="purchase",
+                            method="stars",
+                            catalog_item_id=item_id,
+                            amount=amount,
+                        )
+
                         file_doc = await database.get_file_link(token)
                         if file_doc:
                             try:
@@ -161,11 +183,13 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                                     text=(
                                         f"🔓 **{item['title']} Unlocked!**\n\n"
                                         "Your payment was received successfully. We are delivering your files now..."
-                                    )
+                                    ),
                                 )
                             except Exception:
                                 pass
-                            await deliver_files(client, user_id, file_doc, bypass_monetization=True)
+                            await deliver_files(
+                                client, user_id, file_doc, bypass_monetization=True
+                            )
                         else:
                             try:
                                 await client.send_message(
@@ -173,7 +197,7 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                                     text=(
                                         "❌ **Files Not Found!**\n\n"
                                         "The item was unlocked successfully, but the files have been deleted by the admin."
-                                    )
+                                    ),
                                 )
                             except Exception:
                                 pass
@@ -181,7 +205,7 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                         try:
                             await client.send_message(
                                 chat_id=user_id,
-                                text="❌ **Item Not Found!**\n\nWe could not find the catalog item associated with your payment."
+                                text="❌ **Item Not Found!**\n\nWe could not find the catalog item associated with your payment.",
                             )
                         except Exception:
                             pass
@@ -190,8 +214,10 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                     # Handle pay-to-unlock link purchase
                     token = payload.split("_", 1)[1]
                     await database.unlock_link_for_user(user_id, token)
-                    await database.log_access(user_id, token, action="purchase", method="stars", amount=amount)
-                    
+                    await database.log_access(
+                        user_id, token, action="purchase", method="stars", amount=amount
+                    )
+
                     file_doc = await database.get_file_link(token)
                     if file_doc:
                         try:
@@ -200,11 +226,13 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                                 text=(
                                     "🔓 **File Link Unlocked!**\n\n"
                                     "Your payment was received successfully. We are delivering your files now..."
-                                )
+                                ),
                             )
                         except Exception:
                             pass
-                        await deliver_files(client, user_id, file_doc, bypass_monetization=True)
+                        await deliver_files(
+                            client, user_id, file_doc, bypass_monetization=True
+                        )
                     else:
                         try:
                             await client.send_message(
@@ -212,8 +240,7 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                                 text=(
                                     "❌ **Files Not Found!**\n\n"
                                     "The link was unlocked successfully, but the files have been deleted by the admin."
-                                )
+                                ),
                             )
                         except Exception:
                             pass
-

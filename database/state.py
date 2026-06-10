@@ -59,11 +59,7 @@ async def add_to_batch(
     }
     await batches_col.update_one(
         {"user_id": user_id},
-        {
-            "$push": {
-                "files": file_obj
-            }
-        },
+        {"$push": {"files": file_obj}},
     )
 
 
@@ -146,7 +142,12 @@ async def create_password_setting_session(user_id: int, code: str):
     """Save that this user is setting a password for a specific code."""
     await password_settings_col.update_one(
         {"_id": user_id},
-        {"$set": {"code": code, "created_at": datetime.datetime.now(datetime.timezone.utc)}},
+        {
+            "$set": {
+                "code": code,
+                "created_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        },
         upsert=True,
     )
 
@@ -159,7 +160,9 @@ async def delete_password_setting_session(user_id: int):
     await password_settings_col.delete_one({"_id": user_id})
 
 
-async def create_password_entry_session(user_id: int, code: str, bypass_monetization: bool = False):
+async def create_password_entry_session(
+    user_id: int, code: str, bypass_monetization: bool = False
+):
     """Save that this user is entering a password for a specific code."""
     await password_entries_col.update_one(
         {"_id": user_id},
@@ -199,7 +202,9 @@ async def schedule_deletion(chat_id: int, message_ids: list, delay_seconds: int 
 
 async def get_expired_deletions() -> list:
     """Retrieve all deletion tasks that are due."""
-    cursor = deletions_col.find({"delete_at": {"$lte": datetime.datetime.now(datetime.timezone.utc)}})
+    cursor = deletions_col.find(
+        {"delete_at": {"$lte": datetime.datetime.now(datetime.timezone.utc)}}
+    )
     return [doc async for doc in cursor]
 
 

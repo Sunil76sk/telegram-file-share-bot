@@ -7,7 +7,7 @@ import json
 import logging
 import threading
 import asyncio
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import config
 import database
 from utils.funnel import source_display_name, asset_type_display_name
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Main event loop reference to run async database operations from HTTP thread
 main_loop: asyncio.AbstractEventLoop | None = None
-httpd: HTTPServer | None = None
+httpd: ThreadingHTTPServer | None = None
 
 
 def run_async(coro):
@@ -47,31 +47,38 @@ async def generate_short_link(shortener: dict, long_url: str) -> str | None:
     """Call a third-party shortener API to shorten the redirect URL."""
     api_url = shortener["api_url"]
     api_key = shortener["api_key"]
-    
+
     # URL encode the destination URL
     encoded_url = urllib.parse.quote(long_url)
-    
+
     # Build standard AdLinkFly API URL
     url = f"{api_url}?api={api_key}&url={encoded_url}"
-    
+
     def _call():
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=8) as response:
                 content_type = response.headers.get("Content-Type", "")
                 body = response.read().decode("utf-8")
-                
+
                 if "application/json" in content_type or body.strip().startswith("{"):
                     try:
                         data = json.loads(body)
-                        for key in ["shortenedUrl", "short_url", "shortened_url", "url"]:
+                        for key in [
+                            "shortenedUrl",
+                            "short_url",
+                            "shortened_url",
+                            "url",
+                        ]:
                             if key in data:
                                 return data[key]
                         if data.get("status") == "error":
-                            logger.error(f"Shortener API returned error: {data.get('message')}")
+                            logger.error(
+                                f"Shortener API returned error: {data.get('message')}"
+                            )
                     except Exception:
                         pass
-                
+
                 if body.strip().startswith("http"):
                     return body.strip()
         except Exception as e:
@@ -91,6 +98,15 @@ class RedirectHandler(BaseHTTPRequestHandler):
         path = parsed_url.path
         query_params = urllib.parse.parse_qs(parsed_url.query)
 
+        # Mock shortener API for testing
+        if path == "/mock_shortener":
+            long_url = query_params.get("url", ["http://localhost:8080/verify"])[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(long_url.encode("utf-8"))
+            return
+
         # 1. Route: /go/<token>/<user_id>
         go_match = re.match(r"^/go/([a-zA-Z0-9_-]+)/(\d+)$", path)
         if go_match:
@@ -104,11 +120,13 @@ class RedirectHandler(BaseHTTPRequestHandler):
                 return
 
             # Determine client IP and country
-            client_ip = self.headers.get("CF-Connecting-IP") or \
-                        self.headers.get("X-Forwarded-For") or \
-                        self.headers.get("X-Real-IP") or \
-                        self.client_address[0]
-            
+            client_ip = (
+                self.headers.get("CF-Connecting-IP")
+                or self.headers.get("X-Forwarded-For")
+                or self.headers.get("X-Real-IP")
+                or self.client_address[0]
+            )
+
             # If multiple IPs in X-Forwarded-For, pick the first one
             if "," in client_ip:
                 client_ip = client_ip.split(",")[0].strip()
@@ -121,7 +139,11 @@ class RedirectHandler(BaseHTTPRequestHandler):
 
             # Get best shortener for this route
             bot_id = file_doc.get("bot_id")
-            shortener = run_async(database.get_best_shortener(bot_id=bot_id, user_country=country, user_lang=user_lang))
+            shortener = run_async(
+                database.get_best_shortener(
+                    bot_id=bot_id, user_country=country, user_lang=user_lang
+                )
+            )
 
             # Destination to return to after completing ad
             redirect_base = config.REDIRECT_BASE_URL.rstrip("/")
@@ -138,11 +160,15 @@ class RedirectHandler(BaseHTTPRequestHandler):
             verify_url_with_shortener = f"{verify_url}?sid={str(shortener['_id'])}"
 
             # Call API to shorten the link
-            short_link = run_async(generate_short_link(shortener, verify_url_with_shortener))
-            
+            short_link = run_async(
+                generate_short_link(shortener, verify_url_with_shortener)
+            )
+
             if not short_link:
                 # Fallback to direct verification if API fails
-                logger.warning(f"Shortener API failed for {shortener['name']}. Falling back to direct redirect.")
+                logger.warning(
+                    f"Shortener API failed for {shortener['name']}. Falling back to direct redirect."
+                )
                 self.send_response(302)
                 self.send_header("Location", verify_url_with_shortener)
                 self.end_headers()
@@ -151,7 +177,11 @@ class RedirectHandler(BaseHTTPRequestHandler):
             # Log view/impression
             run_async(database.increment_shortener_stats(shortener["_id"], views=1))
             run_async(database.increment_link_monetization_stats(token, views=1))
-            run_async(database.track_event(user_id, "shortener_view", token=token, country=country))
+            run_async(
+                database.track_event(
+                    user_id, "shortener_view", token=token, country=country
+                )
+            )
 
             # Redirect user to the shortened Ad Link
             self.send_response(302)
@@ -174,19 +204,35 @@ class RedirectHandler(BaseHTTPRequestHandler):
                 if shortener:
                     cpm = shortener.get("cpm", 3.0)
                     revenue = cpm / 1000.0
-                    run_async(database.increment_shortener_stats(sid, clicks=1, revenue=revenue))
-                    run_async(database.increment_link_monetization_stats(token, clicks=1, revenue=revenue))
-                    run_async(database.track_event(user_id, "shortener_click", token=token))
+                    run_async(
+                        database.increment_shortener_stats(
+                            sid, clicks=1, revenue=revenue
+                        )
+                    )
+                    run_async(
+                        database.increment_link_monetization_stats(
+                            token, clicks=1, revenue=revenue
+                        )
+                    )
+                    run_async(
+                        database.track_event(user_id, "shortener_click", token=token)
+                    )
 
             # Fetch file doc to identify which bot username to redirect back to
             file_doc = run_async(database.get_file_link(token))
             bot_username = None
 
             if file_doc and file_doc.get("bot_id"):
-                sub_bot = run_async(database.sub_bots_col.find_one({"_id": file_doc["bot_id"]}))
+                sub_bot = run_async(
+                    database.sub_bots_col.find_one({"_id": file_doc["bot_id"]})
+                )
                 if not sub_bot:
                     # Try lookup by field
-                    sub_bot = run_async(database.sub_bots_col.find_one({"bot_token": {"$regex": f"^{file_doc['bot_id']}:"}}))
+                    sub_bot = run_async(
+                        database.sub_bots_col.find_one(
+                            {"bot_token": {"$regex": f"^{file_doc['bot_id']}:"}}
+                        )
+                    )
                 if sub_bot:
                     bot_username = sub_bot.get("username")
 
@@ -203,7 +249,7 @@ class RedirectHandler(BaseHTTPRequestHandler):
 
             # Render HTML Skip Timer Page
             html_content = self.get_skip_timer_html(tg_redirect)
-            
+
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -223,7 +269,9 @@ class RedirectHandler(BaseHTTPRequestHandler):
 
             # Find active sponsored page ads
             active_sponsored = run_async(database.get_all_ads(ad_type="sponsored_page"))
-            active_sponsored = [a for a in active_sponsored if a.get("status") == "active"]
+            active_sponsored = [
+                a for a in active_sponsored if a.get("status") == "active"
+            ]
 
             sponsor = active_sponsored[0] if active_sponsored else None
 
@@ -234,7 +282,9 @@ class RedirectHandler(BaseHTTPRequestHandler):
             tg_redirect = f"https://t.me/{bot_username}?start=unl_{token}"
 
             html = self.get_sponsored_page_html(
-                brand_name=sponsor.get("brand_name", "Our Sponsor") if sponsor else None,
+                brand_name=(
+                    sponsor.get("brand_name", "Our Sponsor") if sponsor else None
+                ),
                 brand_message=sponsor.get("brand_message", "") if sponsor else None,
                 brand_logo_url=sponsor.get("brand_logo_url") if sponsor else None,
                 redirect_url=tg_redirect,
@@ -256,7 +306,14 @@ class RedirectHandler(BaseHTTPRequestHandler):
             run_async(database.log_ad_click(ad_id, user_id))
             # Redirect to the ad's button URL or back to bot
             ad = run_async(database.get_ad(ad_id))
-            redirect_to = ad.get("button_url", f"https://t.me/{getattr(config, 'BOT_USERNAME', 'file_share_bot')}") if ad else f"https://t.me/{getattr(config, 'BOT_USERNAME', 'file_share_bot')}"
+            redirect_to = (
+                ad.get(
+                    "button_url",
+                    f"https://t.me/{getattr(config, 'BOT_USERNAME', 'file_share_bot')}",
+                )
+                if ad
+                else f"https://t.me/{getattr(config, 'BOT_USERNAME', 'file_share_bot')}"
+            )
             self.send_response(302)
             self.send_header("Location", redirect_to)
             self.end_headers()
@@ -280,7 +337,9 @@ class RedirectHandler(BaseHTTPRequestHandler):
             bot_deep_link = f"https://t.me/{bot_username}?start={campaign_payload}"
             html = self.get_funnel_landing_html(
                 title=campaign.get("title", "Exclusive Content"),
-                description=campaign.get("description", "Access exclusive files by joining our channel!"),
+                description=campaign.get(
+                    "description", "Access exclusive files by joining our channel!"
+                ),
                 source_display=src,
                 asset_display=at,
                 invite_link=invite_link,
@@ -566,8 +625,16 @@ class RedirectHandler(BaseHTTPRequestHandler):
 </body>
 </html>"""
 
-
-    def get_sponsored_page_html(self, brand_name: str | None, brand_message: str | None, brand_logo_url: str | None, redirect_url: str, sponsor_ad_id: str | None, user_id: int, token: str) -> str:
+    def get_sponsored_page_html(
+        self,
+        brand_name: str | None,
+        brand_message: str | None,
+        brand_logo_url: str | None,
+        redirect_url: str,
+        sponsor_ad_id: str | None,
+        user_id: int,
+        token: str,
+    ) -> str:
         brand_section = ""
         if brand_name:
             brand_section = f"""
@@ -697,7 +764,15 @@ class RedirectHandler(BaseHTTPRequestHandler):
 </body>
 </html>"""
 
-    def get_funnel_landing_html(self, title: str, description: str, source_display: str, asset_display: str, invite_link: str, bot_deep_link: str) -> str:
+    def get_funnel_landing_html(
+        self,
+        title: str,
+        description: str,
+        source_display: str,
+        asset_display: str,
+        invite_link: str,
+        bot_deep_link: str,
+    ) -> str:
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -843,7 +918,9 @@ def start_web_server():
     """Start the web server in a daemon background thread."""
     global main_loop, httpd
     if not config.REDIRECT_BASE_URL:
-        logger.info("REDIRECT_BASE_URL is not set. Local redirect web server will not start.")
+        logger.info(
+            "REDIRECT_BASE_URL is not set. Local redirect web server will not start."
+        )
         return
 
     main_loop = asyncio.get_running_loop()
@@ -852,7 +929,7 @@ def start_web_server():
     def _serve():
         global httpd
         try:
-            httpd = HTTPServer(("", port), RedirectHandler)
+            httpd = ThreadingHTTPServer(("", port), RedirectHandler)
             logger.info(f"Local Redirect Server started on port {port}.")
             httpd.serve_forever()
         except Exception as e:

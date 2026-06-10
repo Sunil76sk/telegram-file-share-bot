@@ -7,11 +7,15 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from bot import app
 import database
 import config
-from utils.helpers import get_not_subscribed_channels, is_valid_token, send_stars_invoice
+from utils.helpers import (
+    get_not_subscribed_channels,
+    is_valid_token,
+    send_stars_invoice,
+)
 from utils.locks import user_locks
 from utils.security import verify_password, hash_password
 from utils.delivery import deliver_files
-from utils.funnel import parse_campaign_payload, source_display_name, asset_type_display_name, is_valid_source
+from utils.funnel import parse_campaign_payload, is_valid_source
 from handlers.funnel import show_campaign_detail
 
 logger = logging.getLogger(__name__)
@@ -63,11 +67,13 @@ async def start_handler(client: Client, message: Message):
             if is_new_user and referrer_id != user_id:
                 # Set referrer and credit points
                 await database.set_user_referred_by(user_id, referrer_id)
-                await database.add_user_points(referrer_id, config.REFERRAL_REWARD_POINTS)
+                await database.add_user_points(
+                    referrer_id, config.REFERRAL_REWARD_POINTS
+                )
                 try:
                     await client.send_message(
                         chat_id=referrer_id,
-                        text=f"🎉 **New Referral!**\n\nSomeone joined using your referral link! You earned **{config.REFERRAL_REWARD_POINTS} Point(s)**. Type /referral to check your rewards!"
+                        text=f"🎉 **New Referral!**\n\nSomeone joined using your referral link! You earned **{config.REFERRAL_REWARD_POINTS} Point(s)**. Type /referral to check your rewards!",
                     )
                 except Exception:
                     pass
@@ -84,7 +90,9 @@ async def start_handler(client: Client, message: Message):
         ref = campaign_info.get("ref")
         if source and is_valid_source(source):
             await database.log_source_visit(user_id, source, campaign_id, ref)
-            logger.info(f"User {user_id} arrived from source={source} via campaign={campaign_id}")
+            logger.info(
+                f"User {user_id} arrived from source={source} via campaign={campaign_id}"
+            )
         campaign = await database.get_campaign(campaign_id)
         if campaign:
             await show_campaign_detail(client, message, campaign_id)
@@ -105,7 +113,11 @@ async def start_handler(client: Client, message: Message):
             "• `/premium` - View subscription plans & upgrade\n"
             "• `/store` - Browse & purchase premium catalog items\n"
             "• `/referral` - View your referral link and redeem rewards\n"
-            "• `/createbot` - Build your own custom file share bot"
+            "• `/createbot` - Build your own custom file share bot\n"
+            "• `/marketplace` - Browse & purchase digital products\n"
+            "• `/sell` - List your own digital products for sale\n"
+            "• `/my_products` - Manage your listed products\n"
+            "• `/seller` - View your seller dashboard"
         )
         # Add admin helper text if user is admin of this bot
         if await database.is_admin(user_id, client):
@@ -124,7 +136,13 @@ async def start_handler(client: Client, message: Message):
                 "• `/upi_pending` - View pending UPI payments\n"
                 "• `/accesslogs [user_id|token]` - View content access logs\n"
                 "• `/grantpremium <user_id> <days> [tier]` - Grant premium status\n"
-                "• `/revokepremium <user_id>` - Revoke premium status"
+                "• `/revokepremium <user_id>` - Revoke premium status\n"
+                "• `/ads` - Sponsored promotions dashboard\n"
+                "• `/mycampaigns` - Manage audience funnel campaigns\n"
+                "• `/addcampaign <id> <src> <type> <chat> <link> <title> [desc]` - Add audience campaign\n"
+                "• `/delcampaign <id>` - Delete audience campaign\n"
+                "• `/analytics [dau|growth|top|geo|sources|funnel]` - View analytics dashboard\n"
+                "• `/advertise` - View advertiser portal"
             )
 
         await message.reply_text(welcome_text)
@@ -152,6 +170,7 @@ async def start_handler(client: Client, message: Message):
             # Increment view count
             await database.increment_product_views(product["_id"])
             from handlers.marketplace import show_product_card
+
             await show_product_card(client, message.chat.id, product, user_id)
             return
         else:
@@ -178,8 +197,8 @@ async def start_handler(client: Client, message: Message):
     # Perform monetization access checks (unless bypassed, or if user is owner/admin)
     if not bypass_monetization:
         is_bot_admin = await database.is_admin(user_id, client)
-        is_link_owner = (file_doc.get("owner_id") == user_id)
-        
+        is_link_owner = file_doc.get("owner_id") == user_id
+
         if not is_bot_admin and not is_link_owner:
             # 1. Premium-only check
             if file_doc.get("is_premium_only", False):
@@ -190,8 +209,15 @@ async def start_handler(client: Client, message: Message):
                         "This link is reserved for Premium subscribers. "
                         "Please upgrade your account to Premium to access this file!",
                         reply_markup=InlineKeyboardMarkup(
-                            [[InlineKeyboardButton("🎫 Subscribe to Premium", callback_data="premium_menu_home")]]
-                        )
+                            [
+                                [
+                                    InlineKeyboardButton(
+                                        "🎫 Subscribe to Premium",
+                                        callback_data="premium_menu_home",
+                                    )
+                                ]
+                            ]
+                        ),
                     )
                     return
 
@@ -200,15 +226,22 @@ async def start_handler(client: Client, message: Message):
                 if catalog_item and catalog_item.get("tier_required"):
                     req_tier = catalog_item["tier_required"]
                     user_tier = await database.get_user_premium_tier(user_id)
-                    
+
                     if req_tier == "gold" and user_tier != "gold":
                         await message.reply_text(
                             "👑 **Gold Tier Required** 👑\n\n"
                             "This premium content requires a **Gold Tier** subscription.\n"
                             "Your current subscription is Silver tier. Please upgrade to Gold to access this file!",
                             reply_markup=InlineKeyboardMarkup(
-                                [[InlineKeyboardButton("👑 Upgrade to Gold Tier", callback_data="premium_tier_gold")]]
-                            )
+                                [
+                                    [
+                                        InlineKeyboardButton(
+                                            "👑 Upgrade to Gold Tier",
+                                            callback_data="premium_tier_gold",
+                                        )
+                                    ]
+                                ]
+                            ),
                         )
                         return
                     elif req_tier == "silver" and user_tier not in ["silver", "gold"]:
@@ -216,8 +249,15 @@ async def start_handler(client: Client, message: Message):
                             "🥈 **Silver Tier Required** 🥈\n\n"
                             "This premium content requires at least a **Silver Tier** subscription. Please upgrade to access it!",
                             reply_markup=InlineKeyboardMarkup(
-                                [[InlineKeyboardButton("🥈 Upgrade to Silver", callback_data="premium_tier_silver")]]
-                            )
+                                [
+                                    [
+                                        InlineKeyboardButton(
+                                            "🥈 Upgrade to Silver",
+                                            callback_data="premium_tier_silver",
+                                        )
+                                    ]
+                                ]
+                            ),
                         )
                         return
 
@@ -237,13 +277,17 @@ async def start_handler(client: Client, message: Message):
                         )
                     except Exception as e:
                         logger.error(f"Failed to send unlock invoice: {e}")
-                        await message.reply_text("❌ Failed to generate payment invoice. Please try again.")
+                        await message.reply_text(
+                            "❌ Failed to generate payment invoice. Please try again."
+                        )
                     return
 
     # Check if password protected
     password_hash = file_doc.get("password_hash")
     if password_hash:
-        await database.create_password_entry_session(user_id, token, bypass_monetization=bypass_monetization)
+        await database.create_password_entry_session(
+            user_id, token, bypass_monetization=bypass_monetization
+        )
         await message.reply_text(
             "🔒 **Password Protected Link**\n\n"
             "This link is protected by a password. Please enter the password below to access the files."
@@ -267,9 +311,7 @@ async def start_handler(client: Client, message: Message):
 
         # Add Try Again button
         cb_data = f"checksub_{'unl_' if bypass_monetization else ''}{token}"
-        buttons.append(
-            [InlineKeyboardButton("🔄 Try Again", callback_data=cb_data)]
-        )
+        buttons.append([InlineKeyboardButton("🔄 Try Again", callback_data=cb_data)])
 
         await message.reply_text(
             "⚠️ **Access Denied!**\n\n"
@@ -280,13 +322,12 @@ async def start_handler(client: Client, message: Message):
         return
 
     # 4. Deliver the files
-    await deliver_files(client, message.chat.id, file_doc, bypass_monetization=bypass_monetization)
+    await deliver_files(
+        client, message.chat.id, file_doc, bypass_monetization=bypass_monetization
+    )
 
-@app.on_message(
-    filters.private
-    & filters.text
-    & ~filters.command(["start", "batch", "done", "cancel", "editlink", "edit_link", "stats", "broadcast", "ban", "unban", "add_channel", "del_channel", "channels", "add_admin", "del_admin", "premium", "subscribe", "referral", "share", "createbot", "saas", "shorteners", "store", "shop", "addcatalog", "catalog", "upi_pending", "accesslogs", "grantpremium", "revokepremium", "marketplace", "market", "shop_products", "add_product", "sell", "my_products", "seller"])
-)
+
+@app.on_message(filters.private & filters.text & ~filters.regex(r"^/"))
 async def text_message_handler(client: Client, message: Message):
     user_id = message.from_user.id
     text = message.text.strip()
@@ -296,58 +337,80 @@ async def text_message_handler(client: Client, message: Message):
 
     # Check SaaS sub-bot token registration state
     user_doc = await database.get_user(user_id)
-    
+
     # Intercept premium catalog addition states
     if user_doc and user_doc.get("state", "").startswith("catalog_"):
         if text.lower() == "/cancel":
-            await database.users_col.update_one({"_id": user_id}, {"$unset": {"state": "", "catalog_draft": ""}})
+            await database.users_col.update_one(
+                {"_id": user_id}, {"$unset": {"state": "", "catalog_draft": ""}}
+            )
             await message.reply_text("❌ Catalog item creation cancelled.")
             return
-        
+
         from handlers.premium_admin import handle_catalog_state
-        await handle_catalog_state(client, message, user_id, user_doc["state"], user_doc)
+
+        await handle_catalog_state(
+            client, message, user_id, user_doc["state"], user_doc
+        )
         return
 
     # Intercept marketplace product creation wizard states
     if user_doc and user_doc.get("state", "").startswith("market_"):
         if text.lower() == "/cancel":
-            await database.users_col.update_one({"_id": user_id}, {"$unset": {"state": "", "marketplace_draft": ""}})
+            await database.users_col.update_one(
+                {"_id": user_id}, {"$unset": {"state": "", "marketplace_draft": ""}}
+            )
             await message.reply_text("❌ Product creation cancelled.")
             return
-        
+
         from handlers.marketplace import handle_marketplace_state
-        await handle_marketplace_state(client, message, user_id, user_doc["state"], user_doc)
+
+        await handle_marketplace_state(
+            client, message, user_id, user_doc["state"], user_doc
+        )
         return
 
     # Intercept shortener registration states
     if user_doc and user_doc.get("state", "").startswith("sh_"):
         if text.lower() == "/cancel":
-            await database.users_col.update_one({"_id": user_id}, {"$unset": {"state": "", "shortener_draft": ""}})
+            await database.users_col.update_one(
+                {"_id": user_id}, {"$unset": {"state": "", "shortener_draft": ""}}
+            )
             await message.reply_text("❌ Shortener configuration cancelled.")
             return
-        
+
         from handlers.shorteners import handle_shortener_state
-        await handle_shortener_state(client, message, user_id, user_doc["state"], user_doc)
+
+        await handle_shortener_state(
+            client, message, user_id, user_doc["state"], user_doc
+        )
         return
 
     if user_doc and user_doc.get("state") in ("awaiting_token", "saas_awaiting_token"):
         if text.lower() == "/cancel":
-            await database.users_col.update_one({"_id": user_id}, {"$unset": {"state": ""}})
+            await database.users_col.update_one(
+                {"_id": user_id}, {"$unset": {"state": ""}}
+            )
             await message.reply_text("❌ Registration cancelled.")
             return
 
         await message.reply_text("🔍 **Validating token...** please wait.")
         from handlers.saas import validate_bot_token
         from utils.saas import saas_runner
+
         username = await validate_bot_token(text)
         if username:
             existing = await database.sub_bots_col.find_one({"bot_token": text})
             if existing:
-                await message.reply_text(f"❌ This bot token is already registered to user ID {existing.get('owner_id')}.")
+                await message.reply_text(
+                    f"❌ This bot token is already registered to user ID {existing.get('owner_id')}."
+                )
                 return
 
             await database.add_sub_bot(user_id, text, username)
-            await database.users_col.update_one({"_id": user_id}, {"$unset": {"state": ""}})
+            await database.users_col.update_one(
+                {"_id": user_id}, {"$unset": {"state": ""}}
+            )
 
             await saas_runner.start_bot(text, username)
 
@@ -390,6 +453,7 @@ async def text_message_handler(client: Client, message: Message):
             file_id = message.document.file_id
 
         from database.premium_store import create_upi_payment, set_upi_screenshot
+
         payment_id_str = await create_upi_payment(
             user_id=user_id,
             plan=f"saas_{plan_id}",
@@ -436,7 +500,7 @@ async def text_message_handler(client: Client, message: Message):
         if entry_session:
             token = entry_session["code"]
             bypass_monetization = entry_session.get("bypass_monetization", False)
-            
+
             file_doc = await database.get_file_link(token)
             if not file_doc:
                 await database.delete_password_entry_session(user_id)
@@ -477,11 +541,7 @@ async def text_message_handler(client: Client, message: Message):
 
                     cb_data = f"checksub_{'unl_' if bypass_monetization else ''}{token}"
                     buttons.append(
-                        [
-                            InlineKeyboardButton(
-                                "🔄 Try Again", callback_data=cb_data
-                            )
-                        ]
+                        [InlineKeyboardButton("🔄 Try Again", callback_data=cb_data)]
                     )
 
                     await message.reply_text(
@@ -493,7 +553,12 @@ async def text_message_handler(client: Client, message: Message):
                     return
 
                 # Deliver files!
-                await deliver_files(client, message.chat.id, file_doc, bypass_monetization=bypass_monetization)
+                await deliver_files(
+                    client,
+                    message.chat.id,
+                    file_doc,
+                    bypass_monetization=bypass_monetization,
+                )
             else:
                 # Wrong password! Keep session open so they can try again
                 await message.reply_text(
@@ -539,14 +604,16 @@ async def text_message_handler(client: Client, message: Message):
             if campaign:
                 source = campaign_info.get("source")
                 if source and is_valid_source(source):
-                    await database.log_source_visit(user_id, source, campaign_id, campaign_info.get("ref"))
+                    await database.log_source_visit(
+                        user_id, source, campaign_id, campaign_info.get("ref")
+                    )
                 await show_campaign_detail(client, message, campaign_id)
                 return
 
         # 4. Check if user sent a shareable link or raw token
         token = None
         bypass_monetization = False
-        
+
         if "start=" in text:
             token = text.split("start=")[1].split("&")[0].strip()
         elif "t.me/" in text:
@@ -559,12 +626,15 @@ async def text_message_handler(client: Client, message: Message):
             if token.startswith("unl_"):
                 token = token.replace("unl_", "", 1)
                 bypass_monetization = True
-                
+
             file_doc = await database.get_file_link(token)
             if file_doc:
                 # Check if expired
                 expires_at = file_doc.get("expires_at")
-                if expires_at and datetime.datetime.now(datetime.timezone.utc) > expires_at:
+                if (
+                    expires_at
+                    and datetime.datetime.now(datetime.timezone.utc) > expires_at
+                ):
                     await message.reply_text("❌ This file link has expired.")
                     return
 
@@ -574,8 +644,8 @@ async def text_message_handler(client: Client, message: Message):
                 # Perform monetization access checks (unless bypassed, or if user is owner/admin)
                 if not bypass_monetization:
                     is_bot_admin = await database.is_admin(user_id, client)
-                    is_link_owner = (file_doc.get("owner_id") == user_id)
-                    
+                    is_link_owner = file_doc.get("owner_id") == user_id
+
                     if not is_bot_admin and not is_link_owner:
                         # 1. Premium-only check
                         if file_doc.get("is_premium_only", False):
@@ -586,15 +656,24 @@ async def text_message_handler(client: Client, message: Message):
                                     "This link is reserved for Premium subscribers. "
                                     "Please upgrade your account to Premium to access this file!",
                                     reply_markup=InlineKeyboardMarkup(
-                                        [[InlineKeyboardButton("🎫 Subscribe to Premium", callback_data="buy_premium_info")]]
-                                    )
+                                        [
+                                            [
+                                                InlineKeyboardButton(
+                                                    "🎫 Subscribe to Premium",
+                                                    callback_data="buy_premium_info",
+                                                )
+                                            ]
+                                        ]
+                                    ),
                                 )
                                 return
 
                         # 2. Pay-to-unlock check
                         price = file_doc.get("price", 0)
                         if price > 0:
-                            has_unlocked = await database.has_user_unlocked_link(user_id, token)
+                            has_unlocked = await database.has_user_unlocked_link(
+                                user_id, token
+                            )
                             if not has_unlocked:
                                 try:
                                     await send_stars_invoice(
@@ -607,13 +686,17 @@ async def text_message_handler(client: Client, message: Message):
                                     )
                                 except Exception as e:
                                     logger.error(f"Failed to send unlock invoice: {e}")
-                                    await message.reply_text("❌ Failed to generate payment invoice. Please try again.")
+                                    await message.reply_text(
+                                        "❌ Failed to generate payment invoice. Please try again."
+                                    )
                                 return
 
                 # Check if password protected
                 password_hash = file_doc.get("password_hash")
                 if password_hash:
-                    await database.create_password_entry_session(user_id, token, bypass_monetization=bypass_monetization)
+                    await database.create_password_entry_session(
+                        user_id, token, bypass_monetization=bypass_monetization
+                    )
                     await message.reply_text(
                         "🔒 **Password Protected Link**\n\n"
                         "This link is protected by a password. Please enter the password below to access the files."
@@ -631,7 +714,11 @@ async def text_message_handler(client: Client, message: Message):
                             else f"📢 Join Channel {index}"
                         )
                         buttons.append(
-                            [InlineKeyboardButton(btn_label, url=channel["invite_link"])]
+                            [
+                                InlineKeyboardButton(
+                                    btn_label, url=channel["invite_link"]
+                                )
+                            ]
                         )
 
                     cb_data = f"checksub_{'unl_' if bypass_monetization else ''}{token}"
@@ -648,5 +735,10 @@ async def text_message_handler(client: Client, message: Message):
                     return
 
                 # Deliver the files
-                await deliver_files(client, message.chat.id, file_doc, bypass_monetization=bypass_monetization)
+                await deliver_files(
+                    client,
+                    message.chat.id,
+                    file_doc,
+                    bypass_monetization=bypass_monetization,
+                )
                 return

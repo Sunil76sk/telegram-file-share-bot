@@ -68,13 +68,15 @@ async def seed_plans():
     for plan_id, plan in PLAN_DEFINITIONS.items():
         existing = await saas_plans_col.find_one({"_id": plan_id})
         if not existing:
-            await saas_plans_col.insert_one({
-                "_id": plan_id,
-                "name": plan["name"],
-                "description": plan["description"],
-                "price_inr": plan["price_inr"],
-                "features": plan["features"],
-            })
+            await saas_plans_col.insert_one(
+                {
+                    "_id": plan_id,
+                    "name": plan["name"],
+                    "description": plan["description"],
+                    "price_inr": plan["price_inr"],
+                    "features": plan["features"],
+                }
+            )
     logger.info("SaaS plans seeded.")
 
 
@@ -93,10 +95,12 @@ def get_plan_max_bots(plan_id: str) -> int:
 
 
 async def get_active_subscription(user_id: int) -> dict | None:
-    sub = await saas_subscriptions_col.find_one({
-        "user_id": user_id,
-        "status": "active",
-    })
+    sub = await saas_subscriptions_col.find_one(
+        {
+            "user_id": user_id,
+            "status": "active",
+        }
+    )
     if not sub:
         return None
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -163,4 +167,6 @@ async def get_all_active_subscriptions() -> list[dict]:
 
 
 async def get_subscription_by_user(user_id: int) -> dict | None:
-    return await saas_subscriptions_col.find_one({"user_id": user_id, "status": "active"})
+    return await saas_subscriptions_col.find_one(
+        {"user_id": user_id, "status": "active"}
+    )

@@ -127,7 +127,9 @@ async def update_edit_ui(client: Client, user_id: int):
 
     try:
         new_msg = await client.send_message(
-            chat_id=user_id, text=status_text, reply_markup=InlineKeyboardMarkup(buttons)
+            chat_id=user_id,
+            text=status_text,
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
         await database.update_edit_session_status_message(user_id, new_msg.id)
     except Exception as e:

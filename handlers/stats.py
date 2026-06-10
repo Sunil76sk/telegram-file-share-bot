@@ -17,14 +17,16 @@ async def stats_handler(client: Client, message: Message):
         if await database.is_admin(user_id, client):
             users_count = await database.get_users_count()
             files_count = await database.get_files_count()
-            
+
             # Retrieve sub-bot ID if running as SaaS bot
             bot_id = None
             bot_me = client.me or await client.get_me()
-            sub_bot = await database.sub_bots_col.find_one({"username": bot_me.username})
+            sub_bot = await database.sub_bots_col.find_one(
+                {"username": bot_me.username}
+            )
             if sub_bot:
                 bot_id = bot_me.id
-                
+
             shorteners = await database.get_shorteners(bot_id=bot_id)
             total_views = sum(sh.get("views", 0) for sh in shorteners)
             total_clicks = sum(sh.get("clicks", 0) for sh in shorteners)

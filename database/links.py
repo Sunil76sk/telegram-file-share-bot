@@ -97,7 +97,9 @@ async def increment_link_downloads(token: str, user_id: int):
 
 async def set_link_password(token: str, password_hash: str):
     """Store the password hash against the link token."""
-    await files_col.update_one({"token": token}, {"$set": {"password_hash": password_hash}})
+    await files_col.update_one(
+        {"token": token}, {"$set": {"password_hash": password_hash}}
+    )
 
 
 async def set_link_expiry(token: str, expires_at: datetime.datetime | None):
@@ -108,7 +110,9 @@ async def set_link_expiry(token: str, expires_at: datetime.datetime | None):
 # --- FORCE JOIN CHAT HELPERS ---
 
 
-async def add_force_sub_channel(chat_id_or_username, title: str, invite_link: str, bot_id: int | None = None):
+async def add_force_sub_channel(
+    chat_id_or_username, title: str, invite_link: str, bot_id: int | None = None
+):
     """Add a channel to the force subscribe list in DB."""
     await channels_col.update_one(
         {"_id": chat_id_or_username},
@@ -148,4 +152,6 @@ async def set_link_price(token: str, price: int):
 
 async def set_link_premium_only(token: str, is_premium_only: bool):
     """Toggle premium-only access for a shared link."""
-    await files_col.update_one({"token": token}, {"$set": {"is_premium_only": is_premium_only}})
+    await files_col.update_one(
+        {"token": token}, {"$set": {"is_premium_only": is_premium_only}}
+    )

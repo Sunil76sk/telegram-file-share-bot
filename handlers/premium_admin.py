@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import logging
-import datetime
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 from bot import app
 import config
 import database
@@ -13,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # ─── ADD CATALOG ITEM INTERACTIVE WIZARD ────────────────────────────
 
+
 @app.on_message(filters.command("addcatalog") & filters.private)
 async def addcatalog_command_handler(client: Client, message: Message):
     """Start the interactive catalog item addition flow."""
@@ -21,7 +26,9 @@ async def addcatalog_command_handler(client: Client, message: Message):
         return
 
     if not await database.is_admin(user_id, client):
-        await message.reply_text("⛔️ You must be an administrator to add catalog items.")
+        await message.reply_text(
+            "⛔️ You must be an administrator to add catalog items."
+        )
         return
 
     msg = (
@@ -31,14 +38,24 @@ async def addcatalog_command_handler(client: Client, message: Message):
 
     buttons = []
     for cat_key, cat_name in config.PREMIUM_CATEGORIES.items():
-        buttons.append([InlineKeyboardButton(cat_name, callback_data=f"admin_catalog_select_cat_{cat_key}")])
-    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="admin_catalog_cancel")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    cat_name, callback_data=f"admin_catalog_select_cat_{cat_key}"
+                )
+            ]
+        )
+    buttons.append(
+        [InlineKeyboardButton("❌ Cancel", callback_data="admin_catalog_cancel")]
+    )
 
     await message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
 
 
 @app.on_callback_query(filters.regex(r"^admin_catalog_select_cat_([a-zA-Z0-9_]+)$"))
-async def admin_catalog_select_cat_callback(client: Client, callback_query: CallbackQuery):
+async def admin_catalog_select_cat_callback(
+    client: Client, callback_query: CallbackQuery
+):
     """Save category selection and prompt for Title."""
     user_id = callback_query.from_user.id
     if not await database.is_admin(user_id, client):
@@ -46,18 +63,20 @@ async def admin_catalog_select_cat_callback(client: Client, callback_query: Call
         return
 
     category = callback_query.matches[0].group(1)
-    
+
     draft = {"category": category}
     await database.users_col.update_one(
         {"_id": user_id},
-        {"$set": {"state": "catalog_awaiting_title", "catalog_draft": draft}}
+        {"$set": {"state": "catalog_awaiting_title", "catalog_draft": draft}},
     )
 
     await callback_query.answer()
     await callback_query.message.edit_text(
         "📝 **Step 2: Enter Item Title**\n\n"
         "Send the title for the premium content item (e.g. `Advanced Adobe Course`):",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_catalog_cancel")]])
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("❌ Cancel", callback_data="admin_catalog_cancel")]]
+        ),
     )
 
 
@@ -66,27 +85,32 @@ async def admin_catalog_cancel_callback(client: Client, callback_query: Callback
     """Cancel interactive catalog addition wizard."""
     user_id = callback_query.from_user.id
     await database.users_col.update_one(
-        {"_id": user_id},
-        {"$unset": {"state": "", "catalog_draft": ""}}
+        {"_id": user_id}, {"$unset": {"state": "", "catalog_draft": ""}}
     )
     await callback_query.answer("Cancelled.")
-    await callback_query.message.edit_text("❌ Catalog item creation has been cancelled.")
+    await callback_query.message.edit_text(
+        "❌ Catalog item creation has been cancelled."
+    )
 
 
-async def handle_catalog_state(client: Client, message: Message, user_id: int, state: str, user_doc: dict):
+async def handle_catalog_state(
+    client: Client, message: Message, user_id: int, state: str, user_doc: dict
+):
     """Process text inputs during the catalog addition wizard."""
     text = message.text.strip()
     draft = user_doc.get("catalog_draft", {})
 
     if state == "catalog_awaiting_title":
         if not text:
-            await message.reply_text("❌ Title cannot be empty. Please send a valid title:")
+            await message.reply_text(
+                "❌ Title cannot be empty. Please send a valid title:"
+            )
             return
 
         draft["title"] = text
         await database.users_col.update_one(
             {"_id": user_id},
-            {"$set": {"state": "catalog_awaiting_desc", "catalog_draft": draft}}
+            {"$set": {"state": "catalog_awaiting_desc", "catalog_draft": draft}},
         )
         await message.reply_text(
             "📝 **Step 3: Enter Description**\n\n"
@@ -95,13 +119,15 @@ async def handle_catalog_state(client: Client, message: Message, user_id: int, s
 
     elif state == "catalog_awaiting_desc":
         if not text:
-            await message.reply_text("❌ Description cannot be empty. Please send a valid description:")
+            await message.reply_text(
+                "❌ Description cannot be empty. Please send a valid description:"
+            )
             return
 
         draft["description"] = text
         await database.users_col.update_one(
             {"_id": user_id},
-            {"$set": {"state": "catalog_awaiting_token", "catalog_draft": draft}}
+            {"$set": {"state": "catalog_awaiting_token", "catalog_draft": draft}},
         )
         await message.reply_text(
             "🔗 **Step 4: Enter File Link Token**\n\n"
@@ -121,7 +147,7 @@ async def handle_catalog_state(client: Client, message: Message, user_id: int, s
         draft["token"] = text
         await database.users_col.update_one(
             {"_id": user_id},
-            {"$set": {"state": "catalog_awaiting_price_stars", "catalog_draft": draft}}
+            {"$set": {"state": "catalog_awaiting_price_stars", "catalog_draft": draft}},
         )
         await message.reply_text(
             "⭐️ **Step 5: Enter Price in Stars**\n\n"
@@ -134,13 +160,15 @@ async def handle_catalog_state(client: Client, message: Message, user_id: int, s
             if price < 0:
                 raise ValueError
         except ValueError:
-            await message.reply_text("❌ Price must be a positive integer. Enter Price in Stars:")
+            await message.reply_text(
+                "❌ Price must be a positive integer. Enter Price in Stars:"
+            )
             return
 
         draft["price_stars"] = price
         await database.users_col.update_one(
             {"_id": user_id},
-            {"$set": {"state": "catalog_awaiting_price_upi", "catalog_draft": draft}}
+            {"$set": {"state": "catalog_awaiting_price_upi", "catalog_draft": draft}},
         )
         await message.reply_text(
             "💸 **Step 6: Enter Price in INR (UPI)**\n\n"
@@ -153,13 +181,15 @@ async def handle_catalog_state(client: Client, message: Message, user_id: int, s
             if price_upi < 0.0:
                 raise ValueError
         except ValueError:
-            await message.reply_text("❌ Price must be a positive decimal number. Enter UPI Price:")
+            await message.reply_text(
+                "❌ Price must be a positive decimal number. Enter UPI Price:"
+            )
             return
 
         draft["price_upi"] = price_upi
         await database.users_col.update_one(
             {"_id": user_id},
-            {"$set": {"state": "catalog_awaiting_tier", "catalog_draft": draft}}
+            {"$set": {"state": "catalog_awaiting_tier", "catalog_draft": draft}},
         )
         await message.reply_text(
             "🏷 **Step 7: Enter Required Premium Tier**\n\n"
@@ -170,11 +200,13 @@ async def handle_catalog_state(client: Client, message: Message, user_id: int, s
     elif state == "catalog_awaiting_tier":
         tier_input = text.lower()
         if tier_input not in ["none", "silver", "gold"]:
-            await message.reply_text("❌ Invalid input. Please enter `none`, `silver`, or `gold`:")
+            await message.reply_text(
+                "❌ Invalid input. Please enter `none`, `silver`, or `gold`:"
+            )
             return
 
         tier_required = None if tier_input == "none" else tier_input
-        
+
         # All inputs received, create catalog item
         item_id = await database.add_catalog_item(
             title=draft["title"],
@@ -184,17 +216,16 @@ async def handle_catalog_state(client: Client, message: Message, user_id: int, s
             price_stars=draft["price_stars"],
             price_upi=draft["price_upi"],
             tier_required=tier_required,
-            created_by=user_id
+            created_by=user_id,
         )
 
         # Clear state
         await database.users_col.update_one(
-            {"_id": user_id},
-            {"$unset": {"state": "", "catalog_draft": ""}}
+            {"_id": user_id}, {"$unset": {"state": "", "catalog_draft": ""}}
         )
 
         cat_name = config.PREMIUM_CATEGORIES.get(draft["category"], draft["category"])
-        
+
         success_msg = (
             "🎉 **Content Catalog Item Added Successfully!**\n\n"
             f"🆔 **ID:** `{item_id}`\n"
@@ -210,6 +241,7 @@ async def handle_catalog_state(client: Client, message: Message, user_id: int, s
 
 # ─── BROWSE/MANAGE CATALOG (ADMIN) ──────────────────────────────────
 
+
 @app.on_message(filters.command("catalog") & filters.private)
 async def catalog_command_handler(client: Client, message: Message):
     """List and manage catalog items."""
@@ -218,7 +250,9 @@ async def catalog_command_handler(client: Client, message: Message):
         return
 
     if not await database.is_admin(user_id, client):
-        await message.reply_text("⛔️ You must be an administrator to manage the catalog.")
+        await message.reply_text(
+            "⛔️ You must be an administrator to manage the catalog."
+        )
         return
 
     items = await database.get_all_catalog_items(active_only=False)
@@ -234,9 +268,9 @@ async def catalog_command_handler(client: Client, message: Message):
 
     for item in items:
         status_symbol = "🟢" if item.get("is_active", True) else "🔴"
-        status_text = "Active" if item.get("is_active", True) else "Inactive"
+        "Active" if item.get("is_active", True) else "Inactive"
         req_tier = item.get("tier_required") or "None"
-        
+
         info = (
             f"{status_symbol} **{item['title']}**\n"
             f"🆔 ID: `{item['_id']}`\n"
@@ -248,18 +282,26 @@ async def catalog_command_handler(client: Client, message: Message):
 
         item_id = str(item["_id"])
         toggle_label = "🔴 Disable" if item.get("is_active", True) else "🟢 Enable"
-        
-        buttons = InlineKeyboardMarkup([
+
+        buttons = InlineKeyboardMarkup(
             [
-                InlineKeyboardButton(toggle_label, callback_data=f"admin_catalog_toggle_{item_id}"),
-                InlineKeyboardButton("🗑 Delete", callback_data=f"admin_catalog_delete_{item_id}")
+                [
+                    InlineKeyboardButton(
+                        toggle_label, callback_data=f"admin_catalog_toggle_{item_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "🗑 Delete", callback_data=f"admin_catalog_delete_{item_id}"
+                    ),
+                ]
             ]
-        ])
+        )
 
         await message.reply_text(info, reply_markup=buttons)
 
 
-@app.on_callback_query(filters.regex(r"^admin_catalog_(toggle|delete)_([a-fA-F0-9]{24})$"))
+@app.on_callback_query(
+    filters.regex(r"^admin_catalog_(toggle|delete)_([a-fA-F0-9]{24})$")
+)
 async def admin_catalog_manage_callback(client: Client, callback_query: CallbackQuery):
     """Handle enable/disable toggling and deletion of catalog items."""
     user_id = callback_query.from_user.id
@@ -273,12 +315,14 @@ async def admin_catalog_manage_callback(client: Client, callback_query: Callback
     if action == "toggle":
         new_status = await database.toggle_catalog_item(item_id)
         if new_status is None:
-            await callback_query.answer("❌ Failed to update catalog item.", show_alert=True)
+            await callback_query.answer(
+                "❌ Failed to update catalog item.", show_alert=True
+            )
             return
 
         status_str = "ENABLED" if new_status else "DISABLED"
         await callback_query.answer(f"Item {status_str} successfully!")
-        
+
         # Refresh status on message
         item = await database.get_catalog_item(item_id)
         if item:
@@ -293,12 +337,19 @@ async def admin_catalog_manage_callback(client: Client, callback_query: Callback
                 f"📈 Sales: `{item.get('total_purchases', 0)}` purchases | `{item.get('total_revenue_stars', 0)}` Stars"
             )
             toggle_label = "🔴 Disable" if item.get("is_active", True) else "🟢 Enable"
-            buttons = InlineKeyboardMarkup([
+            buttons = InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(toggle_label, callback_data=f"admin_catalog_toggle_{item_id}"),
-                    InlineKeyboardButton("🗑 Delete", callback_data=f"admin_catalog_delete_{item_id}")
+                    [
+                        InlineKeyboardButton(
+                            toggle_label,
+                            callback_data=f"admin_catalog_toggle_{item_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "🗑 Delete", callback_data=f"admin_catalog_delete_{item_id}"
+                        ),
+                    ]
                 ]
-            ])
+            )
             await callback_query.message.edit_text(info, reply_markup=buttons)
 
     elif action == "delete":
@@ -312,6 +363,7 @@ async def admin_catalog_manage_callback(client: Client, callback_query: Callback
 
 # ─── VIEW PENDING UPI REQUESTS ──────────────────────────────────────
 
+
 @app.on_message(filters.command("upi_pending") & filters.private)
 async def upi_pending_command_handler(client: Client, message: Message):
     """List all pending UPI payments awaiting admin confirmation."""
@@ -320,13 +372,17 @@ async def upi_pending_command_handler(client: Client, message: Message):
         return
 
     if not await database.is_admin(user_id, client):
-        await message.reply_text("⛔️ You must be an administrator to view pending UPI payments.")
+        await message.reply_text(
+            "⛔️ You must be an administrator to view pending UPI payments."
+        )
         return
 
     pending_list = await database.get_all_pending_upi(limit=50)
 
     if not pending_list:
-        await message.reply_text("💸 **No pending UPI payments awaiting verification.**")
+        await message.reply_text(
+            "💸 **No pending UPI payments awaiting verification.**"
+        )
         return
 
     await message.reply_text(f"📋 **Pending UPI Submissions ({len(pending_list)}):**")
@@ -334,7 +390,7 @@ async def upi_pending_command_handler(client: Client, message: Message):
     for payment in pending_list:
         pay_id = str(payment["_id"])
         user_info = f"`{payment['user_id']}`"
-        
+
         plan_desc = payment["plan"]
         if plan_desc.startswith("item_"):
             item_id = plan_desc.split("_")[1]
@@ -350,12 +406,18 @@ async def upi_pending_command_handler(client: Client, message: Message):
             f"🕒 Created: {payment['created_at'].strftime('%Y-%m-%d %H:%M:%S UTC')}"
         )
 
-        buttons = InlineKeyboardMarkup([
+        buttons = InlineKeyboardMarkup(
             [
-                InlineKeyboardButton("Approve ✅", callback_data=f"admin_upi_approve_{pay_id}"),
-                InlineKeyboardButton("Reject ❌", callback_data=f"admin_upi_reject_{pay_id}")
+                [
+                    InlineKeyboardButton(
+                        "Approve ✅", callback_data=f"admin_upi_approve_{pay_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "Reject ❌", callback_data=f"admin_upi_reject_{pay_id}"
+                    ),
+                ]
             ]
-        ])
+        )
 
         # If user has attached a screenshot, we can forward or link it
         msg_id = payment.get("screenshot_msg_id")
@@ -367,7 +429,7 @@ async def upi_pending_command_handler(client: Client, message: Message):
                     from_chat_id=payment["user_id"],
                     message_id=msg_id,
                     caption=info,
-                    reply_markup=buttons
+                    reply_markup=buttons,
                 )
                 continue
             except Exception:
@@ -378,6 +440,7 @@ async def upi_pending_command_handler(client: Client, message: Message):
 
 # ─── ACCESS LOGS AUDITING ───────────────────────────────────────────
 
+
 @app.on_message(filters.command("accesslogs") & filters.private)
 async def accesslogs_command_handler(client: Client, message: Message):
     """View and search content access logs."""
@@ -386,16 +449,23 @@ async def accesslogs_command_handler(client: Client, message: Message):
         return
 
     if not await database.is_admin(user_id, client):
-        await message.reply_text("⛔️ You must be an administrator to view access logs.")
+        await message.reply_text(
+            "⛔️ You must be an administrator to view access logs."
+        )
         return
 
     args = message.text.split(maxsplit=1)
-    
+
     if len(args) == 1:
         # Show general log statistics
         stats = await database.get_access_log_stats()
-        by_action_str = "\n".join([f"• `{action}`: {count}" for action, count in stats.get("by_action", {}).items()])
-        
+        by_action_str = "\n".join(
+            [
+                f"• `{action}`: {count}"
+                for action, count in stats.get("by_action", {}).items()
+            ]
+        )
+
         msg = (
             "📊 **Content Access Log Statistics:**\n\n"
             f"• **Total Logged Events:** {stats.get('total', 0)}\n\n"
@@ -429,20 +499,23 @@ async def accesslogs_command_handler(client: Client, message: Message):
         action = log["action"].upper()
         method = log.get("method", "direct").upper()
         amount_str = f" (${log['amount']})" if log.get("amount") else ""
-        
+
         # Shorten token/item details
         token_info = log["token"][:8] + "..." if log["token"] else "N/A"
-        
-        line = f"🕒 `{ts}` | `{action}` via `{method}` | Token: `{token_info}`{amount_str}"
+
+        line = (
+            f"🕒 `{ts}` | `{action}` via `{method}` | Token: `{token_info}`{amount_str}"
+        )
         if log.get("user_id") and not query.isdigit():
             line += f" | User: `{log['user_id']}`"
-        
+
         log_lines.append(line)
 
     await message.reply_text(title + "\n".join(log_lines))
 
 
 # ─── MANUAL PREMIUM GRANTS / REVOCATION ──────────────────────────────
+
 
 @app.on_message(filters.command("grantpremium") & filters.private)
 async def grantpremium_command_handler(client: Client, message: Message):
@@ -454,7 +527,9 @@ async def grantpremium_command_handler(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 3:
-        await message.reply_text("💡 **Usage:** `/grantpremium <user_id> <days> [tier (silver/gold)]`\nExample: `/grantpremium 1234567 30 silver`")
+        await message.reply_text(
+            "💡 **Usage:** `/grantpremium <user_id> <days> [tier (silver/gold)]`\nExample: `/grantpremium 1234567 30 silver`"
+        )
         return
 
     try:
@@ -474,8 +549,14 @@ async def grantpremium_command_handler(client: Client, message: Message):
 
     # Apply premium status
     await database.set_user_premium(target_user, days, tier)
-    await database.log_access(target_user, token="", action="subscription_activate", method="admin_grant", extra=f"{tier}_{days}d")
-    
+    await database.log_access(
+        target_user,
+        token="",
+        action="subscription_activate",
+        method="admin_grant",
+        extra=f"{tier}_{days}d",
+    )
+
     expiry_str = await database.get_premium_expiry_str(target_user)
     await message.reply_text(
         f"✅ **Premium granted successfully!**\n\n"
@@ -493,10 +574,12 @@ async def grantpremium_command_handler(client: Client, message: Message):
                 f"Your premium membership has been manually granted by an administrator.\n"
                 f"Status: **{expiry_str}**\n\n"
                 "You now have access to premium download perks!"
-            )
+            ),
         )
     except Exception as e:
-        logger.warning(f"Could not notify user {target_user} of manual premium grant: {e}")
+        logger.warning(
+            f"Could not notify user {target_user} of manual premium grant: {e}"
+        )
 
 
 @app.on_message(filters.command("revokepremium") & filters.private)
@@ -519,15 +602,19 @@ async def revokepremium_command_handler(client: Client, message: Message):
         return
 
     await database.revoke_user_premium(target_user)
-    await database.log_access(target_user, token="", action="subscription_revoke", method="admin_revoke")
-    
+    await database.log_access(
+        target_user, token="", action="subscription_revoke", method="admin_revoke"
+    )
+
     await message.reply_text(f"✅ Premium status revoked for user `{target_user}`.")
 
     # Attempt to notify target user
     try:
         await client.send_message(
             chat_id=target_user,
-            text="⚠️ **Your premium membership has been cancelled/revoked by an administrator.**"
+            text="⚠️ **Your premium membership has been cancelled/revoked by an administrator.**",
         )
     except Exception as e:
-        logger.warning(f"Could not notify user {target_user} of premium revocation: {e}")
+        logger.warning(
+            f"Could not notify user {target_user} of premium revocation: {e}"
+        )

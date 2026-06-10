@@ -91,7 +91,7 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
     bot_me = client.me or await client.get_me()
     is_main_bot = True
     bot_id = bot_me.id
-    
+
     sub_bot_doc = await database.sub_bots_col.find_one({"username": bot_me.username})
     if sub_bot_doc:
         is_main_bot = False
@@ -152,7 +152,11 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
                         "title": getattr(chat_info, "title", str(chat_id_or_username)),
                         "invite_link": invite_link
                         or getattr(chat_info, "invite_link", None)
-                        or (f"https://t.me/{getattr(chat_info, 'username')}" if getattr(chat_info, "username", None) else ""),
+                        or (
+                            f"https://t.me/{getattr(chat_info, 'username')}"
+                            if getattr(chat_info, "username", None)
+                            else ""
+                        ),
                     }
                 )
         except UserNotParticipant:
@@ -169,7 +173,11 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
                         "chat_id": chat_id_or_username,
                         "title": getattr(chat_info, "title", str(chat_id_or_username)),
                         "invite_link": invite_link
-                        or (f"https://t.me/{getattr(chat_info, 'username')}" if getattr(chat_info, "username", None) else ""),
+                        or (
+                            f"https://t.me/{getattr(chat_info, 'username')}"
+                            if getattr(chat_info, "username", None)
+                            else ""
+                        ),
                     }
                 )
             except Exception as get_chat_err:
@@ -222,16 +230,16 @@ async def call_telegram_api(client: Client, method: str, params: dict) -> dict:
     """Make an asynchronous HTTP POST request to the Telegram Bot API."""
     bot_token = getattr(client, "bot_token", None) or config.BOT_TOKEN
     url = f"https://api.telegram.org/bot{bot_token}/{method}"
-    
+
     def _call():
         req = urllib.request.Request(
             url,
             data=json.dumps(params).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as response:
             return json.loads(response.read().decode("utf-8"))
-            
+
     try:
         return await asyncio.to_thread(_call)
     except Exception as e:
@@ -239,7 +247,14 @@ async def call_telegram_api(client: Client, method: str, params: dict) -> dict:
         return {"ok": False, "description": str(e)}
 
 
-async def send_stars_invoice(client: Client, chat_id: int, title: str, description: str, payload: str, amount: int) -> bool:
+async def send_stars_invoice(
+    client: Client,
+    chat_id: int,
+    title: str,
+    description: str,
+    payload: str,
+    amount: int,
+) -> bool:
     """Send a Telegram Stars invoice to the user."""
     params = {
         "chat_id": chat_id,
@@ -248,18 +263,20 @@ async def send_stars_invoice(client: Client, chat_id: int, title: str, descripti
         "payload": payload,
         "provider_token": "",  # Empty for Telegram Stars
         "currency": "XTR",
-        "prices": [{"label": title, "amount": amount}]
+        "prices": [{"label": title, "amount": amount}],
     }
     res = await call_telegram_api(client, "sendInvoice", params)
     return res.get("ok", False)
 
 
-async def answer_pre_checkout(client: Client, pre_checkout_query_id: str, ok: bool, error_message: str | None = None) -> bool:
+async def answer_pre_checkout(
+    client: Client,
+    pre_checkout_query_id: str,
+    ok: bool,
+    error_message: str | None = None,
+) -> bool:
     """Answer pre checkout query."""
-    params = {
-        "pre_checkout_query_id": pre_checkout_query_id,
-        "ok": ok
-    }
+    params = {"pre_checkout_query_id": pre_checkout_query_id, "ok": ok}
     if error_message:
         params["error_message"] = error_message
     res = await call_telegram_api(client, "answerPreCheckoutQuery", params)

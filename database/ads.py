@@ -137,7 +137,10 @@ async def log_ad_click(ad_id: str, user_id: int) -> None:
     await increment_ad_clicks(ad_id)
 
 
-async def get_ad_revenue_report(start_date: datetime.datetime | None = None, end_date: datetime.datetime | None = None) -> dict:
+async def get_ad_revenue_report(
+    start_date: datetime.datetime | None = None,
+    end_date: datetime.datetime | None = None,
+) -> dict:
     match: dict = {}
     if start_date or end_date:
         time_match: dict = {}
@@ -149,13 +152,15 @@ async def get_ad_revenue_report(start_date: datetime.datetime | None = None, end
 
     pipeline = [
         {"$match": match},
-        {"$group": {
-            "_id": "$type",
-            "count": {"$sum": 1},
-            "total_impressions": {"$sum": "$impressions"},
-            "total_clicks": {"$sum": "$clicks"},
-            "total_revenue": {"$sum": "$revenue"},
-        }},
+        {
+            "$group": {
+                "_id": "$type",
+                "count": {"$sum": 1},
+                "total_impressions": {"$sum": "$impressions"},
+                "total_clicks": {"$sum": "$clicks"},
+                "total_revenue": {"$sum": "$revenue"},
+            }
+        },
     ]
     cursor = ads_col.aggregate(pipeline)
     results = await cursor.to_list(length=20)
@@ -203,8 +208,8 @@ async def get_ads_due_for_broadcast() -> list[dict]:
                     {"schedule_end": None},
                     {"schedule_end": {"$gte": now}},
                 ]
-            }
-        ]
+            },
+        ],
     }
     cursor = ads_col.find(query)
     return await cursor.to_list(length=50)

@@ -70,7 +70,12 @@ async def check_sub_callback(client: Client, callback_query: CallbackQuery):
 
     # Delete the sub join message and send files
     await callback_query.message.delete()
-    await deliver_files(client, callback_query.message.chat.id, file_doc, bypass_monetization=bypass_monetization)
+    await deliver_files(
+        client,
+        callback_query.message.chat.id,
+        file_doc,
+        bypass_monetization=bypass_monetization,
+    )
 
 
 @app.on_callback_query(filters.regex(r"^batch_(add|close|generate)$"))
@@ -204,7 +209,9 @@ async def pw_callback_handler(client: Client, callback_query: CallbackQuery):
                 ],
                 [
                     InlineKeyboardButton("7 Days", callback_data=f"exp_7d_{token}"),
-                    InlineKeyboardButton("Permanent", callback_data=f"exp_perm_{token}"),
+                    InlineKeyboardButton(
+                        "Permanent", callback_data=f"exp_perm_{token}"
+                    ),
                 ],
             ]
         )
@@ -298,7 +305,7 @@ async def edit_callback_handler(client: Client, callback_query: CallbackQuery):
 
             removed_file = files.pop(index)
             removed_name = removed_file.get("file_name", "Unknown File")
-            
+
             file_unique_id = removed_file.get("file_unique_id")
             if file_unique_id and file_unique_id not in pending_deletes:
                 pending_deletes.append(file_unique_id)

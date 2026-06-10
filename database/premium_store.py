@@ -4,7 +4,6 @@ import datetime
 from bson import ObjectId
 from database.mongo import premium_catalog_col, access_logs_col, upi_pending_col
 
-
 # ─── PREMIUM CATALOG ────────────────────────────────────────────────
 
 VALID_CATEGORIES = [
@@ -153,20 +152,14 @@ async def log_access(
 async def get_access_logs(user_id: int, limit: int = 50) -> list:
     """Get access logs for a specific user, most recent first."""
     cursor = (
-        access_logs_col.find({"user_id": user_id})
-        .sort("timestamp", -1)
-        .limit(limit)
+        access_logs_col.find({"user_id": user_id}).sort("timestamp", -1).limit(limit)
     )
     return [doc async for doc in cursor]
 
 
 async def get_access_logs_by_token(token: str, limit: int = 50) -> list:
     """Get access logs for a specific content token, most recent first."""
-    cursor = (
-        access_logs_col.find({"token": token})
-        .sort("timestamp", -1)
-        .limit(limit)
-    )
+    cursor = access_logs_col.find({"token": token}).sort("timestamp", -1).limit(limit)
     return [doc async for doc in cursor]
 
 
@@ -271,8 +264,6 @@ async def reject_upi(payment_id: str, admin_id: int) -> bool:
 async def get_all_pending_upi(limit: int = 50) -> list:
     """Get all pending UPI payments for admin review."""
     cursor = (
-        upi_pending_col.find({"status": "pending"})
-        .sort("created_at", 1)
-        .limit(limit)
+        upi_pending_col.find({"status": "pending"}).sort("created_at", 1).limit(limit)
     )
     return [doc async for doc in cursor]

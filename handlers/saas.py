@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import datetime
 import logging
 import re
 import urllib.request
 import json
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 from bot import app
 import database
 import config
@@ -103,26 +107,54 @@ async def get_saas_dashboard_markup(user_id: int) -> tuple[str, InlineKeyboardMa
             status_emoji = "🟢 Running" if is_active else "🔴 Stopped"
             text += f"{index}. @{username} — {status_emoji}\n"
             if is_active:
-                action_btn = InlineKeyboardButton("🛑 Stop", callback_data=f"saas_stop_{username}")
+                action_btn = InlineKeyboardButton(
+                    "🛑 Stop", callback_data=f"saas_stop_{username}"
+                )
             else:
-                action_btn = InlineKeyboardButton("▶️ Start", callback_data=f"saas_start_{username}")
-            del_btn = InlineKeyboardButton("🗑 Delete", callback_data=f"saas_delete_{username}")
-            buttons.append([InlineKeyboardButton(f"@{username}", url=f"https://t.me/{username}"), action_btn, del_btn])
+                action_btn = InlineKeyboardButton(
+                    "▶️ Start", callback_data=f"saas_start_{username}"
+                )
+            del_btn = InlineKeyboardButton(
+                "🗑 Delete", callback_data=f"saas_delete_{username}"
+            )
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"@{username}", url=f"https://t.me/{username}"
+                    ),
+                    action_btn,
+                    del_btn,
+                ]
+            )
 
     # Plan and subscription buttons
     plan_buttons = []
     if plan_id != "agency":
-        plan_buttons.append(InlineKeyboardButton(f"⬆️ Upgrade Plan", callback_data="saas_plans"))
+        plan_buttons.append(
+            InlineKeyboardButton("⬆️ Upgrade Plan", callback_data="saas_plans")
+        )
     if plan_id != "starter" or sub:
-        plan_buttons.append(InlineKeyboardButton("📄 Manage Subscription", callback_data="saas_subscription"))
+        plan_buttons.append(
+            InlineKeyboardButton(
+                "📄 Manage Subscription", callback_data="saas_subscription"
+            )
+        )
     if plan_buttons:
         buttons.append(plan_buttons)
 
     can_add = bot_count < max_bots
     if can_add:
-        buttons.append([InlineKeyboardButton("➕ Add New Bot", callback_data="saas_add")])
+        buttons.append(
+            [InlineKeyboardButton("➕ Add New Bot", callback_data="saas_add")]
+        )
     else:
-        buttons.append([InlineKeyboardButton("🔒 Bot Limit Reached", callback_data="saas_limit_info")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "🔒 Bot Limit Reached", callback_data="saas_limit_info"
+                )
+            ]
+        )
 
     return text, InlineKeyboardMarkup(buttons)
 
@@ -158,18 +190,23 @@ async def saas_plans_callback(client: Client, callback_query: CallbackQuery):
     buttons = []
     for plan_id in ["pro", "agency"]:
         if plan_id != current_plan:
-            buttons.append([InlineKeyboardButton(
-                f"⬆️ Upgrade to {PLAN_LABELS[plan_id]} — ₹{database.PLAN_DEFINITIONS[plan_id]['price_inr']}/mo",
-                callback_data=f"saas_checkout_{plan_id}",
-            )])
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"⬆️ Upgrade to {PLAN_LABELS[plan_id]} — ₹{database.PLAN_DEFINITIONS[plan_id]['price_inr']}/mo",
+                        callback_data=f"saas_checkout_{plan_id}",
+                    )
+                ]
+            )
 
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="saas_dashboard")])
-    await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    await callback_query.message.edit_text(
+        text, reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
 
 @app.on_callback_query(filters.regex(r"^saas_checkout_(pro|agency)$"))
 async def saas_checkout_callback(client: Client, callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
     plan_id = callback_query.matches[0].group(1)
     plan = database.PLAN_DEFINITIONS[plan_id]
     icon = PLAN_ICONS[plan_id]
@@ -188,10 +225,16 @@ async def saas_checkout_callback(client: Client, callback_query: CallbackQuery):
     if upi_id:
         text += f"\n📱 **UPI ID:** `{upi_id}`"
 
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"💳 I've Paid — Verify", callback_data=f"saas_pay_{plan_id}")],
-        [InlineKeyboardButton("🔙 Back", callback_data="saas_plans")],
-    ])
+    buttons = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "💳 I've Paid — Verify", callback_data=f"saas_pay_{plan_id}"
+                )
+            ],
+            [InlineKeyboardButton("🔙 Back", callback_data="saas_plans")],
+        ]
+    )
     await callback_query.message.edit_text(text, reply_markup=buttons)
 
 
@@ -217,10 +260,12 @@ async def saas_pay_callback(client: Client, callback_query: CallbackQuery):
         f"4. After payment, **send the screenshot** here\n\n"
         f"__Your subscription will be activated after verification.__"
     )
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("💳 Pay via UPI", url=upi_link)],
-        [InlineKeyboardButton("❌ Cancel", callback_data="saas_dashboard")],
-    ])
+    buttons = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("💳 Pay via UPI", url=upi_link)],
+            [InlineKeyboardButton("❌ Cancel", callback_data="saas_dashboard")],
+        ]
+    )
     await callback_query.message.edit_text(text, reply_markup=buttons)
 
 
@@ -237,10 +282,12 @@ async def saas_subscription_callback(client: Client, callback_query: CallbackQue
             f"You are on the **{icon} {plan_name}** plan (free tier).\n"
             f"Upgrade to Pro or Agency for more features and bots."
         )
-        buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⬆️ View Plans", callback_data="saas_plans")],
-            [InlineKeyboardButton("🔙 Back", callback_data="saas_dashboard")],
-        ])
+        buttons = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("⬆️ View Plans", callback_data="saas_plans")],
+                [InlineKeyboardButton("🔙 Back", callback_data="saas_dashboard")],
+            ]
+        )
         await callback_query.message.edit_text(text, reply_markup=buttons)
         return
 
@@ -257,11 +304,17 @@ async def saas_subscription_callback(client: Client, callback_query: CallbackQue
     )
 
     buttons = [
-        [InlineKeyboardButton(f"⬆️ Upgrade Plan", callback_data="saas_plans")],
-        [InlineKeyboardButton("❌ Cancel Subscription", callback_data="saas_cancel_sub")],
+        [InlineKeyboardButton("⬆️ Upgrade Plan", callback_data="saas_plans")],
+        [
+            InlineKeyboardButton(
+                "❌ Cancel Subscription", callback_data="saas_cancel_sub"
+            )
+        ],
         [InlineKeyboardButton("🔙 Back", callback_data="saas_dashboard")],
     ]
-    await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    await callback_query.message.edit_text(
+        text, reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
 
 @app.on_callback_query(filters.regex(r"^saas_cancel_sub$"))
@@ -322,7 +375,9 @@ async def saas_add_callback(client: Client, callback_query: CallbackQuery):
         "2. Copy the **HTTP API Token** (e.g. `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`).\n"
         "3. Paste and send the token here as a direct message.\n\n"
         "Type `/cancel` to abort.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="saas_cancel_add")]]),
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("❌ Cancel", callback_data="saas_cancel_add")]]
+        ),
     )
 
 
@@ -348,9 +403,13 @@ async def saas_manage_callback(client: Client, callback_query: CallbackQuery):
     action = callback_query.matches[0].group(1)
     username = callback_query.matches[0].group(2)
 
-    bot_doc = await database.sub_bots_col.find_one({"username": username, "owner_id": user_id})
+    bot_doc = await database.sub_bots_col.find_one(
+        {"username": username, "owner_id": user_id}
+    )
     if not bot_doc:
-        await callback_query.answer("❌ Bot config not found or permission denied.", show_alert=True)
+        await callback_query.answer(
+            "❌ Bot config not found or permission denied.", show_alert=True
+        )
         return
 
     bot_token = bot_doc["bot_token"]
@@ -365,7 +424,9 @@ async def saas_manage_callback(client: Client, callback_query: CallbackQuery):
         if success:
             await callback_query.answer(f"🟢 Started bot @{username}")
         else:
-            await callback_query.answer("❌ Failed to start bot. Token might be invalid.", show_alert=True)
+            await callback_query.answer(
+                "❌ Failed to start bot. Token might be invalid.", show_alert=True
+            )
     elif action == "delete":
         await saas_runner.stop_bot(bot_token)
         await database.remove_sub_bot(user_id, bot_token)

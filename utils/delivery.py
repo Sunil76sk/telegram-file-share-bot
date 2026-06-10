@@ -15,33 +15,40 @@ async def get_shortened_url(long_url: str) -> str | None:
     if not config.SHORTENER_API_URL or not config.SHORTENER_API_KEY:
         return None
     url = f"{config.SHORTENER_API_URL}?api={config.SHORTENER_API_KEY}&url={long_url}"
-    
+
     def _call():
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=10) as response:
                 content_type = response.headers.get("Content-Type", "")
                 body = response.read().decode("utf-8")
-                
+
                 if "application/json" in content_type:
                     try:
                         data = json.loads(body)
-                        for key in ['shortenedUrl', 'short_url', 'shortened_url', 'url']:
+                        for key in [
+                            "shortenedUrl",
+                            "short_url",
+                            "shortened_url",
+                            "url",
+                        ]:
                             if key in data:
                                 return data[key]
                     except Exception:
                         pass
-                
+
                 if body.strip().startswith("http"):
                     return body.strip()
         except Exception as e:
             logger.error(f"Error calling URL shortener API: {e}")
         return None
-        
+
     return await asyncio.to_thread(_call)
 
 
-async def deliver_files(client: Client, chat_id: int, file_doc: dict, bypass_monetization: bool = False):
+async def deliver_files(
+    client: Client, chat_id: int, file_doc: dict, bypass_monetization: bool = False
+):
     files = file_doc.get("files", [])
     token = file_doc.get("token")
 
@@ -57,7 +64,7 @@ async def deliver_files(client: Client, chat_id: int, file_doc: dict, bypass_mon
 
     try:
         is_premium = await database.is_user_premium(chat_id)
-        
+
         # Track file view event
         await database.track_event(chat_id, "file_view", token=token)
 
@@ -66,19 +73,27 @@ async def deliver_files(client: Client, chat_id: int, file_doc: dict, bypass_mon
             bot_me = client.me or await client.get_me()
             user_doc = await database.get_user(chat_id)
             user_lang = user_doc.get("language_code") if user_doc else None
-            
+
             # Check if there are active shorteners (either sub-bot specific or global)
             bot_id = file_doc.get("bot_id")
-            active_shorteners = await database.get_shorteners(bot_id=bot_id, active_only=True)
+            active_shorteners = await database.get_shorteners(
+                bot_id=bot_id, active_only=True
+            )
             if not active_shorteners and bot_id is not None:
-                active_shorteners = await database.get_shorteners(bot_id=None, active_only=True)
-                
+                active_shorteners = await database.get_shorteners(
+                    bot_id=None, active_only=True
+                )
+
             has_shorteners = len(active_shorteners) > 0
-            use_config_fallback = not has_shorteners and bool(config.SHORTENER_API_URL and config.SHORTENER_API_KEY)
+            use_config_fallback = not has_shorteners and bool(
+                config.SHORTENER_API_URL and config.SHORTENER_API_KEY
+            )
 
             # Check for active sponsored download page ads first
             active_sponsored = await database.get_all_ads(ad_type="sponsored_page")
-            active_sponsored = [a for a in active_sponsored if a.get("status") == "active"]
+            active_sponsored = [
+                a for a in active_sponsored if a.get("status") == "active"
+            ]
 
             if active_sponsored and config.REDIRECT_BASE_URL:
                 # Send user to branded sponsored page before file access
@@ -90,32 +105,50 @@ async def deliver_files(client: Client, chat_id: int, file_doc: dict, bypass_mon
                     "Click below to continue to your download:",
                     reply_markup=InlineKeyboardMarkup(
                         [
-                            [InlineKeyboardButton("🖼 View Sponsored Page", url=sponsored_url)],
-                            [InlineKeyboardButton("🌟 Bypass with Premium", callback_data="buy_premium_info")]
+                            [
+                                InlineKeyboardButton(
+                                    "🖼 View Sponsored Page", url=sponsored_url
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "🌟 Bypass with Premium",
+                                    callback_data="buy_premium_info",
+                                )
+                            ],
                         ]
-                    )
+                    ),
                 )
                 return
 
             if has_shorteners or use_config_fallback:
                 short_url = None
-                
+
                 if config.REDIRECT_BASE_URL:
                     # Web-enhanced flow: redirect to our web server /go endpoint first
-                    short_url = f"{config.REDIRECT_BASE_URL.rstrip('/')}/go/{token}/{chat_id}"
+                    short_url = (
+                        f"{config.REDIRECT_BASE_URL.rstrip('/')}/go/{token}/{chat_id}"
+                    )
                 else:
                     # Fallback flow: shorten directly
                     long_url = f"https://t.me/{bot_me.username}?start=unl_{token}"
                     if has_shorteners:
-                        shortener = await database.get_best_shortener(bot_id=bot_id, user_lang=user_lang)
+                        shortener = await database.get_best_shortener(
+                            bot_id=bot_id, user_lang=user_lang
+                        )
                         if shortener:
                             from utils.web_server import generate_short_link
+
                             short_url = await generate_short_link(shortener, long_url)
                             if short_url:
                                 # Increment stats
-                                await database.increment_shortener_stats(shortener["_id"], views=1)
-                                await database.increment_link_monetization_stats(token, views=1)
-                    
+                                await database.increment_shortener_stats(
+                                    shortener["_id"], views=1
+                                )
+                                await database.increment_link_monetization_stats(
+                                    token, views=1
+                                )
+
                     if not short_url and use_config_fallback:
                         # Fallback to config
                         short_url = await get_shortened_url(long_url)
@@ -129,10 +162,19 @@ async def deliver_files(client: Client, chat_id: int, file_doc: dict, bypass_mon
                         "👉 **Click the button below to unlock your files:**",
                         reply_markup=InlineKeyboardMarkup(
                             [
-                                [InlineKeyboardButton("🔓 Unlock Files", url=short_url)],
-                                [InlineKeyboardButton("🌟 Bypass with Premium", callback_data="buy_premium_info")]
+                                [
+                                    InlineKeyboardButton(
+                                        "🔓 Unlock Files", url=short_url
+                                    )
+                                ],
+                                [
+                                    InlineKeyboardButton(
+                                        "🌟 Bypass with Premium",
+                                        callback_data="buy_premium_info",
+                                    )
+                                ],
                             ]
-                        )
+                        ),
                     )
                     return
 
@@ -143,7 +185,7 @@ async def deliver_files(client: Client, chat_id: int, file_doc: dict, bypass_mon
                     chat_id,
                     f"⏳ **Preparing your files...**\n"
                     f"Please wait **{wait_seconds}** seconds...\n\n"
-                    f"🌟 *Want to skip this wait? Type /premium to unlock instant downloads!*"
+                    f"🌟 *Want to skip this wait? Type /premium to unlock instant downloads!*",
                 )
                 remaining = wait_seconds
                 while remaining > 0:
@@ -181,7 +223,7 @@ async def deliver_files(client: Client, chat_id: int, file_doc: dict, bypass_mon
         sent_message_ids = []
         if info_msg:
             sent_message_ids.append(info_msg.id)
-            
+
         failures = 0
         for index, file_obj in enumerate(files):
             file_id = file_obj.get("file_id")
@@ -211,13 +253,17 @@ async def deliver_files(client: Client, chat_id: int, file_doc: dict, bypass_mon
             try:
                 catalog_item = await database.get_catalog_item_by_token(token)
                 catalog_item_id = str(catalog_item["_id"]) if catalog_item else None
-                method = "premium" if is_premium else ("bypass" if bypass_monetization else "direct")
+                method = (
+                    "premium"
+                    if is_premium
+                    else ("bypass" if bypass_monetization else "direct")
+                )
                 await database.log_access(
                     user_id=chat_id,
                     token=token,
                     action="download",
                     method=method,
-                    catalog_item_id=catalog_item_id
+                    catalog_item_id=catalog_item_id,
                 )
             except Exception as e:
                 logger.error(f"Failed to log download access for user {chat_id}: {e}")

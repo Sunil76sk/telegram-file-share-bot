@@ -39,7 +39,12 @@ def is_valid_asset_type(asset_type: str) -> bool:
     return asset_type in ASSET_TYPES
 
 
-def format_funnel_link(bot_username: str, campaign_id: str, source: str | None = None, ref: str | None = None) -> str:
+def format_funnel_link(
+    bot_username: str,
+    campaign_id: str,
+    source: str | None = None,
+    ref: str | None = None,
+) -> str:
     parts = [campaign_id]
     if source:
         parts.append(f"src_{source}")

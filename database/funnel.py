@@ -58,7 +58,9 @@ async def get_all_campaigns(active_only: bool = True) -> list[dict]:
     return await cursor.to_list(length=100)
 
 
-async def get_campaigns_by_asset_type(asset_type: str, active_only: bool = True) -> list[dict]:
+async def get_campaigns_by_asset_type(
+    asset_type: str, active_only: bool = True
+) -> list[dict]:
     query: dict = {"asset_type": asset_type}
     if active_only:
         query["active"] = True
@@ -67,7 +69,9 @@ async def get_campaigns_by_asset_type(asset_type: str, active_only: bool = True)
 
 
 async def update_campaign(campaign_id: str, updates: dict) -> bool:
-    result = await funnel_campaigns_col.update_one({"_id": campaign_id}, {"$set": updates})
+    result = await funnel_campaigns_col.update_one(
+        {"_id": campaign_id}, {"$set": updates}
+    )
     return result.modified_count > 0
 
 
@@ -110,19 +114,25 @@ async def get_source_analytics(source: str | None = None) -> list[dict]:
     match: dict = {}
     if source:
         match["source"] = source
-    cursor = funnel_analytics_col.aggregate([
-        {"$match": match},
-        {"$group": {
-            "_id": "$source",
-            "total_visits": {"$sum": 1},
-            "unique_users": {"$addToSet": "$user_id"},
-        }},
-        {"$project": {
-            "source": "$_id",
-            "total_visits": 1,
-            "unique_users_count": {"$size": "$unique_users"},
-        }},
-    ])
+    cursor = funnel_analytics_col.aggregate(
+        [
+            {"$match": match},
+            {
+                "$group": {
+                    "_id": "$source",
+                    "total_visits": {"$sum": 1},
+                    "unique_users": {"$addToSet": "$user_id"},
+                }
+            },
+            {
+                "$project": {
+                    "source": "$_id",
+                    "total_visits": 1,
+                    "unique_users_count": {"$size": "$unique_users"},
+                }
+            },
+        ]
+    )
     return await cursor.to_list(length=50)
 
 
@@ -130,7 +140,9 @@ async def get_campaign_stats(campaign_id: str) -> dict | None:
     campaign = await funnel_campaigns_col.find_one({"_id": campaign_id})
     if not campaign:
         return None
-    total_visits = await funnel_analytics_col.count_documents({"campaign_id": campaign_id})
+    total_visits = await funnel_analytics_col.count_documents(
+        {"campaign_id": campaign_id}
+    )
     pipeline = [
         {"$match": {"campaign_id": campaign_id}},
         {"$group": {"_id": None, "unique_users": {"$addToSet": "$user_id"}}},

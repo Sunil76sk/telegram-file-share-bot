@@ -195,7 +195,10 @@ async def file_uploader(client: Client, message: Message):
     user_doc = await database.get_user(user_id)
     if user_doc and user_doc.get("state", "").startswith("market_"):
         from handlers.marketplace import handle_marketplace_state
-        await handle_marketplace_state(client, message, user_id, user_doc["state"], user_doc)
+
+        await handle_marketplace_state(
+            client, message, user_id, user_doc["state"], user_doc
+        )
         return
 
     # Extract file details
@@ -226,7 +229,9 @@ async def file_uploader(client: Client, message: Message):
             edit_session = await database.get_edit_session(user_id)
             if edit_session:
                 files = edit_session.get("files", [])
-                file_unique_ids = [f.get("file_unique_id") for f in files if f.get("file_unique_id")]
+                file_unique_ids = [
+                    f.get("file_unique_id") for f in files if f.get("file_unique_id")
+                ]
 
                 # Prevent duplicate uploads within the same edit session
                 if file_unique_id and file_unique_id in file_unique_ids:
@@ -255,7 +260,9 @@ async def file_uploader(client: Client, message: Message):
                 batch = await database.get_active_batch(user_id)
 
             files = batch.get("files", [])  # type: ignore[union-attr]
-            file_unique_ids = [f.get("file_unique_id") for f in files if f.get("file_unique_id")]
+            file_unique_ids = [
+                f.get("file_unique_id") for f in files if f.get("file_unique_id")
+            ]
             if file_unique_id and file_unique_id in file_unique_ids:
                 return
 

@@ -48,7 +48,7 @@ async def init_db():
         await users_col.create_index("user_id")
         await batches_col.create_index("user_id")
         await edit_sessions_col.create_index("user_id")
-        
+
         # New Indexes for SaaS and Monetization
         await sub_bots_col.create_index("owner_id")
         await sub_bots_col.create_index("bot_token", unique=True)
@@ -82,7 +82,7 @@ async def init_db():
         await ad_clicks_col.create_index("ad_id")
         await ad_clicks_col.create_index("user_id")
         await ad_clicks_col.create_index("timestamp")
-        
+
         # Marketplace indexes
         await products_col.create_index("token", unique=True)
         await products_col.create_index("owner_id")

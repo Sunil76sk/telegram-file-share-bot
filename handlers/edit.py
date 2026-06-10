@@ -209,7 +209,9 @@ async def edit_link_handler(client: Client, message: Message):
         # Handle set price
         if action == "price":
             if len(args) < 4:
-                await message.reply_text(f"⚠️ Usage: `/edit_link {token} price <stars>`")
+                await message.reply_text(
+                    f"⚠️ Usage: `/edit_link {token} price <stars>`"
+                )
                 return
             try:
                 price = int(args[3])
@@ -221,13 +223,17 @@ async def edit_link_handler(client: Client, message: Message):
 
             await database.set_link_price(token, price)
             price_text = f"{price} Stars ⭐️" if price > 0 else "Free"
-            await message.reply_text(f"✅ **Price updated successfully!**\nLink price is now: **{price_text}**.")
+            await message.reply_text(
+                f"✅ **Price updated successfully!**\nLink price is now: **{price_text}**."
+            )
             return
 
         # Handle toggle premium
         if action == "premium":
             if len(args) < 4:
-                await message.reply_text(f"⚠️ Usage: `/edit_link {token} premium <true/false>`")
+                await message.reply_text(
+                    f"⚠️ Usage: `/edit_link {token} premium <true/false>`"
+                )
                 return
 
             val = args[3].lower().strip()
@@ -241,7 +247,9 @@ async def edit_link_handler(client: Client, message: Message):
 
             await database.set_link_premium_only(token, is_prem)
             status_text = "Premium Only 🌟" if is_prem else "All Users (Free/Regular)"
-            await message.reply_text(f"✅ **Premium access updated!**\nLink access is now: **{status_text}**.")
+            await message.reply_text(
+                f"✅ **Premium access updated!**\nLink access is now: **{status_text}**."
+            )
             return
 
         await message.reply_text(

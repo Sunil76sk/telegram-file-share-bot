@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import logging
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 from bot import app
 import database
 from utils.funnel import (
@@ -18,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 @app.on_message(filters.command("funnel") & filters.private)
 async def funnel_list_cmd(client: Client, message: Message):
-    user_id = message.from_user.id
     args = message.text.split(None, 1)
     if len(args) > 1:
         campaign_id = args[1].strip()
@@ -87,14 +91,21 @@ async def add_campaign_cmd(client: Client, message: Message):
     title = args[6].strip()
     description = args[7].strip() if len(args) > 7 else ""
     from utils.funnel import is_valid_campaign_id, is_valid_source, is_valid_asset_type
+
     if not is_valid_campaign_id(campaign_id):
-        await message.reply_text("❌ Campaign ID must start with `cmp_` and be 3-64 chars (letters, numbers, `_`, `-`).")
+        await message.reply_text(
+            "❌ Campaign ID must start with `cmp_` and be 3-64 chars (letters, numbers, `_`, `-`)."
+        )
         return
     if not is_valid_source(source):
-        await message.reply_text(f"❌ Invalid source `{source}`. Valid: instagram, youtube, movie_review, ott, ai_content.")
+        await message.reply_text(
+            f"❌ Invalid source `{source}`. Valid: instagram, youtube, movie_review, ott, ai_content."
+        )
         return
     if not is_valid_asset_type(asset_type):
-        await message.reply_text(f"❌ Invalid asset type `{asset_type}`. Valid: wallpapers, subtitles, templates, resource_packs, educational.")
+        await message.reply_text(
+            f"❌ Invalid asset type `{asset_type}`. Valid: wallpapers, subtitles, templates, resource_packs, educational."
+        )
         return
     try:
         chat_id = int(chat_id_raw)
@@ -145,7 +156,6 @@ async def del_campaign_cmd(client: Client, message: Message):
 
 
 async def show_campaign_detail(client: Client, message: Message, campaign_id: str):
-    user_id = message.from_user.id
     campaign = await database.get_campaign(campaign_id)
     if not campaign or not campaign.get("active", True):
         await message.reply_text("❌ Campaign not found or no longer active.")
@@ -160,10 +170,20 @@ async def show_campaign_detail(client: Client, message: Message, campaign_id: st
         f"📂 **Content:** {at}\n\n"
         f"👇 **Access this content by joining our channel below!**"
     )
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 Join Channel", url=campaign.get("invite_link", ""))],
-        [InlineKeyboardButton("🔄 Verify & Access", callback_data=f"funnel_sub_{campaign_id}")],
-    ])
+    buttons = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "📢 Join Channel", url=campaign.get("invite_link", "")
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔄 Verify & Access", callback_data=f"funnel_sub_{campaign_id}"
+                )
+            ],
+        ]
+    )
     await message.reply_text(text, reply_markup=buttons)
 
 
@@ -173,11 +193,15 @@ async def funnel_sub_callback(client: Client, callback_query: CallbackQuery):
     campaign_id = callback_query.matches[0].group(1)
     campaign = await database.get_campaign(campaign_id)
     if not campaign or not campaign.get("active", True):
-        await callback_query.answer("❌ This campaign is no longer active.", show_alert=True)
+        await callback_query.answer(
+            "❌ This campaign is no longer active.", show_alert=True
+        )
         return
     not_joined = await get_not_subscribed_channels(client, user_id)
     if not_joined:
-        await callback_query.answer("❌ Please join the channel first!", show_alert=True)
+        await callback_query.answer(
+            "❌ Please join the channel first!", show_alert=True
+        )
         return
     await database.increment_campaign_conversions(campaign_id)
     file_token = campaign.get("file_token")
@@ -197,7 +221,14 @@ async def funnel_sub_callback(client: Client, callback_query: CallbackQuery):
         f"Here is your exclusive bot link to access the files:\n\n"
         f"🔗 `{funnel_link}`\n\n"
         f"Share this with friends to help the community grow! 💪",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("📢 Share with Friends", url=f"https://t.me/share/url?url={funnel_link}&text=Check+out+this+exclusive+content!")],
-        ])
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "📢 Share with Friends",
+                        url=f"https://t.me/share/url?url={funnel_link}&text=Check+out+this+exclusive+content!",
+                    )
+                ],
+            ]
+        ),
     )

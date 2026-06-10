@@ -57,7 +57,7 @@ original_start = app.start
 
 async def custom_start():
     await original_start()
-    
+
     # Cache bot username for global fallback
     bot_me = app.me or await app.get_me()
     config.BOT_USERNAME = bot_me.username
@@ -69,7 +69,7 @@ async def custom_start():
     await database.batches_col.delete_many({})
     await database.edit_sessions_col.delete_many({})
     logger.info("Cleared stale batch and edit sessions from the database.")
-    
+
     # Auto-register shortener from .env config if not already in database
     if config.SHORTENER_API_URL and config.SHORTENER_API_KEY:
         existing = await database.shorteners_col.find_one(
@@ -78,6 +78,7 @@ async def custom_start():
         if not existing:
             # Derive a friendly name from the URL domain
             from urllib.parse import urlparse
+
             domain = urlparse(config.SHORTENER_API_URL).netloc
             name = domain.split(".")[0].capitalize() if domain else "ConfigShortener"
             await database.add_shortener(
@@ -92,13 +93,13 @@ async def custom_start():
             logger.info(f"Auto-registered '{name}' shortener from .env config.")
         else:
             logger.info("Shortener from .env config already registered in database.")
-    
+
     asyncio.create_task(deletion_worker(app))
     asyncio.create_task(expiry_worker())
-    
+
     # Start all registered SaaS sub-bots in the background
     await saas_runner.start_all()
-    
+
     # Start the local redirect web server
     start_web_server()
 

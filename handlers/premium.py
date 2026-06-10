@@ -3,7 +3,12 @@ from __future__ import annotations
 import logging
 import datetime
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 from bot import app
 import config
 import database
@@ -49,6 +54,7 @@ def get_upi_plan_price(tier: str, duration: str) -> float:
 
 # ─── PREMIUM MENU ──────────────────────────────────────────────────
 
+
 @app.on_message(filters.command(["premium", "subscribe"]) & filters.private)
 async def premium_command_handler(client: Client, message: Message):
     """Display Premium features and tier options."""
@@ -57,7 +63,7 @@ async def premium_command_handler(client: Client, message: Message):
         return
 
     expiry_str = await database.get_premium_expiry_str(user_id)
-    current_tier = await database.get_user_premium_tier(user_id)
+    await database.get_user_premium_tier(user_id)
 
     benefits = (
         "🌟 **Premium Membership Perks:**\n\n"
@@ -76,12 +82,18 @@ async def premium_command_handler(client: Client, message: Message):
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🥈 View Silver Plans", callback_data="premium_tier_silver"),
-                InlineKeyboardButton("👑 View Gold Plans", callback_data="premium_tier_gold"),
+                InlineKeyboardButton(
+                    "🥈 View Silver Plans", callback_data="premium_tier_silver"
+                ),
+                InlineKeyboardButton(
+                    "👑 View Gold Plans", callback_data="premium_tier_gold"
+                ),
             ],
             [
-                InlineKeyboardButton("🛍 Browse Content Store", callback_data="store_categories"),
-            ]
+                InlineKeyboardButton(
+                    "🛍 Browse Content Store", callback_data="store_categories"
+                ),
+            ],
         ]
     )
 
@@ -98,11 +110,8 @@ async def premium_tier_callback(client: Client, callback_query: CallbackQuery):
 
     tier = callback_query.matches[0].group(1)
     tier_title = "🥈 Silver Tier" if tier == "silver" else "👑 Gold Tier"
-    
-    msg = (
-        f"{tier_title} Subscriptions:\n\n"
-        "Choose a plan duration below to continue:"
-    )
+
+    msg = f"{tier_title} Subscriptions:\n\n" "Choose a plan duration below to continue:"
 
     keyboard = []
     if tier == "silver":
@@ -110,8 +119,22 @@ async def premium_tier_callback(client: Client, callback_query: CallbackQuery):
         w_upi = get_upi_plan_price("silver", "weekly")
         m_stars = get_stars_plan_price("silver", "monthly")
         m_upi = get_upi_plan_price("silver", "monthly")
-        keyboard.append([InlineKeyboardButton(f"🎫 Weekly - {w_stars} ⭐️ / ₹{w_upi}", callback_data="premium_plan_silver_weekly")])
-        keyboard.append([InlineKeyboardButton(f"📅 Monthly - {m_stars} ⭐️ / ₹{m_upi}", callback_data="premium_plan_silver_monthly")])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"🎫 Weekly - {w_stars} ⭐️ / ₹{w_upi}",
+                    callback_data="premium_plan_silver_weekly",
+                )
+            ]
+        )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"📅 Monthly - {m_stars} ⭐️ / ₹{m_upi}",
+                    callback_data="premium_plan_silver_monthly",
+                )
+            ]
+        )
     else:  # gold
         w_stars = get_stars_plan_price("gold", "weekly")
         w_upi = get_upi_plan_price("gold", "weekly")
@@ -119,17 +142,44 @@ async def premium_tier_callback(client: Client, callback_query: CallbackQuery):
         m_upi = get_upi_plan_price("gold", "monthly")
         l_stars = get_stars_plan_price("gold", "lifetime")
         l_upi = get_upi_plan_price("gold", "lifetime")
-        keyboard.append([InlineKeyboardButton(f"🎫 Weekly - {w_stars} ⭐️ / ₹{w_upi}", callback_data="premium_plan_gold_weekly")])
-        keyboard.append([InlineKeyboardButton(f"📅 Monthly - {m_stars} ⭐️ / ₹{m_upi}", callback_data="premium_plan_gold_monthly")])
-        keyboard.append([InlineKeyboardButton(f"👑 Lifetime - {l_stars} ⭐️ / ₹{l_upi}", callback_data="premium_plan_gold_lifetime")])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"🎫 Weekly - {w_stars} ⭐️ / ₹{w_upi}",
+                    callback_data="premium_plan_gold_weekly",
+                )
+            ]
+        )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"📅 Monthly - {m_stars} ⭐️ / ₹{m_upi}",
+                    callback_data="premium_plan_gold_monthly",
+                )
+            ]
+        )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"👑 Lifetime - {l_stars} ⭐️ / ₹{l_upi}",
+                    callback_data="premium_plan_gold_lifetime",
+                )
+            ]
+        )
 
-    keyboard.append([InlineKeyboardButton("🔙 Back to Tiers", callback_data="premium_menu_home")])
-    
+    keyboard.append(
+        [InlineKeyboardButton("🔙 Back to Tiers", callback_data="premium_menu_home")]
+    )
+
     await callback_query.answer()
-    await callback_query.message.edit_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
+    await callback_query.message.edit_text(
+        msg, reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
-@app.on_callback_query(filters.regex(r"^premium_plan_(silver|gold)_(weekly|monthly|lifetime)$"))
+@app.on_callback_query(
+    filters.regex(r"^premium_plan_(silver|gold)_(weekly|monthly|lifetime)$")
+)
 async def premium_plan_callback(client: Client, callback_query: CallbackQuery):
     """Show payment method options (Stars vs UPI) for the selected plan."""
     user_id = callback_query.from_user.id
@@ -156,12 +206,20 @@ async def premium_plan_callback(client: Client, callback_query: CallbackQuery):
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton(f"⭐️ Pay {stars_price} Stars", callback_data=f"premium_pay_{tier}_{duration}_stars"),
-                InlineKeyboardButton(f"💸 Pay ₹{upi_price} via UPI", callback_data=f"premium_pay_{tier}_{duration}_upi"),
+                InlineKeyboardButton(
+                    f"⭐️ Pay {stars_price} Stars",
+                    callback_data=f"premium_pay_{tier}_{duration}_stars",
+                ),
+                InlineKeyboardButton(
+                    f"💸 Pay ₹{upi_price} via UPI",
+                    callback_data=f"premium_pay_{tier}_{duration}_upi",
+                ),
             ],
             [
-                InlineKeyboardButton("🔙 Back to Plans", callback_data=f"premium_tier_{tier}"),
-            ]
+                InlineKeyboardButton(
+                    "🔙 Back to Plans", callback_data=f"premium_tier_{tier}"
+                ),
+            ],
         ]
     )
 
@@ -169,7 +227,9 @@ async def premium_plan_callback(client: Client, callback_query: CallbackQuery):
     await callback_query.message.edit_text(msg, reply_markup=buttons)
 
 
-@app.on_callback_query(filters.regex(r"^premium_pay_(silver|gold)_(weekly|monthly|lifetime)_(stars|upi)$"))
+@app.on_callback_query(
+    filters.regex(r"^premium_pay_(silver|gold)_(weekly|monthly|lifetime)_(stars|upi)$")
+)
 async def premium_pay_callback(client: Client, callback_query: CallbackQuery):
     """Handle chosen payment method for subscriptions."""
     user_id = callback_query.from_user.id
@@ -189,7 +249,7 @@ async def premium_pay_callback(client: Client, callback_query: CallbackQuery):
         desc = f"Access to {tier.capitalize()} tier features for {duration} duration."
         if duration == "lifetime":
             desc = f"Permanent access to {tier.capitalize()} tier features."
-            
+
         stars_price = get_stars_plan_price(tier, duration)
         payload = f"premium_{tier}_{duration}"
 
@@ -207,7 +267,7 @@ async def premium_pay_callback(client: Client, callback_query: CallbackQuery):
             logger.error(f"Failed to send stars invoice to {user_id}: {e}")
             await client.send_message(
                 chat_id=user_id,
-                text="❌ **Failed to generate invoice.** Please try again or contact support."
+                text="❌ **Failed to generate invoice.** Please try again or contact support.",
             )
 
     elif method == "upi":
@@ -241,9 +301,7 @@ async def premium_pay_callback(client: Client, callback_query: CallbackQuery):
             try:
                 await callback_query.message.delete()
                 await client.send_photo(
-                    chat_id=user_id,
-                    photo=config.UPI_QR_IMAGE,
-                    caption=upi_instructions
+                    chat_id=user_id, photo=config.UPI_QR_IMAGE, caption=upi_instructions
                 )
                 return
             except Exception as e:
@@ -275,12 +333,18 @@ async def premium_menu_home_callback(client: Client, callback_query: CallbackQue
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("🥈 View Silver Plans", callback_data="premium_tier_silver"),
-                InlineKeyboardButton("👑 View Gold Plans", callback_data="premium_tier_gold"),
+                InlineKeyboardButton(
+                    "🥈 View Silver Plans", callback_data="premium_tier_silver"
+                ),
+                InlineKeyboardButton(
+                    "👑 View Gold Plans", callback_data="premium_tier_gold"
+                ),
             ],
             [
-                InlineKeyboardButton("🛍 Browse Content Store", callback_data="store_categories"),
-            ]
+                InlineKeyboardButton(
+                    "🛍 Browse Content Store", callback_data="store_categories"
+                ),
+            ],
         ]
     )
 
@@ -289,6 +353,7 @@ async def premium_menu_home_callback(client: Client, callback_query: CallbackQue
 
 
 # ─── STORE / CATALOG BROWSER ────────────────────────────────────────
+
 
 @app.on_message(filters.command(["store", "shop"]) & filters.private)
 async def store_command_handler(client: Client, message: Message):
@@ -304,9 +369,13 @@ async def store_command_handler(client: Client, message: Message):
 
     buttons = []
     for cat_key, cat_name in config.PREMIUM_CATEGORIES.items():
-        buttons.append([InlineKeyboardButton(cat_name, callback_data=f"store_cat_{cat_key}")])
+        buttons.append(
+            [InlineKeyboardButton(cat_name, callback_data=f"store_cat_{cat_key}")]
+        )
 
-    buttons.append([InlineKeyboardButton("🔙 Premium Menu", callback_data="premium_menu_home")])
+    buttons.append(
+        [InlineKeyboardButton("🔙 Premium Menu", callback_data="premium_menu_home")]
+    )
 
     await message.reply_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -319,19 +388,22 @@ async def store_categories_callback(client: Client, callback_query: CallbackQuer
         await callback_query.answer("⛔️ You are banned.", show_alert=True)
         return
 
-    msg = (
-        "🛍 **Premium Content Store:**\n\n"
-        "Select a category below to browse items:"
-    )
+    msg = "🛍 **Premium Content Store:**\n\n" "Select a category below to browse items:"
 
     buttons = []
     for cat_key, cat_name in config.PREMIUM_CATEGORIES.items():
-        buttons.append([InlineKeyboardButton(cat_name, callback_data=f"store_cat_{cat_key}")])
+        buttons.append(
+            [InlineKeyboardButton(cat_name, callback_data=f"store_cat_{cat_key}")]
+        )
 
-    buttons.append([InlineKeyboardButton("🔙 Premium Menu", callback_data="premium_menu_home")])
+    buttons.append(
+        [InlineKeyboardButton("🔙 Premium Menu", callback_data="premium_menu_home")]
+    )
 
     await callback_query.answer()
-    await callback_query.message.edit_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
+    await callback_query.message.edit_text(
+        msg, reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
 
 @app.on_callback_query(filters.regex(r"^store_cat_([a-zA-Z0-9_]+)$"))
@@ -343,24 +415,43 @@ async def store_category_callback(client: Client, callback_query: CallbackQuery)
         return
 
     category = callback_query.matches[0].group(1)
-    category_name = config.PREMIUM_CATEGORIES.get(category, category.replace("_", " ").title())
+    category_name = config.PREMIUM_CATEGORIES.get(
+        category, category.replace("_", " ").title()
+    )
 
     items = await database.get_catalog_by_category(category, active_only=True)
 
     if not items:
-        await callback_query.answer(f"No items available in {category_name} right now.", show_alert=True)
+        await callback_query.answer(
+            f"No items available in {category_name} right now.", show_alert=True
+        )
         return
 
     msg = f"📂 **Category: {category_name}**\n\nSelect an item to view details:"
     keyboard = []
     for item in items:
         price_label = f"({item['price_stars']} ⭐️ / ₹{item['price_upi']})"
-        keyboard.append([InlineKeyboardButton(f"📄 {item['title']} {price_label}", callback_data=f"store_item_{item['_id']}")])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"📄 {item['title']} {price_label}",
+                    callback_data=f"store_item_{item['_id']}",
+                )
+            ]
+        )
 
-    keyboard.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="store_categories")])
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Categories", callback_data="store_categories"
+            )
+        ]
+    )
 
     await callback_query.answer()
-    await callback_query.message.edit_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
+    await callback_query.message.edit_text(
+        msg, reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 @app.on_callback_query(filters.regex(r"^store_item_([a-fA-F0-9]{24})$"))
@@ -373,27 +464,27 @@ async def store_item_callback(client: Client, callback_query: CallbackQuery):
 
     item_id = callback_query.matches[0].group(1)
     item = await database.get_catalog_item(item_id)
-    
+
     if not item:
         await callback_query.answer("❌ Item not found.", show_alert=True)
         return
 
     # Check if user already unlocked/owns this item, or has active premium tier to access it
     unlocked = await database.has_user_unlocked_link(user_id, item["token"])
-    
+
     user_tier = await database.get_user_premium_tier(user_id)
     tier_unlocked = False
-    
+
     if item["tier_required"]:
         # If item requires gold, user must have gold. If silver, silver/gold.
         if item["tier_required"] == "gold":
-            tier_unlocked = (user_tier == "gold")
+            tier_unlocked = user_tier == "gold"
         elif item["tier_required"] == "silver":
-            tier_unlocked = (user_tier in ["silver", "gold"])
+            tier_unlocked = user_tier in ["silver", "gold"]
     else:
         # No tier required specifically, but is it a general premium catalog item?
         # Standard rules apply: if user has ANY premium tier, they can access it.
-        tier_unlocked = (user_tier is not None)
+        tier_unlocked = user_tier is not None
 
     msg = (
         f"📄 **{item['title']}**\n\n"
@@ -402,24 +493,47 @@ async def store_item_callback(client: Client, callback_query: CallbackQuery):
     )
 
     buttons = []
-    
+
     if unlocked or tier_unlocked:
         msg += "\n✅ **You have access to this content!**"
-        buttons.append([InlineKeyboardButton("📥 Get Content / Deliver Files", callback_data=f"store_deliver_{item_id}")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "📥 Get Content / Deliver Files",
+                    callback_data=f"store_deliver_{item_id}",
+                )
+            ]
+        )
     else:
         msg += (
             f"\n💰 **Price:** {item['price_stars']} Stars / ₹{item['price_upi']} INR\n\n"
             "Choose a payment option below to unlock this item:"
         )
-        buttons.append([
-            InlineKeyboardButton(f"⭐️ Buy ({item['price_stars']} Stars)", callback_data=f"store_buy_{item_id}_stars"),
-            InlineKeyboardButton(f"💸 Buy (₹{item['price_upi']} UPI)", callback_data=f"store_buy_{item_id}_upi")
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"⭐️ Buy ({item['price_stars']} Stars)",
+                    callback_data=f"store_buy_{item_id}_stars",
+                ),
+                InlineKeyboardButton(
+                    f"💸 Buy (₹{item['price_upi']} UPI)",
+                    callback_data=f"store_buy_{item_id}_upi",
+                ),
+            ]
+        )
 
-    buttons.append([InlineKeyboardButton("🔙 Back to Category", callback_data=f"store_cat_{item['category']}")])
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                "🔙 Back to Category", callback_data=f"store_cat_{item['category']}"
+            )
+        ]
+    )
 
     await callback_query.answer()
-    await callback_query.message.edit_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
+    await callback_query.message.edit_text(
+        msg, reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
 
 @app.on_callback_query(filters.regex(r"^store_deliver_([a-fA-F0-9]{24})$"))
@@ -443,27 +557,34 @@ async def store_deliver_callback(client: Client, callback_query: CallbackQuery):
     tier_unlocked = False
     if item["tier_required"]:
         if item["tier_required"] == "gold":
-            tier_unlocked = (user_tier == "gold")
+            tier_unlocked = user_tier == "gold"
         elif item["tier_required"] == "silver":
-            tier_unlocked = (user_tier in ["silver", "gold"])
+            tier_unlocked = user_tier in ["silver", "gold"]
     else:
-        tier_unlocked = (user_tier is not None)
+        tier_unlocked = user_tier is not None
 
     if not (unlocked or tier_unlocked):
-        await callback_query.answer("⛔️ Access denied. Please purchase this item.", show_alert=True)
+        await callback_query.answer(
+            "⛔️ Access denied. Please purchase this item.", show_alert=True
+        )
         return
 
     file_doc = await database.get_file_link(item["token"])
     if not file_doc:
-        await callback_query.answer("❌ The files for this item are no longer available in the bot.", show_alert=True)
+        await callback_query.answer(
+            "❌ The files for this item are no longer available in the bot.",
+            show_alert=True,
+        )
         return
 
     await callback_query.answer("⚡️ Delivering files now...")
     await callback_query.message.delete()
-    
+
     # Log access view
-    await database.log_access(user_id, item["token"], action="view", method="catalog", catalog_item_id=item_id)
-    
+    await database.log_access(
+        user_id, item["token"], action="view", method="catalog", catalog_item_id=item_id
+    )
+
     await deliver_files(client, user_id, file_doc, bypass_monetization=True)
 
 
@@ -495,7 +616,7 @@ async def store_buy_callback(client: Client, callback_query: CallbackQuery):
             desc = desc[:247] + "..."
 
         payload = f"catalog_{item_id}"
-        
+
         try:
             await callback_query.message.delete()
             await send_stars_invoice(
@@ -510,7 +631,7 @@ async def store_buy_callback(client: Client, callback_query: CallbackQuery):
             logger.error(f"Failed to send stars invoice for catalog item: {e}")
             await client.send_message(
                 chat_id=user_id,
-                text="❌ **Failed to generate invoice.** Please try again or contact support."
+                text="❌ **Failed to generate invoice.** Please try again or contact support.",
             )
 
     elif method == "upi":
@@ -540,9 +661,7 @@ async def store_buy_callback(client: Client, callback_query: CallbackQuery):
             try:
                 await callback_query.message.delete()
                 await client.send_photo(
-                    chat_id=user_id,
-                    photo=config.UPI_QR_IMAGE,
-                    caption=upi_instructions
+                    chat_id=user_id, photo=config.UPI_QR_IMAGE, caption=upi_instructions
                 )
                 return
             except Exception as e:
@@ -552,6 +671,7 @@ async def store_buy_callback(client: Client, callback_query: CallbackQuery):
 
 
 # ─── UPI SCREENSHOT HANDLER ─────────────────────────────────────────
+
 
 @app.on_message(filters.photo & filters.private)
 async def upi_screenshot_handler(client: Client, message: Message):
@@ -567,7 +687,7 @@ async def upi_screenshot_handler(client: Client, message: Message):
         return
 
     payment_id = str(pending["_id"])
-    
+
     # Save the message ID of the screenshot
     await database.set_upi_screenshot(payment_id, message.id)
 
@@ -586,9 +706,14 @@ async def upi_screenshot_handler(client: Client, message: Message):
         plan_desc = f"Store Item: {item['title']}" if item else f"Item ID {item_id}"
     elif plan_desc.startswith("prod_"):
         from bson import ObjectId
+
         product_id = plan_desc.split("_")[1]
         product = await database.get_product_by_id(ObjectId(product_id))
-        plan_desc = f"Marketplace Product: {product['name']}" if product else f"Product ID {product_id}"
+        plan_desc = (
+            f"Marketplace Product: {product['name']}"
+            if product
+            else f"Product ID {product_id}"
+        )
     else:
         plan_desc = f"Subscription: {plan_desc.replace('_', ' ').title()}"
 
@@ -604,8 +729,12 @@ async def upi_screenshot_handler(client: Client, message: Message):
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("Approve ✅", callback_data=f"admin_upi_approve_{payment_id}"),
-                InlineKeyboardButton("Reject ❌", callback_data=f"admin_upi_reject_{payment_id}"),
+                InlineKeyboardButton(
+                    "Approve ✅", callback_data=f"admin_upi_approve_{payment_id}"
+                ),
+                InlineKeyboardButton(
+                    "Reject ❌", callback_data=f"admin_upi_reject_{payment_id}"
+                ),
             ]
         ]
     )
@@ -615,25 +744,26 @@ async def upi_screenshot_handler(client: Client, message: Message):
     for admin_id in config.ADMIN_IDS:
         try:
             await message.copy(
-                chat_id=admin_id,
-                caption=admin_msg,
-                reply_markup=buttons
+                chat_id=admin_id, caption=admin_msg, reply_markup=buttons
             )
             admin_notified = True
         except Exception as e:
             logger.error(f"Failed to forward UPI screenshot to admin {admin_id}: {e}")
 
     if not admin_notified:
-        logger.error("No admins could be notified of the pending UPI screenshot submission.")
+        logger.error(
+            "No admins could be notified of the pending UPI screenshot submission."
+        )
 
 
 # ─── ADMIN APPROVAL / REJECTION ACTIONS ──────────────────────────────
+
 
 @app.on_callback_query(filters.regex(r"^admin_upi_(approve|reject)_([a-fA-F0-9]{24})$"))
 async def admin_upi_action_callback(client: Client, callback_query: CallbackQuery):
     """Handle admin actions for pending UPI payment screenshots."""
     admin_id = callback_query.from_user.id
-    
+
     # Check admin privileges
     if not await database.is_admin(admin_id):
         await callback_query.answer("⛔️ Access denied. Admin only.", show_alert=True)
@@ -648,7 +778,10 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
         return
 
     if payment.get("status") != "pending":
-        await callback_query.answer(f"⚠️ This payment has already been processed as {payment['status'].upper()}.", show_alert=True)
+        await callback_query.answer(
+            f"⚠️ This payment has already been processed as {payment['status'].upper()}.",
+            show_alert=True,
+        )
         return
 
     target_user_id = payment["user_id"]
@@ -687,10 +820,12 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
                             f"Your **{database.PLAN_DEFINITIONS[saas_plan_id]['name']}** plan is now active.\n"
                             f"Payment of **₹{payment['amount_inr']}** verified.\n\n"
                             f"Use `/saas` to manage your bots and subscription."
-                        )
+                        ),
                     )
                 except Exception as e:
-                    logger.error(f"Failed to notify user {target_user_id} of SaaS approval: {e}")
+                    logger.error(
+                        f"Failed to notify user {target_user_id} of SaaS approval: {e}"
+                    )
         elif plan.startswith("item_"):
             # Individual Item Purchase
             item_id = plan.split("_")[1]
@@ -705,7 +840,7 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
                     action="purchase",
                     method="upi",
                     catalog_item_id=item_id,
-                    amount=payment["amount_inr"]
+                    amount=payment["amount_inr"],
                 )
 
                 try:
@@ -715,16 +850,21 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
                             f"🔓 **UPI Purchase Approved!**\n\n"
                             f"Your payment of **₹{payment['amount_inr']}** for **{item['title']}** has been verified and approved.\n"
                             "We are delivering your content now..."
-                        )
+                        ),
                     )
                     file_doc = await database.get_file_link(token)
                     if file_doc:
-                        await deliver_files(client, target_user_id, file_doc, bypass_monetization=True)
+                        await deliver_files(
+                            client, target_user_id, file_doc, bypass_monetization=True
+                        )
                 except Exception as e:
-                    logger.error(f"Failed to notify user {target_user_id} of approved UPI catalog purchase: {e}")
+                    logger.error(
+                        f"Failed to notify user {target_user_id} of approved UPI catalog purchase: {e}"
+                    )
         elif plan.startswith("prod_"):
             # Individual Product Purchase
             from bson import ObjectId
+
             product_id = plan.split("_")[1]
             product = await database.get_product_by_id(ObjectId(product_id))
             if product:
@@ -735,10 +875,10 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
                     amount_paid=payment["amount_inr"],
                     payment_id=str(payment_id),
                     status="completed",
-                    files_delivered=product["files"]
+                    files_delivered=product["files"],
                 )
                 await database.increment_product_sales(product["_id"])
-                
+
                 try:
                     await client.send_message(
                         chat_id=target_user_id,
@@ -746,18 +886,23 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
                             f"🎉 **UPI Purchase Approved!**\n\n"
                             f"Your payment of **₹{payment['amount_inr']}** for **{product['name']}** has been verified and approved.\n"
                             "We are delivering your product now..."
-                        )
+                        ),
                     )
                     from handlers.marketplace import deliver_product_files
-                    await deliver_product_files(client, target_user_id, purchase, product)
+
+                    await deliver_product_files(
+                        client, target_user_id, purchase, product
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to notify user {target_user_id} of approved UPI product purchase: {e}")
+                    logger.error(
+                        f"Failed to notify user {target_user_id} of approved UPI product purchase: {e}"
+                    )
         else:
             # Subscription purchase (format: tier_duration)
             parts = plan.split("_")
             tier = parts[0]
             duration = parts[1]
-            
+
             days = 0
             if duration == "weekly":
                 days = 7
@@ -773,7 +918,7 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
                 action="subscription_activate",
                 method="upi",
                 amount=payment["amount_inr"],
-                extra=plan
+                extra=plan,
             )
 
             expiry_str = await database.get_premium_expiry_str(target_user_id)
@@ -785,17 +930,19 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
                         f"Your payment of **₹{payment['amount_inr']}** has been verified.\n"
                         f"Status: **{expiry_str}**\n\n"
                         f"Thank you for your support! You now have full access to your Premium perks."
-                    )
+                    ),
                 )
             except Exception as e:
-                logger.error(f"Failed to notify user {target_user_id} of approved UPI subscription: {e}")
+                logger.error(
+                    f"Failed to notify user {target_user_id} of approved UPI subscription: {e}"
+                )
 
         await callback_query.answer("Payment Approved successfully!", show_alert=True)
         # Update admin message
         await callback_query.message.edit_reply_markup(reply_markup=None)
         await callback_query.message.reply_text(
             f"✅ **UPI Payment Approved** by {callback_query.from_user.mention} (`{admin_id}`).",
-            quote=True
+            quote=True,
         )
 
     elif action == "reject":
@@ -811,7 +958,7 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
                     f"❌ **UPI Payment Rejected**\n\n"
                     f"Your payment of **₹{payment['amount_inr']}** could not be verified by our team.\n"
                     "If you believe this is an error, please contact support and provide payment proof."
-                )
+                ),
             )
         except Exception as e:
             logger.error(f"Failed to notify user {target_user_id} of rejected UPI: {e}")
@@ -821,6 +968,5 @@ async def admin_upi_action_callback(client: Client, callback_query: CallbackQuer
         await callback_query.message.edit_reply_markup(reply_markup=None)
         await callback_query.message.reply_text(
             f"❌ **UPI Payment Rejected** by {callback_query.from_user.mention} (`{admin_id}`).",
-            quote=True
+            quote=True,
         )
-
