@@ -6,8 +6,10 @@ from database.mongo import sub_bots_col
 
 async def add_sub_bot(owner_id: int, bot_token: str, username: str):
     """Add a new sub-bot token and link it to the owner."""
+    bot_id = int(bot_token.split(":")[0])
     bot_data = {
         "owner_id": owner_id,
+        "bot_id": bot_id,
         "bot_token": bot_token,
         "username": username,
         "is_active": True,

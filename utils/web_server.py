@@ -224,10 +224,9 @@ class RedirectHandler(BaseHTTPRequestHandler):
 
             if file_doc and file_doc.get("bot_id"):
                 sub_bot = run_async(
-                    database.sub_bots_col.find_one({"_id": file_doc["bot_id"]})
+                    database.sub_bots_col.find_one({"bot_id": file_doc["bot_id"]})
                 )
                 if not sub_bot:
-                    # Try lookup by field
                     sub_bot = run_async(
                         database.sub_bots_col.find_one(
                             {"bot_token": {"$regex": f"^{file_doc['bot_id']}:"}}

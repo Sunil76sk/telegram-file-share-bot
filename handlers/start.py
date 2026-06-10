@@ -193,7 +193,10 @@ async def start_handler(client: Client, message: Message):
     # Check for direct unlock token (bypass monetization)
     bypass_monetization = False
     if token.startswith("unl_"):
-        token = token.replace("unl_", "", 1)
+        if "start=" in token:
+            token = token.split("start=")[1].split("&")[0]
+        else:
+            token = token[len("unl_"):]
         bypass_monetization = True
 
     # Check for marketplace product link
@@ -375,7 +378,16 @@ async def start_handler(client: Client, message: Message):
     message.stop_propagation()
 
 
-@app.on_message(filters.private & filters.text & ~filters.regex(r"^/"), group=1)
+async def _not_command(_, __, message):
+    if not message.text:
+        return False
+    return not message.text.startswith("/")
+
+
+not_command_filter = filters.create(_not_command)
+
+
+@app.on_message(filters.private & filters.text & not_command_filter, group=1)
 async def text_message_handler(client: Client, message: Message):
     user_id = message.from_user.id
     text = message.text.strip()
