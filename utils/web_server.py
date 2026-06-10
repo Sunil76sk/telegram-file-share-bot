@@ -238,7 +238,10 @@ class RedirectHandler(BaseHTTPRequestHandler):
 
             if not bot_username:
                 # Main bot fallback
-                bot_username = getattr(config, "BOT_USERNAME", "file_share_bot") or "file_share_bot"
+                bot_username = (
+                    getattr(config, "BOT_USERNAME", "file_share_bot")
+                    or "file_share_bot"
+                )
 
             # Final destination deep link back to Telegram bot
             tg_redirect = f"https://t.me/{bot_username}?start=unl_{token}"

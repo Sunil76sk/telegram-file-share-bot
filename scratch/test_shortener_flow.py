@@ -146,7 +146,9 @@ async def run_tests():
             response = await asyncio.to_thread(opener.open, req)
         except urllib.error.HTTPError as e:
             response = e
-        status_code = getattr(response, "status", None) or getattr(response, "code", None)
+        status_code = getattr(response, "status", None) or getattr(
+            response, "code", None
+        )
         redirect_target = response.headers.get("Location")
 
         logger.info(f"Response Code: {status_code}")
@@ -181,10 +183,10 @@ async def run_tests():
         verify_url = redirect_target  # This contains the sid
 
         response_verify = await asyncio.to_thread(urllib.request.urlopen, verify_url)
-        status_code_verify = getattr(response_verify, "status", None) or getattr(response_verify, "code", None)
-        assert (
-            status_code_verify == 200
-        ), f"Expected 200, got {status_code_verify}"
+        status_code_verify = getattr(response_verify, "status", None) or getattr(
+            response_verify, "code", None
+        )
+        assert status_code_verify == 200, f"Expected 200, got {status_code_verify}"
 
         html_body = response_verify.read().decode("utf-8")
         assert (
