@@ -72,12 +72,13 @@ async def add_campaign_cmd(client: Client, message: Message):
     user_id = message.from_user.id
     is_bot_admin = await database.is_admin(user_id, client)
     if not is_bot_admin:
+        await message.reply_text("⛔️ Only admins can manage campaigns.")
         return
     args = message.text.split(None, 7)
     if len(args) < 7:
         await message.reply_text(
             "❌ **Usage:**\n"
-            "`/addcampaign <campaign_id> <source> <asset_type> <chat_id> <invite_link> <title> [description]`\n\n"
+            "`/addcampaign [campaign_id] [source] [asset_type] [chat_id] [invite_link] [title] [description]`\n\n"
             "**Sources:** instagram, youtube, movie_review, ott, ai_content\n"
             "**Asset Types:** wallpapers, subtitles, templates, resource_packs, educational\n\n"
             "Campaign IDs must start with `cmp_` (e.g. `cmp_summer_wp`)."
@@ -142,10 +143,11 @@ async def del_campaign_cmd(client: Client, message: Message):
     user_id = message.from_user.id
     is_bot_admin = await database.is_admin(user_id, client)
     if not is_bot_admin:
+        await message.reply_text("⛔️ Only admins can manage campaigns.")
         return
     args = message.text.split(None, 1)
     if len(args) < 2:
-        await message.reply_text("Usage: `/delcampaign <campaign_id>`")
+        await message.reply_text("Usage: `/delcampaign [campaign_id]`")
         return
     campaign_id = args[1].strip()
     deleted = await database.delete_campaign(campaign_id)

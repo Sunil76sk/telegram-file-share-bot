@@ -47,7 +47,7 @@ async def stats_handler(client: Client, message: Message):
         else:
             await message.reply_text(
                 "⚠️ **Usage:**\n"
-                "`/stats <link_url_or_token>`\n\n"
+                "`/stats [link_url_or_token]`\n\n"
                 "Example: `/stats https://t.me/bot?start=abc123`"
             )
         return

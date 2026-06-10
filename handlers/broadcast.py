@@ -184,7 +184,7 @@ async def broadcast_handler(client: Client, message: Message):
 async def ban_handler(client: Client, message: Message):
     args = message.text.split()
     if len(args) < 2:
-        await message.reply_text("⚠️ Usage: `/ban <user_id>`")
+        await message.reply_text("⚠️ Usage: `/ban [user_id]`")
         return
 
     try:
@@ -205,7 +205,7 @@ async def ban_handler(client: Client, message: Message):
 async def unban_handler(client: Client, message: Message):
     args = message.text.split()
     if len(args) < 2:
-        await message.reply_text("⚠️ Usage: `/unban <user_id>`")
+        await message.reply_text("⚠️ Usage: `/unban [user_id]`")
         return
 
     try:
@@ -223,7 +223,7 @@ async def add_channel_handler(client: Client, message: Message):
     args = message.text.split(None, 2)
     if len(args) < 3:
         await message.reply_text(
-            "⚠️ Usage: `/add_channel <channel_id_or_username> <invite_link>`"
+            "⚠️ Usage: `/add_channel [channel_id_or_username] [invite_link]`"
         )
         return
 
@@ -262,7 +262,7 @@ async def add_channel_handler(client: Client, message: Message):
 async def del_channel_handler(client: Client, message: Message):
     args = message.text.split()
     if len(args) < 2:
-        await message.reply_text("⚠️ Usage: `/del_channel <channel_id_or_username>`")
+        await message.reply_text("⚠️ Usage: `/del_channel [channel_id_or_username]`")
         return
 
     chat_raw = args[1].strip()
@@ -314,7 +314,7 @@ async def list_channels_handler(client: Client, message: Message):
 async def add_admin_handler(client: Client, message: Message):
     args = message.text.split()
     if len(args) < 2:
-        await message.reply_text("⚠️ Usage: `/add_admin <user_id>`")
+        await message.reply_text("⚠️ Usage: `/add_admin [user_id]`")
         return
 
     try:
@@ -333,7 +333,7 @@ async def add_admin_handler(client: Client, message: Message):
 async def del_admin_handler(client: Client, message: Message):
     args = message.text.split()
     if len(args) < 2:
-        await message.reply_text("⚠️ Usage: `/del_admin <user_id>`")
+        await message.reply_text("⚠️ Usage: `/del_admin [user_id]`")
         return
 
     try:

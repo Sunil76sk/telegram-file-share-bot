@@ -103,7 +103,7 @@ async def batch_done_cmd(client: Client, message: Message):
         if existing:
             await message.reply_text(
                 f"❌ **Token Already In Use!**\n\n"
-                f"The token `{token}` is now in use. Please generate again by specifying a different token: `/done <new_token>`."
+                f"The token `{token}` is now in use. Please generate again by specifying a different token: `/done [new_token]`."
             )
             return
 

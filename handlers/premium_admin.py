@@ -472,8 +472,8 @@ async def accesslogs_command_handler(client: Client, message: Message):
             "**By Action:**\n"
             f"{by_action_str or '• None'}\n\n"
             "🔍 **To search logs:**\n"
-            "• Search by User ID: `/accesslogs <user_id>`\n"
-            "• Search by File Token: `/accesslogs <token>`"
+            "• Search by User ID: `/accesslogs [user_id]`\n"
+            "• Search by File Token: `/accesslogs [token]`"
         )
         await message.reply_text(msg)
         return
@@ -528,7 +528,7 @@ async def grantpremium_command_handler(client: Client, message: Message):
     args = message.text.split()
     if len(args) < 3:
         await message.reply_text(
-            "💡 **Usage:** `/grantpremium <user_id> <days> [tier (silver/gold)]`\nExample: `/grantpremium 1234567 30 silver`"
+            "💡 **Usage:** `/grantpremium [user_id] [days] [tier (silver/gold)]`\nExample: `/grantpremium 1234567 30 silver`"
         )
         return
 
@@ -592,7 +592,7 @@ async def revokepremium_command_handler(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 2:
-        await message.reply_text("💡 **Usage:** `/revokepremium <user_id>`")
+        await message.reply_text("💡 **Usage:** `/revokepremium [user_id]`")
         return
 
     try:

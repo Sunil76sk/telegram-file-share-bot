@@ -134,7 +134,7 @@ async def batch_callback_handler(client: Client, callback_query: CallbackQuery):
                 existing = await database.get_file_link(custom_token)
                 if existing:
                     await callback_query.answer(
-                        f"❌ The custom token '{custom_token}' is now in use. Please use /done <new_token> to finalize.",
+                        f"❌ The custom token '{custom_token}' is now in use. Please use /done [new_token] to finalize.",
                         show_alert=True,
                     )
                     return

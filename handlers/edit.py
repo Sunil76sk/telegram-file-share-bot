@@ -20,7 +20,7 @@ async def editlink_cmd_handler(client: Client, message: Message):
     if len(args) < 2:
         await message.reply_text(
             "⚠️ **Usage:**\n"
-            "`/editlink <link_url_or_token>`\n\n"
+            "`/editlink [link_url_or_token]`\n\n"
             "Example: `/editlink https://t.me/bot?start=abc123`"
         )
         return
@@ -66,12 +66,12 @@ async def edit_link_handler(client: Client, message: Message):
             await message.reply_text(
                 "🛠 **Link Editor**\n\n"
                 "Usage:\n"
-                "- View details: `/edit_link <token>`\n"
-                "- Append files: `/edit_link <token> add`\n"
-                "- Delete index: `/edit_link <token> del <index>`\n"
-                "- Delete link: `/edit_link <token> delete`\n"
-                "- Set Stars price: `/edit_link <token> price <stars>`\n"
-                "- Toggle Premium-only: `/edit_link <token> premium <true/false>`"
+            "- View details: `/edit_link [token]`\n"
+            "- Append files: `/edit_link [token] add`\n"
+            "- Delete index: `/edit_link [token] del [index]`\n"
+            "- Delete link: `/edit_link [token] delete`\n"
+                "- Set Stars price: `/edit_link [token] price [stars]`\n"
+                "- Toggle Premium-only: `/edit_link [token] premium [true/false]`"
             )
             return
 
@@ -124,10 +124,10 @@ async def edit_link_handler(client: Client, message: Message):
             text += (
                 "\n🛠 **Actions:**\n"
                 f"• Append file: `/edit_link {token} add`\n"
-                f"• Delete file at index: `/edit_link {token} del <index>`\n"
+                f"• Delete file at index: `/edit_link {token} del [index]`\n"
                 f"• Delete whole link: `/edit_link {token} delete`\n"
-                f"• Set Stars price: `/edit_link {token} price <stars>`\n"
-                f"• Toggle Premium-only: `/edit_link {token} premium <true/false>`"
+                f"• Set Stars price: `/edit_link {token} price [stars]`\n"
+                f"• Toggle Premium-only: `/edit_link {token} premium [true/false]`"
             )
             await message.reply_text(text)
             return
@@ -165,7 +165,7 @@ async def edit_link_handler(client: Client, message: Message):
         # Handle delete single file inside batch (del <index>)
         if action == "del":
             if len(args) < 4:
-                await message.reply_text(f"⚠️ Usage: `/edit_link {token} del <index>`")
+                await message.reply_text(f"⚠️ Usage: `/edit_link {token} del [index]`")
                 return
 
             try:
@@ -210,7 +210,7 @@ async def edit_link_handler(client: Client, message: Message):
         if action == "price":
             if len(args) < 4:
                 await message.reply_text(
-                    f"⚠️ Usage: `/edit_link {token} price <stars>`"
+                    f"⚠️ Usage: `/edit_link {token} price [stars]`"
                 )
                 return
             try:
@@ -232,7 +232,7 @@ async def edit_link_handler(client: Client, message: Message):
         if action == "premium":
             if len(args) < 4:
                 await message.reply_text(
-                    f"⚠️ Usage: `/edit_link {token} premium <true/false>`"
+                    f"⚠️ Usage: `/edit_link {token} premium [true/false]`"
                 )
                 return
 
