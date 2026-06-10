@@ -103,8 +103,21 @@ async def custom_start():
     # Start the local redirect web server
     start_web_server()
 
+    # Debug print all registered handlers
+    logger.info("--- REGISTERED HANDLERS ON STARTUP ---")
+    for group, handlers in sorted(app.dispatcher.groups.items()):
+        logger.info(f"Group {group}:")
+        for h in handlers:
+            logger.info(f"  - {h.__class__.__name__}: callback={h.callback.__name__ if hasattr(h, 'callback') else 'None'}")
+
 
 app.start = custom_start  # type: ignore[assignment]
+
+
+@app.on_message(group=-100)
+async def debug_message_logger(client: Client, message: Message):
+    logger.info(f"DEBUG RECEIVE: text='{message.text}', user='{message.from_user.id if message.from_user else None}', chat='{message.chat.id}'")
+
 
 # Override stop to cleanly shutdown all running sub-bots
 original_stop = app.stop
