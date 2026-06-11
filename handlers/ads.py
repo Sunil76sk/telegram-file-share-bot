@@ -338,6 +338,27 @@ async def ad_create_text_handler(client: Client, message: Message):
         except ValueError:
             channel_id = channel_raw
 
+        # Post and pin the ad message in the target channel
+        sent_msg_id = None
+        try:
+            from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            ad_text = f"📌 **{title}**\n\n{description}"
+            reply_markup = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Join Channel 📢", url=invite_link)]]
+            )
+            sent_msg = await client.send_message(
+                chat_id=channel_id, text=ad_text, reply_markup=reply_markup
+            )
+            sent_msg_id = sent_msg.id
+            await client.pin_chat_message(chat_id=channel_id, message_id=sent_msg_id)
+        except Exception as e:
+            logger.error(f"Failed to post/pin ad to channel {channel_id}: {e}")
+            await message.reply_text(
+                f"⚠️ **Note:** Ad saved to database, but failed to post or pin to the channel.\n"
+                f"Make sure the bot is an administrator in `{channel_id}` with posting and pinning privileges.\n"
+                f"Error: {e}"
+            )
+
         ad = await database.create_ad(
             ad_type="pinned",
             title=title,
@@ -346,6 +367,7 @@ async def ad_create_text_handler(client: Client, message: Message):
             channel_id=channel_id,
             channel_link=invite_link,
             cpm=cpm,
+            file_token=str(sent_msg_id) if sent_msg_id else None,
         )
         await message.reply_text(
             f"✅ **Pinned Ad Created!**\n\nID: `{ad['_id']}`\nTitle: {title}"

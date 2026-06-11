@@ -123,13 +123,13 @@ async def start_handler(client: Client, message: Message):
                 "• Use `/batch` to start uploading multiple files, and `/done` when finished to generate a combined batch sharing link.\n"
                 "• Use `/cancel` to abort an active batch session."
             )
-            # Add admin helper text if user is admin/owner of this sub-bot
             if await database.is_admin(user_id, client):
                 welcome_text += (
                     "\n\n🛠 **Admin Commands:**\n"
                     "• `/stats` - View bot statistics\n"
                     "• `/broadcast` - Broadcast a message to all users\n"
                     "• `/channels` - List force subscription channels\n"
+                    "• `/shorteners` - Manage URL shortener configuration\n"
                     "• `/add_channel [channel_id_or_username] [invite_link]` - Add force-join channel\n"
                     "• `/del_channel [channel_id_or_username]` - Remove force-join channel"
                 )
@@ -152,13 +152,13 @@ async def start_handler(client: Client, message: Message):
                 "• `/my_products` - Manage your listed products\n"
                 "• `/seller` - View your seller dashboard"
             )
-            # Add admin helper text if user is admin of this bot
             if await database.is_admin(user_id, client):
                 welcome_text += (
                     "\n\n🛠 **Admin Commands:**\n"
                     "• `/stats` - View bot statistics\n"
                     "• `/broadcast` - Broadcast a message to all users\n"
                     "• `/channels` - List force subscription channels\n"
+                    "• `/shorteners` - Manage URL shortener configuration\n"
                     "• `/add_channel [channel_id_or_username] [invite_link]` - Add force-join channel\n"
                     "• `/del_channel [channel_id_or_username]` - Remove force-join channel\n"
                     "• `/edit_link [code]` - Edit/manage files in a shared link\n"

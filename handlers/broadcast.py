@@ -220,6 +220,18 @@ async def unban_handler(client: Client, message: Message):
 
 @app.on_message(filters.command("add_channel") & filters.private & admin_filter)
 async def add_channel_handler(client: Client, message: Message):
+    if "[channel_id_or_username]" in message.text or "[invite_link]" in message.text:
+        await message.reply_text(
+            "❌ **Error: You included the placeholder brackets!**\n\n"
+            "Please do **not** write `[channel_id_or_username]` or `[invite_link]` in your command.\n"
+            "You must **replace** them with your actual channel username/ID and invite link.\n\n"
+            "**Correct Example:**\n"
+            "`/add_channel @QuickAmazonFinds https://t.me/QuickAmazonFinds`\n\n"
+            "**Another Example (with channel ID):**\n"
+            "`/add_channel -1002471479638 https://t.me/+IbHLv5W4jpBkYzBl`"
+        )
+        return
+
     args = message.text.split(None, 2)
     if len(args) < 3:
         await message.reply_text(
@@ -260,6 +272,16 @@ async def add_channel_handler(client: Client, message: Message):
 
 @app.on_message(filters.command("del_channel") & filters.private & admin_filter)
 async def del_channel_handler(client: Client, message: Message):
+    if "[channel_id_or_username]" in message.text:
+        await message.reply_text(
+            "❌ **Error: You included the placeholder brackets!**\n\n"
+            "Please do **not** write `[channel_id_or_username]` in your command.\n"
+            "You must **replace** it with your actual channel username or ID.\n\n"
+            "**Correct Example:**\n"
+            "`/del_channel @QuickAmazonFinds`"
+        )
+        return
+
     args = message.text.split()
     if len(args) < 2:
         await message.reply_text("⚠️ Usage: `/del_channel [channel_id_or_username]`")
