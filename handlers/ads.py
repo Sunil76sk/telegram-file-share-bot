@@ -271,7 +271,7 @@ async def ads_create_callback(client: Client, callback_query: CallbackQuery):
     )
 
 
-@app.on_message(filters.text & filters.private & admin_filter, group=2)
+@app.on_message(filters.text & filters.private & admin_filter & ~filters.regex(r"^/"), group=2)
 async def ad_create_text_handler(client: Client, message: Message):
     user_id = message.from_user.id
     draft = await database.get_ad_draft(user_id)
