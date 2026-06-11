@@ -17,7 +17,7 @@ from utils.helpers import answer_pre_checkout
 logger = logging.getLogger(__name__)
 
 
-@app.on_raw_update()
+@app.on_raw_update(group=10)
 async def payment_raw_update_handler(client: Client, update, users, chats):
     """Handle raw pre-checkout and successful payment updates directly from Telegram."""
 
