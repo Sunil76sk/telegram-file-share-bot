@@ -147,6 +147,7 @@ from database.funnel import (
     log_source_visit,
     get_source_analytics,
     get_campaign_stats,
+    get_traffic_analytics,
 )
 from database.premium_store import (
     VALID_CATEGORIES,
@@ -404,6 +405,7 @@ __all__ = [
     "log_source_visit",
     "get_source_analytics",
     "get_campaign_stats",
+    "get_traffic_analytics",
     "VALID_CATEGORIES",
     "add_catalog_item",
     "get_catalog_item",

@@ -121,6 +121,12 @@ async def init_db():
         await analytics_events_col.create_index([("country", 1), ("timestamp", 1)])
         await analytics_events_col.create_index([("source", 1), ("timestamp", 1)])
 
-        logger.info("Database indexes initialized successfully.")
+        # Migrate traffic attribution for older users
+        await users_col.update_many(
+            {"source": {"$exists": False}},
+            {"$set": {"source": "direct", "campaign": None}}
+        )
+
+        logger.info("Database indexes and migrations initialized successfully.")
     except Exception as e:
-        logger.error(f"Failed to initialize database indexes: {e}")
+        logger.error(f"Failed to initialize database indexes/migrations: {e}")

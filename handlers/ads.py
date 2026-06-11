@@ -486,3 +486,50 @@ async def ads_revenue_callback(client: Client, callback_query: CallbackQuery):
 @app.on_callback_query(filters.regex(r"^ads_main_menu$"))
 async def ads_main_menu_callback(client: Client, callback_query: CallbackQuery):
     await ads_menu_handler(client, callback_query.message)
+
+
+@app.on_message(filters.command("adstats") & filters.private & admin_filter)
+async def adstats_command_handler(client: Client, message: Message):
+    report = await database.get_ad_revenue_report()
+    active_ads = await database.ads_col.count_documents({"status": "active"})
+    impressions = report["total_impressions"]
+    clicks = report["total_clicks"]
+    ctr = (clicks / impressions * 100.0) if impressions > 0 else 0.0
+    
+    text = (
+        "📈 **Sponsored Ads Statistics**\n\n"
+        f"👥 **Total Ads Created:** {report['total_ads']}\n"
+        f"🟢 **Active Ads:** {active_ads}\n"
+        f"👀 **Total Impressions:** {impressions}\n"
+        f"🖱 **Total Clicks:** {clicks}\n"
+        f"🎯 **Average CTR:** `{ctr:.2f}%`\n"
+        f"💰 **Total Revenue:** `${report['total_revenue']:.4f}`\n"
+    )
+    await message.reply_text(text)
+
+
+@app.on_message(filters.command("traffic") & filters.private & admin_filter)
+async def traffic_command_handler(client: Client, message: Message):
+    analytics = await database.get_traffic_analytics()
+    
+    text = "🚦 **Traffic Attribution & Funnel Analytics**\n\n"
+    
+    text += "📊 **User Growth by Source:**\n"
+    for source, count in analytics["by_source"].items():
+        text += f"• **{source.capitalize()}:** {count} users\n"
+    
+    text += "\n💸 **Conversion Rate by Source (Downloads):**\n"
+    for source, data in analytics["conversion_by_source"].items():
+        text += (
+            f"• **{source.capitalize()}:** {data['total']} users, "
+            f"{data['converted']} conversions ({data['rate']}%)\n"
+        )
+        
+    text += "\n🔥 **Top Campaigns:**\n"
+    if analytics["top_campaigns"]:
+        for campaign, count in analytics["top_campaigns"].items():
+            text += f"• `{campaign}`: {count} users\n"
+    else:
+        text += "• No active campaign traffic recorded yet.\n"
+        
+    await message.reply_text(text)

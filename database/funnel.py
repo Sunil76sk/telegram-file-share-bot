@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from database.mongo import funnel_campaigns_col, funnel_analytics_col
+from database.mongo import funnel_campaigns_col, funnel_analytics_col, users_col
 
 logger = logging.getLogger(__name__)
 
@@ -156,4 +156,60 @@ async def get_campaign_stats(campaign_id: str) -> dict | None:
         "conversions": campaign.get("conversions", 0),
         "total_analytics_visits": total_visits,
         "unique_users": unique_users,
+    }
+
+
+async def get_traffic_analytics() -> dict:
+    cursor_source = users_col.aggregate([
+        {"$group": {"_id": "$source", "count": {"$sum": 1}}}
+    ])
+    by_source = {doc["_id"]: doc["count"] async for doc in cursor_source}
+
+    cursor_conv = users_col.aggregate([
+        {
+            "$lookup": {
+                "from": "downloads",
+                "localField": "user_id",
+                "foreignField": "user_id",
+                "as": "downloads"
+            }
+        },
+        {
+            "$project": {
+                "source": 1,
+                "has_downloaded": {"$cond": [{"$gt": [{"$size": "$downloads"}, 0]}, 1, 0]}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$source",
+                "total_users": {"$sum": 1},
+                "converted_users": {"$sum": "$has_downloaded"}
+            }
+        }
+    ])
+    conversion_by_source = {}
+    async for doc in cursor_conv:
+        src = doc["_id"] or "unknown"
+        total = doc["total_users"]
+        converted = doc["converted_users"]
+        rate = (converted / total * 100.0) if total > 0 else 0.0
+        conversion_by_source[src] = {
+            "total": total,
+            "converted": converted,
+            "rate": round(rate, 2)
+        }
+
+    cursor_camps = users_col.aggregate([
+        {"$match": {"campaign": {"$ne": None}}},
+        {"$group": {"_id": "$campaign", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ])
+    top_campaigns = {doc["_id"]: doc["count"] async for doc in cursor_camps}
+
+    return {
+        "by_source": by_source,
+        "conversion_by_source": conversion_by_source,
+        "top_campaigns": top_campaigns
     }

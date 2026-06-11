@@ -233,21 +233,20 @@ async def add_channel_handler(client: Client, message: Message):
         return
 
     args = message.text.split(None, 2)
-    if len(args) < 3:
+    if len(args) < 2:
         await message.reply_text(
             "⚠️ Usage: `/add_channel [channel_id_or_username] [invite_link]`"
         )
         return
 
     chat_raw = args[1].strip()
-    invite_link = args[2].strip()
 
     # Standardize chat ID/username
     if chat_raw.startswith("-") or chat_raw.isdigit():
         try:
             chat_id = int(chat_raw)
         except ValueError:
-            await message.reply_text("❌ Invalid channel ID format.")
+            await message.reply_text("❌ Invalid channel identifier.")
             return
     else:
         chat_id = chat_raw
@@ -259,14 +258,47 @@ async def add_channel_handler(client: Client, message: Message):
         chat_info = await client.get_chat(chat_id)
         title = chat_info.title
     except Exception as e:
-        await message.reply_text(
-            f"❌ Failed to access channel info. Make sure the bot is an administrator in the channel.\nError: {e}"
-        )
+        logger.error(f"Failed to access channel info for {chat_id}: {e}")
+        await message.reply_text("❌ Invalid channel identifier.")
         return
 
+    # Verify bot is an administrator in the channel
+    try:
+        bot_member = await client.get_chat_member(chat_id, "me")
+        bot_status = str(bot_member.status).split(".")[-1].lower()
+        if bot_status not in ["administrator", "owner", "creator"]:
+            await message.reply_text("❌ Bot is not an administrator in this channel.")
+            return
+    except Exception as e:
+        logger.error(f"Failed to verify admin status of bot in channel {chat_id}: {e}")
+        await message.reply_text("❌ Bot is not an administrator in this channel.")
+        return
+
+    # Determine invite link (optional)
+    invite_link = None
+    if len(args) >= 3:
+        invite_link = args[2].strip()
+    else:
+        if chat_info.username:
+            invite_link = f"https://t.me/{chat_info.username}"
+        elif chat_info.invite_link:
+            invite_link = chat_info.invite_link
+        else:
+            try:
+                invite_link = await client.export_chat_invite_link(chat_id)
+            except Exception as e:
+                logger.warning(f"Could not export invite link for private channel {chat_id}: {e}")
+
+    # Fallback default if still not found
+    if not invite_link:
+        invite_link = f"https://t.me/c/{str(chat_id).replace('-100', '')}/1"
+
+    # Save to database (updates if exists, preventing duplicates)
     await database.add_force_sub_channel(chat_id, title, invite_link)
+    
     await message.reply_text(
-        f"✅ Added **{title}** (`{chat_id}`) to the force subscription channels list."
+        f"✅ Channel Added\n"
+        f"Channel ID: `{chat_id}`"
     )
 
 

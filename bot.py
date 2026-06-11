@@ -96,6 +96,8 @@ async def custom_start():
 
     asyncio.create_task(deletion_worker(app))
     asyncio.create_task(expiry_worker())
+    from utils.ads_engine import ads_scheduler_worker
+    asyncio.create_task(ads_scheduler_worker(app))
 
     # Start all registered SaaS sub-bots in the background
     await saas_runner.start_all()

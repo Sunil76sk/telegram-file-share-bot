@@ -249,6 +249,42 @@ async def deliver_files(
             await database.increment_link_downloads(token, chat_id)
             await database.track_event(chat_id, "file_download", token=token)
 
+            # Inject sponsored block for non-premium users
+            if not is_premium:
+                try:
+                    active_pinned_ads = await database.get_all_ads(ad_type="pinned")
+                    active_pinned_ads = [a for a in active_pinned_ads if a.get("status") == "active"]
+                    if active_pinned_ads:
+                        import random
+                        ad = random.choice(active_pinned_ads)
+                        ad_id = str(ad["_id"])
+                        
+                        ad_text = (
+                            f"━━━━━━━━━━━━━━━\n"
+                            f"📢 **Sponsored**\n\n"
+                            f"🔥 **{ad.get('title')}**\n"
+                            f"🚀 {ad.get('description')}\n"
+                            f"━━━━━━━━━━━━━━━"
+                        )
+                        
+                        from utils.ads_engine import get_ad_click_url
+                        click_url = get_ad_click_url(ad_id, chat_id)
+                        reply_markup = InlineKeyboardMarkup(
+                            [[InlineKeyboardButton(ad.get("button_text") or "Visit Sponsor 🌐", url=click_url)]]
+                        )
+                        
+                        ad_msg = await client.send_message(
+                            chat_id,
+                            text=ad_text,
+                            reply_markup=reply_markup
+                        )
+                        if ad_msg:
+                            sent_message_ids.append(ad_msg.id)
+                            # Log impression
+                            await database.log_ad_impression(ad_id, chat_id)
+                except Exception as ad_err:
+                    logger.error(f"Failed to inject pinned ad for user {chat_id}: {ad_err}")
+
             # Log successful access/download
             try:
                 catalog_item = await database.get_catalog_item_by_token(token)

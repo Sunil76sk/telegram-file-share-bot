@@ -8,7 +8,12 @@ from database.mongo import users_col, admins_col
 
 
 async def add_user(
-    user_id: int, username: str | None = None, first_name: str = "", last_name: str = ""
+    user_id: int,
+    username: str | None = None,
+    first_name: str = "",
+    last_name: str = "",
+    source: str = "direct",
+    campaign: str | None = None,
 ):
     """Add a new user or update their details if they exist."""
     user_data = {
@@ -28,6 +33,8 @@ async def add_user(
             "$setOnInsert": {
                 "is_banned": False,
                 "joined_at": datetime.datetime.now(datetime.timezone.utc),
+                "source": source,
+                "campaign": campaign,
             },
         },
         upsert=True,

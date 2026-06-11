@@ -30,6 +30,76 @@ logger = logging.getLogger(__name__)
 async def start_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
+    # Parse arguments early to extract traffic source & campaign
+    text_split = message.text.split(None, 1)
+    payload = ""
+    if len(text_split) > 1:
+        payload = text_split[1].strip()
+
+    # Handle deep-linked ad clicks first
+    if payload.startswith("adclk_"):
+        ad_id = payload.split("_")[1]
+        try:
+            await database.log_ad_click(ad_id, user_id)
+            ad = await database.get_ad(ad_id)
+            if ad and ad.get("button_url"):
+                await message.reply_text(
+                    f"✨ **Redirecting to Sponsor**\n\nClick the button below to visit the link:",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton(ad.get("button_text", "Visit Sponsor"), url=ad.get("button_url"))]]
+                    )
+                )
+                message.stop_propagation()
+                return
+        except Exception as e:
+            logger.error(f"Error handling adclk deep link: {e}")
+
+    # Determine traffic source and campaign
+    source = "direct"
+    campaign = None
+
+    if payload:
+        payload_lower = payload.lower()
+        
+        # Check for referral payload
+        ref_payload = None
+        if payload.startswith("ref_"):
+            ref_payload = payload
+        elif "start=ref_" in payload:
+            ref_payload = payload.split("start=")[1].split("&")[0]
+            
+        if ref_payload:
+            source = "referral"
+        else:
+            # Check for source keyword
+            import re
+            if "instagram" in payload_lower:
+                source = "instagram"
+            elif "youtube" in payload_lower:
+                source = "youtube"
+            elif "telegram" in payload_lower:
+                source = "telegram"
+            elif "referral" in payload_lower:
+                source = "referral"
+            
+            # Extract campaign token (first part or custom campaign param)
+            camp_match = re.match(r"^([a-zA-Z0-9_-]+)", payload)
+            if camp_match:
+                camp = camp_match.group(1)
+                if camp.lower() not in ["instagram", "youtube", "telegram", "referral", "direct"]:
+                    campaign = camp
+
+            # Check for explicit src= or campaign= params
+            src_param = re.search(r"src[=_]([a-zA-Z0-9_-]+)", payload_lower)
+            if src_param:
+                val = src_param.group(1)
+                if val in ["instagram", "youtube", "telegram", "referral", "direct"]:
+                    source = val
+            
+            camp_param = re.search(r"campaign[=_]([a-zA-Z0-9_-]+)", payload_lower)
+            if camp_param:
+                campaign = camp_param.group(1)
+
     # 1. Add user to database (Check if exists first to help with referral checks)
     is_new_user = False
     existing_user = await database.get_user(user_id)
@@ -41,6 +111,8 @@ async def start_handler(client: Client, message: Message):
         username=message.from_user.username,
         first_name=message.from_user.first_name,
         last_name=message.from_user.last_name,
+        source=source,
+        campaign=campaign,
     )
     await database.track_event(user_id, "active")
 
@@ -49,10 +121,6 @@ async def start_handler(client: Client, message: Message):
         await message.reply_text("⛔️ You have been banned from using this bot.")
         message.stop_propagation()
         return
-
-    # Parse arguments
-    text_split = message.text.split(None, 1)
-    payload = ""
     if len(text_split) > 1:
         payload = text_split[1].strip()
 
@@ -346,8 +414,27 @@ async def start_handler(client: Client, message: Message):
     # 3. Check force subscription
     not_joined = await get_not_subscribed_channels(client, user_id)
     if not_joined:
+        # Check for active force-join ads
+        sponsored_ad = None
+        try:
+            active_fj_ads = await database.get_force_join_ads()
+            if active_fj_ads:
+                import random
+                sponsored_ad = random.choice(active_fj_ads)
+        except Exception as e:
+            logger.error(f"Error fetching force-join ads: {e}")
+
         # User must subscribe to channels
         buttons = []
+
+        # If there is a sponsored ad, insert its button at the top
+        if sponsored_ad:
+            ad_id = str(sponsored_ad["_id"])
+            await database.log_ad_impression(ad_id, user_id)
+            from utils.ads_engine import get_ad_click_url
+            click_url = get_ad_click_url(ad_id, user_id)
+            buttons.append([InlineKeyboardButton("📢 Visit Sponsor", url=click_url)])
+
         for index, channel in enumerate(not_joined, start=1):
             btn_label = (
                 "📢 Join Channel"
@@ -362,10 +449,20 @@ async def start_handler(client: Client, message: Message):
         cb_data = f"checksub_{'unl_' if bypass_monetization else ''}{token}"
         buttons.append([InlineKeyboardButton("🔄 Try Again", callback_data=cb_data)])
 
+        ad_header = ""
+        if sponsored_ad:
+            ad_header = (
+                f"📢 **Sponsored:**\n"
+                f"🔥 **{sponsored_ad.get('title')}**\n"
+                f"🚀 {sponsored_ad.get('description')}\n\n"
+                f"━━━━━━━━━━━━━━━\n\n"
+            )
+
         await message.reply_text(
-            "⚠️ **Access Denied!**\n\n"
-            "You must join our channel before you can download this file. "
-            "Please join the channel below and click Try Again to proceed.",
+            f"{ad_header}"
+            f"⚠️ **Access Denied!**\n\n"
+            f"You must join our channel before you can download this file. "
+            f"Please join the channel below and click Try Again to proceed.",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
         message.stop_propagation()
