@@ -90,8 +90,16 @@ PREMIUM_GOLD_MONTHLY = get_env_int("PREMIUM_GOLD_MONTHLY", 400)
 PREMIUM_GOLD_LIFETIME = get_env_int("PREMIUM_GOLD_LIFETIME", 1500)
 
 # UPI Payment Settings
-UPI_ID = os.getenv("UPI_ID", "merchant@upi")
-UPI_QR_IMAGE = os.getenv("UPI_QR_IMAGE", "")  # File path or URL to QR code image
+UPI_ID = os.getenv("UPI_ID")
+if not UPI_ID or UPI_ID.strip() == "":
+    UPI_ID = "sunil.kembhavi@ybl"
+
+UPI_QR_IMAGE = os.getenv("UPI_QR_IMAGE")
+if not UPI_QR_IMAGE or UPI_QR_IMAGE.strip() == "":
+    if os.path.exists("assets/upi_qr.png"):
+        UPI_QR_IMAGE = "assets/upi_qr.png"
+    else:
+        UPI_QR_IMAGE = ""
 UPI_PRICE_WEEKLY = get_env_float("UPI_PRICE_WEEKLY", 49.0)  # INR
 UPI_PRICE_MONTHLY = get_env_float("UPI_PRICE_MONTHLY", 149.0)  # INR
 UPI_PRICE_LIFETIME = get_env_float("UPI_PRICE_LIFETIME", 499.0)  # INR
@@ -133,7 +141,9 @@ SAAS_PRO_PRICE = get_env_int("SAAS_PRO_PRICE", 2499)
 SAAS_AGENCY_PRICE = get_env_int("SAAS_AGENCY_PRICE", 4999)
 
 # SaaS Subscription UPI Payment
-SAAS_UPI_ID = os.getenv("SAAS_UPI_ID", "")  # Falls back to UPI_ID if empty
+SAAS_UPI_ID = os.getenv("SAAS_UPI_ID")
+if not SAAS_UPI_ID or SAAS_UPI_ID.strip() == "":
+    SAAS_UPI_ID = UPI_ID
 
 # Runtime-populated: set by bot.py on startup
 BOT_USERNAME: str = ""
