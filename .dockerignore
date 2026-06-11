@@ -1,0 +1,14 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.db
+*.sqlite3
+.git
+.gitignore
+.env
+.env.*
+file_share_bot.session
+file_share_bot.session-journal
