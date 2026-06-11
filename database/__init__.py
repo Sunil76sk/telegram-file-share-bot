@@ -81,6 +81,7 @@ from database.shorteners import (
 )
 from database.analytics import (
     track_event,
+    log_access,
     get_dau,
     get_mau,
     get_user_growth,
@@ -253,6 +254,7 @@ __all__ = [
     "analytics_events_col",
     "upi_pending_col",
     "track_event",
+    "log_access",
     "get_dau",
     "get_mau",
     "get_user_growth",

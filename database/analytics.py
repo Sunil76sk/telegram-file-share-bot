@@ -29,6 +29,30 @@ async def track_event(
     await analytics_events_col.insert_one(doc)
 
 
+async def log_access(
+    user_id: int,
+    token: str = "",
+    action: str = "",
+    method: str = "",
+    catalog_item_id: str | None = None,
+    amount: float | int | None = None,
+    extra: str | None = None,
+):
+    """Log access and subscription payment events into the analytics logs."""
+    metadata = {
+        "method": method,
+        "catalog_item_id": catalog_item_id,
+        "amount": amount,
+        "extra": extra,
+    }
+    await track_event(
+        user_id=user_id,
+        event_type=action,
+        token=token or None,
+        metadata=metadata,
+    )
+
+
 async def get_dau(days: int = 1) -> int:
     since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
     pipeline = [
