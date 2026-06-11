@@ -20,7 +20,13 @@ from utils.locks import broadcast_lock
 
 logger = logging.getLogger(__name__)
 
+import datetime
+
 is_broadcasting = False
+broadcast_start_time = None
+broadcast_total_users = 0
+broadcast_progress = 0
+broadcast_lock_source = "None"
 
 
 async def premium_check(_, client: Client, message: Message):
@@ -39,8 +45,10 @@ async def run_broadcast(
     broadcast_text: str | None,
     all_users: list,
 ):
-    global is_broadcasting
+    global is_broadcasting, broadcast_total_users, broadcast_progress
     total_users = len(all_users)
+    broadcast_total_users = total_users
+    broadcast_progress = 0
     success = 0
     failed = 0
     blocked = 0
@@ -49,6 +57,7 @@ async def run_broadcast(
 
     try:
         for index, user_id in enumerate(all_users):
+            broadcast_progress = index + 1
             try:
                 if reply_message:
                     await reply_message.copy(chat_id=user_id)
@@ -140,7 +149,7 @@ async def run_broadcast(
 
 @app.on_message(filters.command("broadcast") & filters.private & admin_filter)
 async def broadcast_handler(client: Client, message: Message):
-    global is_broadcasting
+    global is_broadcasting, broadcast_start_time, broadcast_total_users, broadcast_progress, broadcast_lock_source
     async with broadcast_lock:
         if is_broadcasting:
             await message.reply_text(
@@ -149,43 +158,53 @@ async def broadcast_handler(client: Client, message: Message):
             return
         is_broadcasting = True
 
-    # Determine what to broadcast (either the message replied to, or the text following the command)
-    reply = message.reply_to_message
-    broadcast_text = None
-    if not reply:
-        text_parts = message.text.split(None, 1)
-        if len(text_parts) < 2:
+    try:
+        # Determine what to broadcast (either the message replied to, or the text following the command)
+        reply = message.reply_to_message
+        broadcast_text = None
+        if not reply:
+            text_parts = message.text.split(None, 1)
+            if len(text_parts) < 2:
+                is_broadcasting = False
+                await message.reply_text(
+                    "⚠️ Please reply to a message or provide text to broadcast.\nUsage: `/broadcast Hello Users` or reply to a post with `/broadcast`."
+                )
+                return
+            broadcast_text = text_parts[1]
+
+        all_users = await database.get_all_users()
+        total_users = len(all_users)
+
+        if total_users == 0:
             is_broadcasting = False
-            await message.reply_text(
-                "⚠️ Please reply to a message or provide text to broadcast.\nUsage: `/broadcast Hello Users` or reply to a post with `/broadcast`."
-            )
+            await message.reply_text("❌ No registered users to broadcast to.")
             return
-        broadcast_text = text_parts[1]
 
-    all_users = await database.get_all_users()
-    total_users = len(all_users)
+        broadcast_start_time = datetime.datetime.now(datetime.timezone.utc)
+        broadcast_total_users = total_users
+        broadcast_progress = 0
+        broadcast_lock_source = f"Admin {message.from_user.id} ({message.from_user.username or 'No Username'})"
 
-    if total_users == 0:
-        is_broadcasting = False
-        await message.reply_text("❌ No registered users to broadcast to.")
-        return
-
-    status_msg = await message.reply_text(
-        f"📢 **Starting broadcast...**\n"
-        f"Target: `{total_users}` users.\n"
-        f"This runs in the background. You will receive a completion message shortly."
-    )
-
-    asyncio.create_task(
-        run_broadcast(
-            client=client,
-            admin_chat_id=message.chat.id,
-            status_message_id=status_msg.id,
-            reply_message=reply,
-            broadcast_text=broadcast_text,
-            all_users=all_users,
+        status_msg = await message.reply_text(
+            f"📢 **Starting broadcast...**\n"
+            f"Target: `{total_users}` users.\n"
+            f"This runs in the background. You will receive a completion message shortly."
         )
-    )
+
+        asyncio.create_task(
+            run_broadcast(
+                client=client,
+                admin_chat_id=message.chat.id,
+                status_message_id=status_msg.id,
+                reply_message=reply,
+                broadcast_text=broadcast_text,
+                all_users=all_users,
+            )
+        )
+    except Exception as e:
+        is_broadcasting = False
+        logger.error(f"Error starting broadcast: {e}")
+        await message.reply_text(f"❌ **Failed to start broadcast:** {e}")
 
 
 @app.on_message(filters.command("ban") & filters.private & admin_filter)
@@ -445,3 +464,37 @@ async def del_admin_handler(client: Client, message: Message):
         await message.reply_text(
             f"❌ User `{user_id}` not found in dynamic admin list."
         )
+
+
+@app.on_message(filters.command("broadcast_status") & filters.private & admin_filter)
+async def broadcast_status_handler(client: Client, message: Message):
+    global is_broadcasting, broadcast_start_time, broadcast_total_users, broadcast_progress, broadcast_lock_source
+    
+    start_str = "N/A"
+    if broadcast_start_time:
+        start_str = broadcast_start_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+        
+    status_text = (
+        "📢 **Broadcast Status Info:**\n\n"
+        f"• **Active:** `{is_broadcasting}`\n"
+        f"• **Started At:** `{start_str}`\n"
+        f"• **Total Users:** `{broadcast_total_users}`\n"
+        f"• **Progress:** `{broadcast_progress}/{broadcast_total_users}`\n"
+        f"• **Lock Source:** `{broadcast_lock_source}`"
+    )
+    await message.reply_text(status_text)
+
+
+@app.on_message(filters.command("broadcast_unlock") & filters.private & admin_filter)
+async def broadcast_unlock_handler(client: Client, message: Message):
+    global is_broadcasting, broadcast_start_time, broadcast_total_users, broadcast_progress, broadcast_lock_source
+    
+    async with broadcast_lock:
+        is_broadcasting = False
+        broadcast_start_time = None
+        broadcast_total_users = 0
+        broadcast_progress = 0
+        broadcast_lock_source = "Unlocked by admin"
+        
+    await message.reply_text("✅ **Broadcast lock has been forcefully cleared.**")
+
