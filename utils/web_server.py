@@ -27,13 +27,64 @@ def run_async(coro):
 
 
 def get_ip_country(ip_address: str) -> str:
-    """Perform GeoIP lookup using ip-api.com (disabled)."""
+    """Perform GeoIP lookup using ip-api.com."""
+    if ip_address in ["127.0.0.1", "localhost", "::1", ""]:
+        return "US"
+    try:
+        url = f"http://ip-api.com/json/{ip_address}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            if data.get("status") == "success":
+                return data.get("countryCode", "US")
+    except Exception as e:
+        logger.error(f"GeoIP error for {ip_address}: {e}")
     return "US"
 
 
 async def generate_short_link(shortener: dict, long_url: str) -> str | None:
-    """Call a third-party shortener API (disabled)."""
-    return None
+    """Call a third-party shortener API to shorten the redirect URL."""
+    api_url = shortener["api_url"]
+    api_key = shortener["api_key"]
+
+    # URL encode the destination URL
+    encoded_url = urllib.parse.quote(long_url)
+
+    # Build standard AdLinkFly API URL
+    url = f"{api_url}?api={api_key}&url={encoded_url}"
+
+    def _call():
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8) as response:
+                content_type = response.headers.get("Content-Type", "")
+                body = response.read().decode("utf-8")
+
+                if "application/json" in content_type or body.strip().startswith("{"):
+                    try:
+                        data = json.loads(body)
+                        for key in [
+                            "shortenedUrl",
+                            "short_url",
+                            "shortened_url",
+                            "url",
+                        ]:
+                            if key in data:
+                                return data[key]
+                        if data.get("status") == "error":
+                            logger.error(
+                                f"Shortener API returned error: {data.get('message')}"
+                            )
+                    except Exception:
+                        pass
+
+                if body.strip().startswith("http"):
+                    return body.strip()
+        except Exception as e:
+            logger.error(f"Error calling shortener API ({api_url}): {e}")
+        return None
+
+    return await asyncio.to_thread(_call)
 
 
 class RedirectHandler(BaseHTTPRequestHandler):

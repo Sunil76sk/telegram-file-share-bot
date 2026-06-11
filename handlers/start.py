@@ -148,6 +148,7 @@ async def start_handler(client: Client, message: Message):
         except Exception as e:
             logger.error(f"Error processing referral: {e}")
         # Clear payload so they get the standard welcome message instead of trying to download a file
+        payload = ""
     # Simple /start with no payload
     if not payload:
         welcome_text = (
