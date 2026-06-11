@@ -145,17 +145,27 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
                     and not chat_id_or_username.startswith("-")
                     else None
                 )
-                chat_info = await client.get_chat(chat_id_or_username)
+                try:
+                    chat_info = await client.get_chat(chat_id_or_username)
+                except Exception:
+                    chat_info = None
+
+                fallback_link = (
+                    f"https://t.me/c/{str(chat_id_or_username).replace('-100', '')}/1"
+                    if not isinstance(chat_id_or_username, str) or chat_id_or_username.startswith("-")
+                    else f"https://t.me/{str(chat_id_or_username).replace('@', '')}"
+                )
+
                 not_joined.append(
                     {
                         "chat_id": chat_id_or_username,
-                        "title": getattr(chat_info, "title", str(chat_id_or_username)),
+                        "title": getattr(chat_info, "title", str(chat_id_or_username)) if chat_info else str(chat_id_or_username),
                         "invite_link": invite_link
-                        or getattr(chat_info, "invite_link", None)
+                        or (getattr(chat_info, "invite_link", None) if chat_info else None)
                         or (
                             f"https://t.me/{getattr(chat_info, 'username')}"
-                            if getattr(chat_info, "username", None)
-                            else ""
+                            if chat_info and getattr(chat_info, "username", None)
+                            else fallback_link
                         ),
                     }
                 )
@@ -168,6 +178,11 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
                     and not chat_id_or_username.startswith("-")
                     else getattr(chat_info, "invite_link", None)
                 )
+                fallback_link = (
+                    f"https://t.me/c/{str(chat_id_or_username).replace('-100', '')}/1"
+                    if not isinstance(chat_id_or_username, str) or chat_id_or_username.startswith("-")
+                    else f"https://t.me/{str(chat_id_or_username).replace('@', '')}"
+                )
                 not_joined.append(
                     {
                         "chat_id": chat_id_or_username,
@@ -176,7 +191,7 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
                         or (
                             f"https://t.me/{getattr(chat_info, 'username')}"
                             if getattr(chat_info, "username", None)
-                            else ""
+                            else fallback_link
                         ),
                     }
                 )
@@ -189,7 +204,8 @@ async def get_not_subscribed_channels(client: Client, user_id: int) -> list:
                 invite_link = (
                     f"https://t.me/{chat_id_or_username.replace('@', '')}"
                     if isinstance(chat_id_or_username, str)
-                    else ""
+                    and not chat_id_or_username.startswith("-")
+                    else f"https://t.me/c/{str(chat_id_or_username).replace('-100', '')}/1"
                 )
                 not_joined.append(
                     {

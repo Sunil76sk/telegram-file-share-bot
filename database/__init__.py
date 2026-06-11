@@ -19,6 +19,7 @@ from database.mongo import (
     ad_drafts_col,
     analytics_events_col,
     upi_pending_col,
+    sub_bots_col,
     init_db,
 )
 from database.links import (
@@ -268,4 +269,5 @@ __all__ = [
     "approve_upi",
     "reject_upi",
     "get_all_pending_upi",
+    "sub_bots_col",
 ]

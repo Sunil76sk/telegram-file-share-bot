@@ -27,6 +27,7 @@ ad_impressions_col = db["ad_impressions"]
 ad_clicks_col = db["ad_clicks"]
 ad_drafts_col = db["ad_drafts"]
 analytics_events_col = db["analytics_events"]
+sub_bots_col = db["sub_bots"]
 
 
 async def init_db():

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import config
-from database.mongo import users_col, admins_col
+from database.mongo import users_col, admins_col, sub_bots_col
 
 # --- USER HELPERS ---
 
@@ -122,15 +122,14 @@ async def is_admin(user_id: int, client=None) -> bool:
     if doc is not None:
         return True
 
-    # If client is provided, check if client is a sub-bot and user_id is the owner
-    if client:
-        from database.mongo import sub_bots_col
-
-        bot_me = getattr(client, "me", None)
-        if bot_me:
-            sub_bot = await sub_bots_col.find_one({"username": bot_me.username})
+    if client is not None:
+        try:
+            bot_me = client.me or await client.get_me()
+            sub_bot = await sub_bots_col.find_one({"bot_id": bot_me.id})
             if sub_bot and sub_bot.get("owner_id") == user_id:
                 return True
+        except Exception:
+            pass
 
     return False
 
