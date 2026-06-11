@@ -230,66 +230,8 @@ async def file_uploader(client: Client, message: Message):
 
     user_doc = await database.get_user(user_id)
 
-    # 1. Intercept SaaS screenshot upload
-    if user_doc and user_doc.get("state") == "saas_awaiting_screenshot":
-        plan_id = user_doc.get("saas_pending_plan", "pro")
-        plan = database.PLAN_DEFINITIONS.get(plan_id, database.PLAN_DEFINITIONS["pro"])
-
-        file_id = None
-        if message.photo:
-            file_id = message.photo.file_id
-        elif message.document:
-            file_id = message.document.file_id
-
-        if not file_id:
-            await message.reply_text(
-                "📸 **Please send a screenshot** of your UPI payment as a photo or document."
-            )
-            return
-
-        from database.premium_store import create_upi_payment, set_upi_screenshot
-
-        payment_id_str = await create_upi_payment(
-            user_id=user_id,
-            plan=f"saas_{plan_id}",
-            amount_inr=plan["price_inr"],
-        )
-        await set_upi_screenshot(payment_id_str, message.id)
-
-        await database.users_col.update_one(
-            {"_id": user_id},
-            {"$unset": {"state": "", "saas_pending_plan": ""}},
-        )
-
-        await message.reply_text(
-            f"✅ **Payment screenshot received!**\n\n"
-            f"Your **{plan['name']}** plan upgrade request is pending verification.\n"
-            f"Our team will review and activate your subscription shortly.\n\n"
-            f"Use `/saas` to check your dashboard."
-        )
-
-        # Notify admins
-        admin_text = (
-            f"📋 **New SaaS Subscription Request**\n\n"
-            f"User: `{user_id}`\n"
-            f"Plan: {plan['name']} (₹{plan['price_inr']}/mo)\n"
-            f"Payment ID: `{payment_id_str}`\n"
-            f"Status: Pending Verification\n\n"
-            f"Use `/approve_upi {payment_id_str}` to activate."
-        )
-        for admin_id in config.ADMIN_IDS:
-            try:
-                await client.send_photo(admin_id, file_id, caption=admin_text)
-            except Exception:
-                try:
-                    await client.send_message(admin_id, admin_text)
-                except Exception:
-                    pass
-        return
-
-    # 2. Intercept premium/store UPI screenshot upload
+    # 1. Intercept premium UPI screenshot upload
     import datetime
-    from bson import ObjectId
 
     pending = await database.get_pending_upi(user_id)
     if pending and pending.get("screenshot_msg_id") is None:
@@ -305,27 +247,11 @@ async def file_uploader(client: Client, message: Message):
 
             await message.reply_text(
                 "✅ **Payment screenshot received!**\n\n"
-                "Our team is verifying the payment details. We will notify you once your premium access is activated "
-                "or your purchased content is unlocked."
+                "Our team is verifying the payment details. We will notify you once your premium access is activated."
             )
 
             plan_desc = pending["plan"]
-            if plan_desc.startswith("item_"):
-                item_id = plan_desc.split("_")[1]
-                item = await database.get_catalog_item(item_id)
-                plan_desc = (
-                    f"Store Item: {item['title']}" if item else f"Item ID {item_id}"
-                )
-            elif plan_desc.startswith("prod_"):
-                product_id = plan_desc.split("_")[1]
-                product = await database.get_product_by_id(ObjectId(product_id))
-                plan_desc = (
-                    f"Marketplace Product: {product['name']}"
-                    if product
-                    else f"Product ID {product_id}"
-                )
-            else:
-                plan_desc = f"Subscription: {plan_desc.replace('_', ' ').title()}"
+            plan_desc = f"Subscription: {plan_desc.replace('_', ' ').title()}"
 
             admin_msg = (
                 "🔔 **New UPI Payment Submission:**\n\n"
@@ -360,15 +286,6 @@ async def file_uploader(client: Client, message: Message):
                         f"Failed to forward UPI screenshot to admin {admin_id}: {e}"
                     )
             return
-
-    # 3. Intercept marketplace product upload files
-    if user_doc and user_doc.get("state", "").startswith("market_"):
-        from handlers.marketplace import handle_marketplace_state
-
-        await handle_marketplace_state(
-            client, message, user_id, user_doc["state"], user_doc
-        )
-        return
 
     # Extract file details
     file_id, file_unique_id, file_name, file_type, file_size, caption = (

@@ -10,7 +10,6 @@ import asyncio
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import config
 import database
-from utils.funnel import source_display_name, asset_type_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -28,64 +27,13 @@ def run_async(coro):
 
 
 def get_ip_country(ip_address: str) -> str:
-    """Perform GeoIP lookup using ip-api.com."""
-    if ip_address in ["127.0.0.1", "localhost", "::1", ""]:
-        return "US"
-    try:
-        url = f"http://ip-api.com/json/{ip_address}"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=3) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            if data.get("status") == "success":
-                return data.get("countryCode", "US")
-    except Exception as e:
-        logger.error(f"GeoIP error for {ip_address}: {e}")
+    """Perform GeoIP lookup using ip-api.com (disabled)."""
     return "US"
 
 
 async def generate_short_link(shortener: dict, long_url: str) -> str | None:
-    """Call a third-party shortener API to shorten the redirect URL."""
-    api_url = shortener["api_url"]
-    api_key = shortener["api_key"]
-
-    # URL encode the destination URL
-    encoded_url = urllib.parse.quote(long_url)
-
-    # Build standard AdLinkFly API URL
-    url = f"{api_url}?api={api_key}&url={encoded_url}"
-
-    def _call():
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=8) as response:
-                content_type = response.headers.get("Content-Type", "")
-                body = response.read().decode("utf-8")
-
-                if "application/json" in content_type or body.strip().startswith("{"):
-                    try:
-                        data = json.loads(body)
-                        for key in [
-                            "shortenedUrl",
-                            "short_url",
-                            "shortened_url",
-                            "url",
-                        ]:
-                            if key in data:
-                                return data[key]
-                        if data.get("status") == "error":
-                            logger.error(
-                                f"Shortener API returned error: {data.get('message')}"
-                            )
-                    except Exception:
-                        pass
-
-                if body.strip().startswith("http"):
-                    return body.strip()
-        except Exception as e:
-            logger.error(f"Error calling shortener API ({api_url}): {e}")
-        return None
-
-    return await asyncio.to_thread(_call)
+    """Call a third-party shortener API (disabled)."""
+    return None
 
 
 class RedirectHandler(BaseHTTPRequestHandler):
@@ -315,38 +263,6 @@ class RedirectHandler(BaseHTTPRequestHandler):
             self.send_response(302)
             self.send_header("Location", redirect_to)
             self.end_headers()
-            return
-
-        # 5. Route: /funnel/<campaign_id> - Campaign landing page
-        funnel_match = re.match(r"^/funnel/([a-zA-Z0-9_-]+)$", path)
-        if funnel_match:
-            campaign_id = funnel_match.group(1)
-            campaign = run_async(database.get_campaign(campaign_id))
-            if not campaign:
-                self.send_error(404, "Campaign Not Found")
-                return
-            src = source_display_name(campaign.get("source", "unknown"))
-            at = asset_type_display_name(campaign.get("asset_type", "unknown"))
-            invite_link = campaign.get("invite_link", "")
-            bot_username = getattr(config, "BOT_USERNAME", "file_share_bot")
-            campaign_payload = campaign_id
-            if campaign.get("source"):
-                campaign_payload += f"&src_{campaign['source']}"
-            bot_deep_link = f"https://t.me/{bot_username}?start={campaign_payload}"
-            html = self.get_funnel_landing_html(
-                title=campaign.get("title", "Exclusive Content"),
-                description=campaign.get(
-                    "description", "Access exclusive files by joining our channel!"
-                ),
-                source_display=src,
-                asset_display=at,
-                invite_link=invite_link,
-                bot_deep_link=bot_deep_link,
-            )
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(html.encode("utf-8"))
             return
 
         # Fallback

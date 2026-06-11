@@ -23,6 +23,14 @@ logger = logging.getLogger(__name__)
 is_broadcasting = False
 
 
+async def premium_check(_, client: Client, message: Message):
+    if not message or not message.from_user:
+        return False
+    return await database.is_user_premium(message.from_user.id)
+
+premium_filter = filters.create(premium_check)
+
+
 async def run_broadcast(
     client: Client,
     admin_chat_id: int,
@@ -218,7 +226,7 @@ async def unban_handler(client: Client, message: Message):
     await message.reply_text(f"✅ User `{user_id}` has been unbanned.")
 
 
-@app.on_message(filters.command("add_channel") & filters.private & admin_filter)
+@app.on_message(filters.command("add_channel") & filters.private & premium_filter)
 async def add_channel_handler(client: Client, message: Message):
     if "[channel_id_or_username]" in message.text or "[invite_link]" in message.text:
         await message.reply_text(
@@ -302,7 +310,7 @@ async def add_channel_handler(client: Client, message: Message):
     )
 
 
-@app.on_message(filters.command("del_channel") & filters.private & admin_filter)
+@app.on_message(filters.command("del_channel") & filters.private & premium_filter)
 async def del_channel_handler(client: Client, message: Message):
     if "[channel_id_or_username]" in message.text:
         await message.reply_text(
@@ -340,7 +348,7 @@ async def del_channel_handler(client: Client, message: Message):
         await message.reply_text(f"❌ Channel `{chat_id}` not found in force sub list.")
 
 
-@app.on_message(filters.command("channels") & filters.private & admin_filter)
+@app.on_message(filters.command("channels") & filters.private & premium_filter)
 async def list_channels_handler(client: Client, message: Message):
     db_channels = await database.get_force_sub_channels()
     static_channels = config.FORCE_SUB_CHATS

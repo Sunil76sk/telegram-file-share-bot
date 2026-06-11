@@ -11,39 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 async def get_shortened_url(long_url: str) -> str | None:
-    """Shorten the start URL using configured third-party link shortener API."""
-    if not config.SHORTENER_API_URL or not config.SHORTENER_API_KEY:
-        return None
-    url = f"{config.SHORTENER_API_URL}?api={config.SHORTENER_API_KEY}&url={long_url}"
-
-    def _call():
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as response:
-                content_type = response.headers.get("Content-Type", "")
-                body = response.read().decode("utf-8")
-
-                if "application/json" in content_type:
-                    try:
-                        data = json.loads(body)
-                        for key in [
-                            "shortenedUrl",
-                            "short_url",
-                            "shortened_url",
-                            "url",
-                        ]:
-                            if key in data:
-                                return data[key]
-                    except Exception:
-                        pass
-
-                if body.strip().startswith("http"):
-                    return body.strip()
-        except Exception as e:
-            logger.error(f"Error calling URL shortener API: {e}")
-        return None
-
-    return await asyncio.to_thread(_call)
+    """Shorten the start URL using configured third-party link shortener API (disabled)."""
+    return None
 
 
 async def deliver_files(

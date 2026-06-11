@@ -39,16 +39,11 @@ import handlers.broadcast  # noqa: E402
 import handlers.payment  # noqa: E402
 import handlers.premium  # noqa: E402
 import handlers.referral  # noqa: E402
-import handlers.saas  # noqa: E402, F401
 import handlers.shorteners  # noqa: E402
-import handlers.funnel  # noqa: E402
 import handlers.ads  # noqa: E402
 import handlers.analytics  # noqa: E402
-import handlers.premium_admin  # noqa: E402
-import handlers.marketplace  # noqa: E402, F401
 
 
-from utils.saas import saas_runner  # noqa: E402
 from utils.web_server import start_web_server, stop_web_server  # noqa: E402
 
 # Override start to trigger background workers and sub-bots
@@ -63,8 +58,6 @@ async def custom_start():
     config.BOT_USERNAME = bot_me.username
 
     await database.init_db()
-    await database.seed_plans()
-    await database.seed_marketplace_categories()
     await database.clear_active_deliveries()
     await database.batches_col.delete_many({})
     await database.edit_sessions_col.delete_many({})
@@ -99,9 +92,6 @@ async def custom_start():
     from utils.ads_engine import ads_scheduler_worker
     asyncio.create_task(ads_scheduler_worker(app))
 
-    # Start all registered SaaS sub-bots in the background
-    await saas_runner.start_all()
-
     # Start the local redirect web server
     start_web_server()
 
@@ -126,7 +116,6 @@ original_stop = app.stop
 
 
 async def custom_stop():
-    await saas_runner.stop_all()
     stop_web_server()
     await original_stop()
 
