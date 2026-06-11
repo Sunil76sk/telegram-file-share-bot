@@ -322,6 +322,18 @@ async def add_channel_handler(client: Client, message: Message):
         if bot_status not in ["administrator", "owner", "creator"]:
             await message.reply_text("❌ Bot is not an administrator in this channel.")
             return
+            
+        # Verify required privileges for Creator Studio (Post & Delete messages)
+        privileges = bot_member.privileges
+        if not privileges or not privileges.can_post_messages or not privileges.can_delete_messages:
+            await message.reply_text(
+                "❌ **Missing Permissions!**\n\n"
+                "The bot must have the following administrator privileges in the channel:\n"
+                "• **Post Messages** (`can_post_messages`)\n"
+                "• **Delete Messages** (`can_delete_messages`)\n\n"
+                "Please enable these permissions for the bot in your channel settings."
+            )
+            return
     except Exception as e:
         logger.error(f"Failed to verify admin status of bot in channel {chat_id}: {e}")
         await message.reply_text("❌ Bot is not an administrator in this channel.")
@@ -347,10 +359,17 @@ async def add_channel_handler(client: Client, message: Message):
         invite_link = f"https://t.me/c/{str(chat_id).replace('-100', '')}/1"
 
     # Save to database (updates if exists, preventing duplicates)
-    await database.add_force_sub_channel(chat_id, title, invite_link)
+    await database.add_creator_channel(
+        user_id=message.from_user.id,
+        channel_id=chat_id,
+        title=title,
+        username=getattr(chat_info, "username", None),
+        invite_link=invite_link,
+        permissions_verified=True,
+    )
     
     await message.reply_text(
-        f"✅ Channel Added\n"
+        f"✅ Channel Added to Creator Studio\n"
         f"Channel ID: `{chat_id}`\n"
         f"Title: **{title}**\n"
         f"Invite Link: {invite_link}"
@@ -497,4 +516,125 @@ async def broadcast_unlock_handler(client: Client, message: Message):
         broadcast_lock_source = "Unlocked by admin"
         
     await message.reply_text("✅ **Broadcast lock has been forcefully cleared.**")
+
+
+# ─── CREATOR STUDIO CHANNEL SETTINGS ─────────────────────────────────
+
+@app.on_message(filters.command("my_channels") & filters.private & premium_filter)
+async def my_channels_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    channels = await database.get_creator_channels(user_id)
+    if not channels:
+        await message.reply_text("❌ You haven't added any channels to Creator Studio yet. Use `/add_channel` to add one.")
+        return
+
+    text = "📂 **Your Managed Channels:**\n\n"
+    buttons = []
+    for chan in channels:
+        text += f"• **{chan['title']}** (`{chan['_id']}`)\n"
+        buttons.append([InlineKeyboardButton(f"⚙️ Settings: {chan['title']}", callback_data=f"chan_settings_{chan['_id']}")])
+        
+    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+@app.on_callback_query(filters.regex(r"^chan_settings_(.+)"))
+async def chan_settings_callback_handler(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    channel_id = callback_query.matches[0].group(1)
+    
+    try:
+        channel_id_val = int(channel_id)
+    except ValueError:
+        channel_id_val = channel_id
+        
+    channel = await database.get_channel_by_id(channel_id_val)
+    if not channel or channel.get("user_id") != user_id:
+        await callback_query.answer("❌ Channel not found or access denied.", show_alert=True)
+        return
+        
+    status = "Active ✅" if channel.get("service_enabled", True) else "Disabled ❌"
+    text = (
+        f"📢 **Channel Settings: {channel.get('title')}**\n"
+        f"ID: `{channel['_id']}`\n"
+        f"Username: `@{channel.get('username') or 'None'}`\n"
+        f"Status: **{status}**\n\n"
+        f"Choose an option below to configure the channel:"
+    )
+    
+    toggle_label = "Disable Service ❌" if channel.get("service_enabled", True) else "Enable Service ✅"
+    buttons = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(toggle_label, callback_data=f"chan_toggle_{channel['_id']}"),
+                InlineKeyboardButton("Demote/Remove 🗑", callback_data=f"chan_remove_{channel['_id']}"),
+            ],
+            [
+                InlineKeyboardButton("🔙 Back to Channels", callback_data="chan_list_back")
+            ]
+        ]
+    )
+    try:
+        await callback_query.message.edit_text(text, reply_markup=buttons)
+    except Exception:
+        pass
+
+
+@app.on_callback_query(filters.regex(r"^chan_toggle_(.+)"))
+async def chan_toggle_callback_handler(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    channel_id = callback_query.matches[0].group(1)
+    try:
+        channel_id_val = int(channel_id)
+    except ValueError:
+        channel_id_val = channel_id
+        
+    channel = await database.get_channel_by_id(channel_id_val)
+    if not channel or channel.get("user_id") != user_id:
+        await callback_query.answer("❌ Access denied.", show_alert=True)
+        return
+        
+    new_state = not channel.get("service_enabled", True)
+    await database.channels_col.update_one({"_id": channel_id_val}, {"$set": {"service_enabled": new_state}})
+    await callback_query.answer(f"Channel service {'enabled' if new_state else 'disabled'}.")
+    
+    # Reload settings view
+    class FakeMatch:
+        def group(self, i): return channel_id
+    callback_query.matches = [FakeMatch()]
+    await chan_settings_callback_handler(client, callback_query)
+
+
+@app.on_callback_query(filters.regex(r"^chan_remove_(.+)"))
+async def chan_remove_callback_handler(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    channel_id = callback_query.matches[0].group(1)
+    try:
+        channel_id_val = int(channel_id)
+    except ValueError:
+        channel_id_val = channel_id
+        
+    deleted = await database.delete_force_sub_channel(channel_id_val)
+    if deleted:
+        await callback_query.answer("🗑 Channel removed successfully.", show_alert=True)
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass
+        message = callback_query.message
+        message.from_user = callback_query.from_user
+        await my_channels_handler(client, message)
+    else:
+        await callback_query.answer("❌ Failed to remove channel.", show_alert=True)
+
+
+@app.on_callback_query(filters.regex(r"^chan_list_back$"))
+async def chan_list_back_callback_handler(client: Client, callback_query: CallbackQuery):
+    try:
+        await callback_query.message.delete()
+    except Exception:
+        pass
+    message = callback_query.message
+    message.from_user = callback_query.from_user
+    await my_channels_handler(client, message)
+
 

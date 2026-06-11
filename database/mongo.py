@@ -28,6 +28,12 @@ ad_clicks_col = db["ad_clicks"]
 ad_drafts_col = db["ad_drafts"]
 analytics_events_col = db["analytics_events"]
 sub_bots_col = db["sub_bots"]
+scheduled_posts_col = db["scheduled_posts"]
+templates_col = db["templates"]
+repost_jobs_col = db["repost_jobs"]
+post_drafts_col = db["post_drafts"]
+channel_stats_col = db["channel_stats"]
+button_clicks_col = db["button_clicks"]
 
 
 async def init_db():
