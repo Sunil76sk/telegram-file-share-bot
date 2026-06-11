@@ -338,3 +338,160 @@ async def premium_menu_home_callback(client: Client, callback_query: CallbackQue
 
     await callback_query.answer()
     await callback_query.message.edit_text(benefits, reply_markup=buttons)
+
+
+# ─── UPI ADMIN REVIEW HANDLERS ──────────────────────────────────────
+
+
+@app.on_callback_query(filters.regex(r"^admin_upi_(approve|reject)_(.+)"))
+async def admin_upi_callback_handler(client: Client, callback_query: CallbackQuery):
+    admin_id = callback_query.from_user.id
+    if not await database.is_admin(admin_id, client):
+        await callback_query.answer("⛔️ Access denied.", show_alert=True)
+        return
+
+    action = callback_query.matches[0].group(1)
+    payment_id = callback_query.matches[0].group(2)
+
+    payment = await database.get_upi_payment(payment_id)
+    if not payment:
+        await callback_query.answer("❌ Payment record not found.", show_alert=True)
+        return
+
+    if payment.get("status") != "pending":
+        await callback_query.answer(f"⚠️ Already {payment.get('status')}.", show_alert=True)
+        return
+
+    user_id = payment["user_id"]
+    plan_name = payment["plan"]
+    amount = payment["amount_inr"]
+
+    if action == "approve":
+        success = await database.approve_upi(payment_id, admin_id)
+        if success:
+            parts = plan_name.split("_")
+            tier = parts[0]
+            duration = parts[1]
+            days = 0
+            if duration == "weekly":
+                days = 7
+            elif duration == "monthly":
+                days = 30
+            elif duration == "lifetime":
+                days = 0
+
+            await database.set_user_premium(user_id, days, tier)
+            await database.log_access(
+                user_id,
+                token="",
+                action="subscription_activate",
+                method="upi",
+                amount=amount,
+                extra=plan_name,
+            )
+
+            expiry_str = await database.get_premium_expiry_str(user_id)
+            try:
+                await client.send_message(
+                    chat_id=user_id,
+                    text=(
+                        f"🌟 **Premium Membership Activated!** 🌟\n\n"
+                        f"Your UPI payment of **₹{amount}** for the **{tier.capitalize()} {duration.capitalize()}** plan has been approved.\n"
+                        f"Status: **{expiry_str}**\n\n"
+                        f"Thank you for your support!"
+                    ),
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify user {user_id} of UPI approval: {e}")
+
+            await callback_query.answer("✅ UPI Payment Approved!", show_alert=True)
+            try:
+                await callback_query.message.edit_reply_markup(None)
+                await callback_query.message.reply_text(
+                    f"✅ **Approved** by {callback_query.from_user.mention}"
+                )
+            except Exception:
+                pass
+        else:
+            await callback_query.answer("❌ Failed to approve payment.", show_alert=True)
+
+    elif action == "reject":
+        success = await database.reject_upi(payment_id, admin_id)
+        if success:
+            try:
+                await client.send_message(
+                    chat_id=user_id,
+                    text=(
+                        "❌ **UPI Payment Rejected**\n\n"
+                        f"Your UPI payment verification request for the **{plan_name.replace('_', ' ').title()}** plan was rejected.\n"
+                        "Please verify your payment screenshot and try again, or contact support."
+                    ),
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify user {user_id} of UPI rejection: {e}")
+
+            await callback_query.answer("❌ UPI Payment Rejected!", show_alert=True)
+            try:
+                await callback_query.message.edit_reply_markup(None)
+                await callback_query.message.reply_text(
+                    f"❌ **Rejected** by {callback_query.from_user.mention}"
+                )
+            except Exception:
+                pass
+        else:
+            await callback_query.answer("❌ Failed to reject payment.", show_alert=True)
+
+
+@app.on_message(filters.command(["upi_pending", "pending_upi"]) & filters.private)
+async def upi_pending_command_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    if not await database.is_admin(user_id, client):
+        return
+
+    pending_list = await database.get_all_pending_upi()
+    if not pending_list:
+        await message.reply_text("✅ **No pending UPI payments to verify.**")
+        return
+
+    await message.reply_text(f"⏳ **Found {len(pending_list)} pending UPI payment verification requests:**")
+
+    for payment in pending_list:
+        pay_id = str(payment["_id"])
+        user_info = f"User ID: `{payment['user_id']}`"
+        plan_desc = f"Plan: `{payment['plan'].replace('_', ' ').title()}`"
+        amount_desc = f"Amount: `₹{payment['amount_inr']}`"
+        created_str = payment["created_at"].strftime("%Y-%m-%d %H:%M:%S UTC")
+        
+        caption = (
+            f"🔔 **Pending UPI Payment Request**\n\n"
+            f"👤 **User:** {user_info}\n"
+            f"📦 **Plan:** {plan_desc}\n"
+            f"💰 **Amount:** {amount_desc}\n"
+            f"🕒 **Submitted:** {created_str}\n"
+        )
+        
+        buttons = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Approve ✅", callback_data=f"admin_upi_approve_{pay_id}"),
+                    InlineKeyboardButton("Reject ❌", callback_data=f"admin_upi_reject_{pay_id}"),
+                ]
+            ]
+        )
+        
+        msg_id = payment.get("screenshot_msg_id")
+        if msg_id:
+            try:
+                await client.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=payment["user_id"],
+                    message_id=msg_id,
+                    caption=caption,
+                    reply_markup=buttons,
+                )
+                continue
+            except Exception as e:
+                logger.error(f"Failed to copy screenshot for pending payment {pay_id}: {e}")
+                
+        await message.reply_text(caption, reply_markup=buttons)
+
