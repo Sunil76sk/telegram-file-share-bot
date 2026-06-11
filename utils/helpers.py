@@ -281,3 +281,40 @@ async def answer_pre_checkout(
         params["error_message"] = error_message
     res = await call_telegram_api(client, "answerPreCheckoutQuery", params)
     return res.get("ok", False)
+
+
+async def get_share_link(client: Client, token: str) -> str:
+    """Generate the final share link (shortened if shorteners are active, otherwise raw deep link)."""
+    bot_me = client.me or await client.get_me()
+    username = bot_me.username or "bot"
+    raw_link = f"https://t.me/{username}?start={token}"
+    
+    file_doc = await database.get_file_link(token)
+    bot_id = file_doc.get("bot_id") if file_doc else None
+    
+    active_shorteners = await database.get_shorteners(bot_id=bot_id, active_only=True)
+    if not active_shorteners and bot_id is not None:
+        active_shorteners = await database.get_shorteners(bot_id=None, active_only=True)
+        
+    has_shorteners = len(active_shorteners) > 0
+    use_config_fallback = not has_shorteners and bool(config.SHORTENER_API_URL and config.SHORTENER_API_KEY)
+    
+    if has_shorteners or use_config_fallback:
+        long_url = f"https://t.me/{username}?start=unl_{token}"
+        short_url = None
+        
+        if has_shorteners:
+            shortener = await database.get_best_shortener(bot_id=bot_id)
+            if shortener:
+                from utils.web_server import generate_short_link
+                short_url = await generate_short_link(shortener, long_url)
+                
+        if not short_url and use_config_fallback:
+            from utils.delivery import get_shortened_url
+            short_url = await get_shortened_url(long_url)
+            
+        if short_url:
+            return short_url
+            
+    return raw_link
+
