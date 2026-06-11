@@ -226,6 +226,36 @@ async def unban_handler(client: Client, message: Message):
     await message.reply_text(f"✅ User `{user_id}` has been unbanned.")
 
 
+def parse_channel_input(input_str: str):
+    input_str = input_str.strip()
+    
+    # 1. Check if it is a numeric ID (integer)
+    if input_str.startswith("-") or input_str.isdigit():
+        try:
+            return int(input_str), None
+        except ValueError:
+            pass
+
+    # 2. Check if it is a Telegram URL/Link
+    if "t.me/" in input_str or "telegram.me/" in input_str or input_str.startswith("https://") or input_str.startswith("http://"):
+        clean = input_str.replace("https://", "").replace("http://", "")
+        clean = clean.replace("telegram.me/", "").replace("t.me/", "")
+        
+        # Private invite links (e.g., https://t.me/+abc or https://t.me/joinchat/abc)
+        if clean.startswith("+") or clean.startswith("joinchat/"):
+            invite_link = f"https://t.me/{clean}"
+            return invite_link, invite_link
+            
+        # Public channel links (e.g., https://t.me/channelname)
+        username = clean.split("/")[0].split("?")[0].strip()
+        if username:
+            return f"@{username}", f"https://t.me/{username}"
+
+    # 3. Usernames or raw strings
+    username = input_str.replace("@", "").strip()
+    return f"@{username}", f"https://t.me/{username}"
+
+
 @app.on_message(filters.command("add_channel") & filters.private & premium_filter)
 async def add_channel_handler(client: Client, message: Message):
     if "[channel_id_or_username]" in message.text or "[invite_link]" in message.text:
@@ -248,26 +278,22 @@ async def add_channel_handler(client: Client, message: Message):
         return
 
     chat_raw = args[1].strip()
-
-    # Standardize chat ID/username
-    if chat_raw.startswith("-") or chat_raw.isdigit():
-        try:
-            chat_id = int(chat_raw)
-        except ValueError:
-            await message.reply_text("❌ Invalid channel identifier.")
-            return
-    else:
-        chat_id = chat_raw
-        if not chat_id.startswith("@"):
-            chat_id = f"@{chat_id}"
+    chat_id, invite_link = parse_channel_input(chat_raw)
 
     try:
         # Check bot access and fetch title
         chat_info = await client.get_chat(chat_id)
         title = chat_info.title
+        # If it successfully fetched chat info, use the resolved integer ID for consistency
+        chat_id = chat_info.id
     except Exception as e:
         logger.error(f"Failed to access channel info for {chat_id}: {e}")
-        await message.reply_text("❌ Invalid channel identifier.")
+        await message.reply_text(
+            "❌ **Invalid channel identifier or Bot is not in the channel.**\n\n"
+            "Please make sure:\n"
+            "1. You provided a valid channel ID, username, or invite link.\n"
+            "2. You **added the bot to the channel as an Administrator** BEFORE running this command."
+        )
         return
 
     # Verify bot is an administrator in the channel
@@ -282,20 +308,20 @@ async def add_channel_handler(client: Client, message: Message):
         await message.reply_text("❌ Bot is not an administrator in this channel.")
         return
 
-    # Determine invite link (optional)
-    invite_link = None
+    # Determine invite link (optional override)
     if len(args) >= 3:
         invite_link = args[2].strip()
     else:
-        if chat_info.username:
-            invite_link = f"https://t.me/{chat_info.username}"
-        elif chat_info.invite_link:
-            invite_link = chat_info.invite_link
-        else:
-            try:
-                invite_link = await client.export_chat_invite_link(chat_id)
-            except Exception as e:
-                logger.warning(f"Could not export invite link for private channel {chat_id}: {e}")
+        if not invite_link:
+            if getattr(chat_info, "username", None):
+                invite_link = f"https://t.me/{chat_info.username}"
+            elif getattr(chat_info, "invite_link", None):
+                invite_link = chat_info.invite_link
+            else:
+                try:
+                    invite_link = await client.export_chat_invite_link(chat_id)
+                except Exception as e:
+                    logger.warning(f"Could not export invite link for private channel {chat_id}: {e}")
 
     # Fallback default if still not found
     if not invite_link:
@@ -306,7 +332,9 @@ async def add_channel_handler(client: Client, message: Message):
     
     await message.reply_text(
         f"✅ Channel Added\n"
-        f"Channel ID: `{chat_id}`"
+        f"Channel ID: `{chat_id}`\n"
+        f"Title: **{title}**\n"
+        f"Invite Link: {invite_link}"
     )
 
 
