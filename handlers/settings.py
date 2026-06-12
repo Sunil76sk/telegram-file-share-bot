@@ -10,7 +10,6 @@ from utils.helpers import banned_filter
 from utils.notification_center import (
     get_user_notification_preferences,
     set_user_notification_preference,
-    get_unread_count,
 )
 from utils.multi_lang import get_supported_languages, set_user_lang, get_user_lang
 
