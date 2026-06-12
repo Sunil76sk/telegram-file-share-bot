@@ -17,6 +17,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+import os
+import socket
+import datetime
+import contextvars
+
+# Create a unique instance identifier
+startup_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+INSTANCE_ID = f"{socket.gethostname()}-{os.getpid()}-{startup_time}"
+current_update_info = contextvars.ContextVar("current_update_info", default=None)
+
+# Log immediately on startup
+logger.info(f"[INSTANCE_START]\ninstance={INSTANCE_ID}")
+print(f"[INSTANCE_START]\ninstance={INSTANCE_ID}", flush=True)
+
 # Reduce Pyrogram log verbosity
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
 
@@ -56,14 +70,8 @@ original_start = app.start
 
 
 async def custom_start():
-    import os
-    import socket
-    import datetime
-    pid = os.getpid()
-    hostname = socket.gethostname()
-    timestamp = datetime.datetime.now().isoformat()
-    logger.info(f"STARTUP LOG - PID: {pid}, Hostname: {hostname}, Timestamp: {timestamp}")
-    logger.info("BOT INSTANCE STARTED")
+    logger.info(f"[INSTANCE_START]\ninstance={INSTANCE_ID}")
+    print(f"[INSTANCE_START]\ninstance={INSTANCE_ID}", flush=True)
     await original_start()
 
     # Cache bot username for global fallback
@@ -145,7 +153,6 @@ app.stop = custom_stop  # type: ignore[assignment]
 
 
 # --- TEMPORARY RUNTIME LOGGING FOR INVESTIGATION ---
-import inspect
 import time
 from pyrogram.types import Message, CallbackQuery
 
@@ -157,80 +164,196 @@ if hasattr(sys.stdout, "reconfigure"):
 # 1. Incoming Update Loggers (Group -200 to run first)
 @app.on_message(group=-200)
 async def log_incoming_message(client: Client, message: Message):
-    import os
-    pid = os.getpid()
-    logger.info(f"Incoming Update - PID: {pid} | Update ID: {message.id} | Message ID: {message.id}")
-    t_ms = int(time.time() * 1000)
-    logger.info(f"[LIVE LOG][INCOMING_MSG] timestamp={t_ms} update_id={message.id} message_id={message.id} user_id={message.from_user.id if message.from_user else None} chat_id={message.chat.id} text={repr(message.text)} outgoing={message.outgoing}")
+    current_update_info.set({
+        "handler": "unknown",
+        "update_id": message.id,
+        "message_id": message.id
+    })
+    log_msg = (
+        f"[INCOMING_UPDATE]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"update_id={message.id}\n"
+        f"message_id={message.id}\n"
+        f"user_id={message.from_user.id if message.from_user else None}\n"
+        f"chat_id={message.chat.id}\n"
+        f"text={message.text}\n"
+        f"callback_data=None"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
 
 @app.on_callback_query(group=-200)
 async def log_incoming_callback(client: Client, callback_query: CallbackQuery):
-    import os
-    pid = os.getpid()
-    logger.info(f"Incoming Update - PID: {pid} | Update ID: {callback_query.id} | Message ID: {callback_query.message.id if callback_query.message else None}")
-    t_ms = int(time.time() * 1000)
-    logger.info(f"[LIVE LOG][INCOMING_CB] timestamp={t_ms} update_id={callback_query.id} user_id={callback_query.from_user.id} chat_id={callback_query.message.chat.id if callback_query.message else None} data={repr(callback_query.data)}")
-
-# Helper to log caller information
-def get_caller_info():
-    frame = inspect.currentframe()
-    # Go up the stack to find the first caller outside of our wrappers
-    while frame:
-        co_filename = frame.f_code.co_filename
-        co_name = frame.f_code.co_name
-        if "bot.py" not in co_filename and "pyrogram" not in co_filename and "inspect" not in co_filename:
-            # Found the handler file/function
-            basename = co_filename.split("/")[-1].split("\\")[-1]
-            return f"{basename}:{co_name}:{frame.f_lineno}"
-        frame = frame.f_back
-    return "unknown:unknown:0"
+    msg_id = callback_query.message.id if callback_query.message else None
+    chat_id = callback_query.message.chat.id if callback_query.message else None
+    current_update_info.set({
+        "handler": "unknown",
+        "update_id": callback_query.id,
+        "message_id": msg_id
+    })
+    log_msg = (
+        f"[INCOMING_UPDATE]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"update_id={callback_query.id}\n"
+        f"message_id={msg_id}\n"
+        f"user_id={callback_query.from_user.id}\n"
+        f"chat_id={chat_id}\n"
+        f"text=None\n"
+        f"callback_data={callback_query.data}"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
 
 # 2. Outgoing Reply/Send Method Wrappers
 original_send_message = Client.send_message
 async def patched_send_message(self, chat_id, text, *args, **kwargs):
-    t_ms = int(time.time() * 1000)
-    caller = get_caller_info()
-    print(f"[LIVE LOG][OUTGOING][send_message] timestamp={t_ms} chat_id={chat_id} text={repr(text)} caller={caller}")
+    info = current_update_info.get()
+    h_name = info["handler"] if info else "unknown"
+    u_id = info["update_id"] if info else "unknown"
+    m_id = info["message_id"] if info else "unknown"
+    log_msg = (
+        f"[OUTGOING_REPLY]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler={h_name}\n"
+        f"update_id={u_id}\n"
+        f"message_id={m_id}\n"
+        f"reply_type=send_message"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     return await original_send_message(self, chat_id, text, *args, **kwargs)
 Client.send_message = patched_send_message
 
 original_reply_text = Message.reply_text
 async def patched_reply_text(self, text, *args, **kwargs):
-    t_ms = int(time.time() * 1000)
-    caller = get_caller_info()
-    print(f"[LIVE LOG][OUTGOING][reply_text] timestamp={t_ms} chat_id={self.chat.id} reply_to_msg_id={self.id} text={repr(text)} caller={caller}")
+    info = current_update_info.get()
+    h_name = info["handler"] if info else "unknown"
+    u_id = info["update_id"] if info else "unknown"
+    m_id = info["message_id"] if info else "unknown"
+    log_msg = (
+        f"[OUTGOING_REPLY]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler={h_name}\n"
+        f"update_id={u_id}\n"
+        f"message_id={m_id}\n"
+        f"reply_type=reply_text"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     return await original_reply_text(self, text, *args, **kwargs)
 Message.reply_text = patched_reply_text
 
-original_send_photo = Client.send_photo
-async def patched_send_photo(self, chat_id, photo, caption="", *args, **kwargs):
-    t_ms = int(time.time() * 1000)
-    caller = get_caller_info()
-    print(f"[LIVE LOG][OUTGOING][send_photo] timestamp={t_ms} chat_id={chat_id} caption={repr(caption)} caller={caller}")
-    return await original_send_photo(self, chat_id, photo, caption=caption, *args, **kwargs)
-Client.send_photo = patched_send_photo
-
-original_send_document = Client.send_document
-async def patched_send_document(self, chat_id, document, caption="", *args, **kwargs):
-    t_ms = int(time.time() * 1000)
-    caller = get_caller_info()
-    print(f"[LIVE LOG][OUTGOING][send_document] timestamp={t_ms} chat_id={chat_id} caption={repr(caption)} caller={caller}")
-    return await original_send_document(self, chat_id, document, caption=caption, *args, **kwargs)
-Client.send_document = patched_send_document
-
 original_edit_message_text = Client.edit_message_text
 async def patched_edit_message_text(self, chat_id, message_id, text, *args, **kwargs):
-    t_ms = int(time.time() * 1000)
-    caller = get_caller_info()
-    print(f"[LIVE LOG][OUTGOING][edit_message_text] timestamp={t_ms} chat_id={chat_id} message_id={message_id} text={repr(text)} caller={caller}")
+    info = current_update_info.get()
+    h_name = info["handler"] if info else "unknown"
+    u_id = info["update_id"] if info else "unknown"
+    m_id = info["message_id"] if info else "unknown"
+    log_msg = (
+        f"[OUTGOING_REPLY]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler={h_name}\n"
+        f"update_id={u_id}\n"
+        f"message_id={m_id}\n"
+        f"reply_type=edit_message_text"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     return await original_edit_message_text(self, chat_id, message_id, text, *args, **kwargs)
 Client.edit_message_text = patched_edit_message_text
 
 original_msg_edit_text = Message.edit_text
 async def patched_msg_edit_text(self, text, *args, **kwargs):
-    t_ms = int(time.time() * 1000)
-    caller = get_caller_info()
-    print(f"[LIVE LOG][OUTGOING][msg_edit_text] timestamp={t_ms} chat_id={self.chat.id} message_id={self.id} text={repr(text)} caller={caller}")
+    info = current_update_info.get()
+    h_name = info["handler"] if info else "unknown"
+    u_id = info["update_id"] if info else "unknown"
+    m_id = info["message_id"] if info else "unknown"
+    log_msg = (
+        f"[OUTGOING_REPLY]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler={h_name}\n"
+        f"update_id={u_id}\n"
+        f"message_id={m_id}\n"
+        f"reply_type=edit_message_text"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     return await original_msg_edit_text(self, text, *args, **kwargs)
 Message.edit_text = patched_msg_edit_text
+
+original_reply_photo = Message.reply_photo
+async def patched_reply_photo(self, photo, *args, **kwargs):
+    info = current_update_info.get()
+    h_name = info["handler"] if info else "unknown"
+    u_id = info["update_id"] if info else "unknown"
+    m_id = info["message_id"] if info else "unknown"
+    log_msg = (
+        f"[OUTGOING_REPLY]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler={h_name}\n"
+        f"update_id={u_id}\n"
+        f"message_id={m_id}\n"
+        f"reply_type=reply_photo"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
+    return await original_reply_photo(self, photo, *args, **kwargs)
+Message.reply_photo = patched_reply_photo
+
+original_send_photo = Client.send_photo
+async def patched_send_photo(self, chat_id, photo, *args, **kwargs):
+    info = current_update_info.get()
+    h_name = info["handler"] if info else "unknown"
+    u_id = info["update_id"] if info else "unknown"
+    m_id = info["message_id"] if info else "unknown"
+    log_msg = (
+        f"[OUTGOING_REPLY]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler={h_name}\n"
+        f"update_id={u_id}\n"
+        f"message_id={m_id}\n"
+        f"reply_type=reply_photo"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
+    return await original_send_photo(self, chat_id, photo, *args, **kwargs)
+Client.send_photo = patched_send_photo
+
+original_reply_document = Message.reply_document
+async def patched_reply_document(self, document, *args, **kwargs):
+    info = current_update_info.get()
+    h_name = info["handler"] if info else "unknown"
+    u_id = info["update_id"] if info else "unknown"
+    m_id = info["message_id"] if info else "unknown"
+    log_msg = (
+        f"[OUTGOING_REPLY]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler={h_name}\n"
+        f"update_id={u_id}\n"
+        f"message_id={m_id}\n"
+        f"reply_type=reply_document"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
+    return await original_reply_document(self, document, *args, **kwargs)
+Message.reply_document = patched_reply_document
+
+original_send_document = Client.send_document
+async def patched_send_document(self, chat_id, document, *args, **kwargs):
+    info = current_update_info.get()
+    h_name = info["handler"] if info else "unknown"
+    u_id = info["update_id"] if info else "unknown"
+    m_id = info["message_id"] if info else "unknown"
+    log_msg = (
+        f"[OUTGOING_REPLY]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler={h_name}\n"
+        f"update_id={u_id}\n"
+        f"message_id={m_id}\n"
+        f"reply_type=reply_document"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
+    return await original_send_document(self, chat_id, document, *args, **kwargs)
+Client.send_document = patched_send_document
 # ----------------------------------------------------

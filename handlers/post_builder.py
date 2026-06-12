@@ -11,7 +11,7 @@ from pyrogram.types import (
     InputMediaPhoto,
     InputMediaVideo,
 )
-from bot import app
+from bot import app, INSTANCE_ID, current_update_info
 import database
 from utils.helpers import banned_filter, extract_file_details
 from utils.caption_builder import build_telegram_caption_html
@@ -63,6 +63,20 @@ def build_inline_keyboard(parsed_buttons: list[list[dict]]) -> InlineKeyboardMar
 
 @app.on_message(filters.command("newpost") & filters.private & ~banned_filter)
 async def newpost_command_handler(client: Client, message: Message):
+    current_update_info.set({
+        "handler": "newpost_command_handler",
+        "update_id": message.id,
+        "message_id": message.id
+    })
+    log_msg = (
+        f"[HANDLER_ENTER]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler=newpost_command_handler\n"
+        f"update_id={message.id}\n"
+        f"message_id={message.id}"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     user_id = message.from_user.id
     channels = await database.get_creator_channels(user_id)
     if not channels:
@@ -114,6 +128,21 @@ async def newpost_command_handler(client: Client, message: Message):
 
 @app.on_callback_query(filters.regex(r"^build_select_(.+)"))
 async def build_select_callback(client: Client, callback_query: CallbackQuery):
+    msg_id = callback_query.message.id if callback_query.message else None
+    current_update_info.set({
+        "handler": "build_select_callback",
+        "update_id": callback_query.id,
+        "message_id": msg_id
+    })
+    log_msg = (
+        f"[HANDLER_ENTER]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler=build_select_callback\n"
+        f"update_id={callback_query.id}\n"
+        f"message_id={msg_id}"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     user_id = callback_query.from_user.id
     channel_id = callback_query.matches[0].group(1)
     try:
@@ -153,6 +182,20 @@ async def build_select_callback(client: Client, callback_query: CallbackQuery):
 
 @app.on_message(filters.private & ~banned_filter, group=5)
 async def builder_input_handler(client: Client, message: Message):
+    current_update_info.set({
+        "handler": "builder_input_handler",
+        "update_id": message.id,
+        "message_id": message.id
+    })
+    log_msg = (
+        f"[HANDLER_ENTER]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler=builder_input_handler\n"
+        f"update_id={message.id}\n"
+        f"message_id={message.id}"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     user_id = message.from_user.id
     text = message.text.strip() if message.text else ""
 
@@ -432,6 +475,21 @@ async def show_builder_menu(client: Client, message: Message, user_id: int, draf
 
 @app.on_callback_query(filters.regex(r"^build_btn_(.+)"))
 async def builder_menu_callback_handler(client: Client, callback_query: CallbackQuery):
+    msg_id = callback_query.message.id if callback_query.message else None
+    current_update_info.set({
+        "handler": "builder_menu_callback_handler",
+        "update_id": callback_query.id,
+        "message_id": msg_id
+    })
+    log_msg = (
+        f"[HANDLER_ENTER]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler=builder_menu_callback_handler\n"
+        f"update_id={callback_query.id}\n"
+        f"message_id={msg_id}"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     user_id = callback_query.from_user.id
     action = callback_query.matches[0].group(1)
 

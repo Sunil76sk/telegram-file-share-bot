@@ -4,7 +4,7 @@ import datetime
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from bot import app
+from bot import app, INSTANCE_ID, current_update_info
 import database
 import config
 from utils.helpers import (
@@ -363,6 +363,20 @@ not_command_filter = filters.create(_not_command)
 
 @app.on_message(filters.private & filters.text & not_command_filter, group=1)
 async def text_message_handler(client: Client, message: Message):
+    current_update_info.set({
+        "handler": "text_message_handler",
+        "update_id": message.id,
+        "message_id": message.id
+    })
+    log_msg = (
+        f"[HANDLER_ENTER]\n"
+        f"instance={INSTANCE_ID}\n"
+        f"handler=text_message_handler\n"
+        f"update_id={message.id}\n"
+        f"message_id={message.id}"
+    )
+    logger.info(log_msg)
+    print(log_msg, flush=True)
     user_id = message.from_user.id
     logger.info(f"DEBUG BYPASS: user={user_id}, text='{message.text[:20]}...'")
     text = message.text.strip()
