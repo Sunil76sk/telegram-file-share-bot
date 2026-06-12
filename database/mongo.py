@@ -35,6 +35,36 @@ post_drafts_col = db["post_drafts"]
 channel_stats_col = db["channel_stats"]
 button_clicks_col = db["button_clicks"]
 
+# New collections for the Movie Channel Creator Studio migration
+diagnostics_logs_col = db["diagnostics_logs"]
+error_logs_col = db["error_logs"]
+state_logs_col = db["state_logs"]
+callback_logs_col = db["callback_logs"]
+message_logs_col = db["message_logs"]
+payment_logs_col = db["payment_logs"]
+admin_logs_col = db["admin_logs"]
+processed_updates_col = db["processed_updates"]
+published_posts_col = db["published_posts"]
+worker_status_col = db["worker_status"]
+rate_limits_col = db["rate_limits"]
+user_settings_col = db["user_settings"]
+roles_col = db["roles"]
+admins_config_col = db["admins_config"]  # admins collection config
+backup_jobs_col = db["backup_jobs"]
+media_library_col = db["media_library"]
+runtime_lock_col = db["runtime_lock"]
+transactions_col = db["transactions"]
+premium_plans_col = db["premium_plans"]
+referrals_col = db["referrals"]
+referral_rewards_col = db["referral_rewards"]
+referral_logs_col = db["referral_logs"]
+store_products_col = db["store_products"]
+store_orders_col = db["store_orders"]
+coupons_col = db["coupons"]
+premium_users_col = db["premium_users"]
+file_links_col = db["file_links"]
+password_sessions_col = db["password_sessions"]
+
 
 async def init_db():
     try:
@@ -73,6 +103,15 @@ async def init_db():
         await analytics_events_col.create_index([("event", 1), ("timestamp", 1)])
         await analytics_events_col.create_index([("country", 1), ("timestamp", 1)])
         await analytics_events_col.create_index([("source", 1), ("timestamp", 1)])
+
+        # New migration indexes
+        await processed_updates_col.create_index("update_id", unique=True)
+        await processed_updates_col.create_index("processed_at", expireAfterSeconds=86400) # TTL index 24h
+        await runtime_lock_col.create_index("lock_name", unique=True)
+        await rate_limits_col.create_index([("user_id", 1), ("action", 1)])
+        await published_posts_col.create_index([("post_id", 1), ("channel_id", 1)])
+        await worker_status_col.create_index("worker_name", unique=True)
+        await file_links_col.create_index("code", unique=True)
 
         # Migrate traffic attribution for older users
         await users_col.update_many(

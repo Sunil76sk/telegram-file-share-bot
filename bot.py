@@ -152,18 +152,92 @@ async def custom_stop():
 app.stop = custom_stop  # type: ignore[assignment]
 
 
-# --- TEMPORARY RUNTIME LOGGING FOR INVESTIGATION ---
+# --- TEMPORARY RUNTIME LOGGING & GUARDS FOR INVESTIGATION ---
 import time
+import sys
 from pyrogram.types import Message, CallbackQuery
+from database.mongo import processed_updates_col, runtime_lock_col
 
 # Reconfigure stdout for UTF-8 to ensure emojis don't crash the prints
-import sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+
+# Single Instance Protection
+async def acquire_runtime_lock():
+    lock_name = "bot_runtime_lock"
+    now = datetime.datetime.now(datetime.timezone.utc)
+    hostname = socket.gethostname()
+    pid = os.getpid()
+    
+    lock = await runtime_lock_col.find_one({"lock_name": lock_name})
+    if lock:
+        last_heartbeat = lock.get("heartbeat")
+        if last_heartbeat:
+            if last_heartbeat.tzinfo is None:
+                last_heartbeat = last_heartbeat.replace(tzinfo=datetime.timezone.utc)
+            if (now - last_heartbeat).total_seconds() < 60:
+                logger.error(f"Active bot instance detected! Hostname: {lock.get('hostname')}, PID: {lock.get('pid')}, Last Heartbeat: {last_heartbeat}")
+                print(f"FATAL: Active instance already running on {lock.get('hostname')} (PID {lock.get('pid')}). Exiting.", flush=True)
+                sys.exit(1)
+        
+        await runtime_lock_col.update_one(
+            {"lock_name": lock_name},
+            {"$set": {
+                "instance_id": INSTANCE_ID,
+                "hostname": hostname,
+                "pid": pid,
+                "started_at": now,
+                "heartbeat": now
+            }}
+        )
+    else:
+        await runtime_lock_col.insert_one({
+            "lock_name": lock_name,
+            "instance_id": INSTANCE_ID,
+            "hostname": hostname,
+            "pid": pid,
+            "started_at": now,
+            "heartbeat": now
+        })
+    logger.info("Successfully acquired runtime lock.")
+
+async def instance_heartbeat_worker():
+    lock_name = "bot_runtime_lock"
+    while True:
+        try:
+            await asyncio.sleep(30)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            res = await runtime_lock_col.update_one(
+                {"lock_name": lock_name, "instance_id": INSTANCE_ID},
+                {"$set": {"heartbeat": now}}
+            )
+            if res.modified_count == 0:
+                logger.warning("Lost runtime lock ownership. Exiting process to prevent duplication.")
+                print("FATAL: Lost runtime lock ownership. Exiting process.", flush=True)
+                os._exit(1)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error in instance heartbeat worker: {e}")
 
 # 1. Incoming Update Loggers (Group -200 to run first)
 @app.on_message(group=-200)
 async def log_incoming_message(client: Client, message: Message):
+    # Update Processing Guard (Module 19)
+    update_key = f"msg_{message.chat.id}_{message.id}"
+    user_id = message.from_user.id if message.from_user else None
+    try:
+        await processed_updates_col.insert_one({
+            "update_id": update_key,
+            "user_id": user_id,
+            "processed_at": datetime.datetime.now(datetime.timezone.utc)
+        })
+    except Exception:
+        # Already processed or write conflict, drop update
+        logger.warning(f"Duplicate update key {update_key} detected. Dropping message.")
+        message.stop_propagation()
+        return
+
     current_update_info.set({
         "handler": "unknown",
         "update_id": message.id,
@@ -184,6 +258,20 @@ async def log_incoming_message(client: Client, message: Message):
 
 @app.on_callback_query(group=-200)
 async def log_incoming_callback(client: Client, callback_query: CallbackQuery):
+    # Update Processing Guard (Module 19)
+    update_key = f"cb_{callback_query.id}"
+    try:
+        await processed_updates_col.insert_one({
+            "update_id": update_key,
+            "user_id": callback_query.from_user.id,
+            "processed_at": datetime.datetime.now(datetime.timezone.utc)
+        })
+    except Exception:
+        # Already processed or write conflict, drop callback
+        logger.warning(f"Duplicate update key {update_key} detected. Dropping callback.")
+        callback_query.stop_propagation()
+        return
+
     msg_id = callback_query.message.id if callback_query.message else None
     chat_id = callback_query.message.chat.id if callback_query.message else None
     current_update_info.set({
