@@ -19,6 +19,10 @@ from utils.caption_builder import build_telegram_caption_html
 
 logger = logging.getLogger(__name__)
 
+import socket
+import os
+INSTANCE = f"{socket.gethostname()}_{os.getpid()}"
+
 # Helper to format and parse buttons from text
 # Input format: [Button Text | url] or [Button Text | deep_link], etc.
 # Support multiple rows: newlines represent new rows
@@ -99,9 +103,11 @@ async def newpost_command_handler(client: Client, message: Message):
         await message.reply_text("❌ All your added channels are currently disabled. Please enable them in `/my_channels` settings.")
         return
 
+    logger.info(f"[DIAGNOSTIC] handler_name=newpost_command_handler | update_id={message.id} | message_id={message.id} | INSTANCE={INSTANCE}")
     await message.reply_text(
-        "📝 **Creator Studio — Create New Post**\n\n"
-        "Please select the target channel for this post:",
+        f"📝 **Creator Studio — Create New Post**\n\n"
+        f"Please select the target channel for this post:\n\n"
+        f"({INSTANCE})",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -273,7 +279,8 @@ async def builder_input_handler(client: Client, message: Message):
         await database.save_post_draft(user_id, draft)
         logger.info(f"[builder_input_handler] SENDING caption updated to user_id={user_id}")
         logger.info("✅ Caption updated!")
-        await message.reply_text("✅ Caption updated!")
+        logger.info(f"[DIAGNOSTIC] handler_name=builder_input_handler | update_id={message.id} | message_id={message.id} | INSTANCE={INSTANCE}")
+        await message.reply_text(f"✅ Caption updated!\n\n({INSTANCE})")
         await show_builder_menu(client, message, user_id, draft)
         message.stop_propagation()
         return
@@ -441,10 +448,12 @@ async def builder_menu_callback_handler(client: Client, callback_query: Callback
         await callback_query.answer()
         draft["state"] = "awaiting_caption"
         await database.save_post_draft(user_id, draft)
+        logger.info(f"[DIAGNOSTIC] handler_name=builder_menu_callback_handler | update_id={callback_query.id} | message_id={callback_query.message.id if callback_query.message else None} | INSTANCE={INSTANCE}")
         await callback_query.message.reply_text(
-            "📝 **Send the new caption text now.**\n"
-            "You can use formatting like bold, italic, spoilers, and links.\n"
-            "Send `/cancel` to abort."
+            f"📝 **Send the new caption text now.**\n"
+            f"You can use formatting like bold, italic, spoilers, and links.\n"
+            f"Send `/cancel` to abort.\n\n"
+            f"({INSTANCE})"
         )
 
     elif action == "buttons":
