@@ -35,6 +35,10 @@ _strings: dict[str, dict[str, str]] = {}
 _loaded = False
 
 
+def get_supported_languages() -> dict[str, str]:
+    return dict(SUPPORTED_LANGUAGES)
+
+
 async def load_translations():
     global _strings, _loaded
     _strings = {}
