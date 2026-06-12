@@ -65,60 +65,46 @@ premium_users_col = db["premium_users"]
 file_links_col = db["file_links"]
 password_sessions_col = db["password_sessions"]
 
+# Creator Studio new collections
+channel_post_history_col = db["channel_post_history"]
+crash_recovery_col = db["crash_recovery"]
+error_recovery_col = db["error_recovery"]
+draft_recovery_col = db["draft_recovery"]
+queue_tasks_col = db["queue_tasks"]
+queue_execution_log_col = db["queue_execution_log"]
+botfather_menu_col = db["botfather_menu"]
+worker_heartbeats_col = db["worker_heartbeats"]
+movie_metadata_col = db["movie_metadata"]
+movie_download_buttons_col = db["movie_download_buttons"]
+movie_templates_col = db["movie_templates"]
+backups_col = db["backups"]
+audit_admin_logs_col = db["audit_admin_logs"]
+audit_error_logs_col = db["audit_error_logs"]
+audit_event_logs_col = db["audit_event_logs"]
+notification_queue_col = db["notification_queue"]
+notification_preferences_col = db["notification_preferences"]
+user_language_col = db["user_language"]
+translations_col = db["translations"]
+
 
 async def init_db():
     try:
-        # Create unique index on token
-        await files_col.create_index("token", unique=True)
-        # Create indexes on user_id
-        await users_col.create_index("user_id")
-        await batches_col.create_index("user_id")
-        await edit_sessions_col.create_index("user_id")
+        from database.schema import ensure_collections, ensure_indexes, run_migrations
+        await ensure_collections()
+        await ensure_indexes()
+        await run_migrations()
 
-        await payments_col.create_index("user_id")
-        await payments_col.create_index("created_at")
-        await shorteners_col.create_index("status")
+        await processed_updates_col.create_index("processed_at", expireAfterSeconds=86400)
 
-        await upi_pending_col.create_index("user_id")
-        await upi_pending_col.create_index("status")
-
-        # Ad Sponsored Promotions indexes
-        await ads_col.create_index("type")
-        await ads_col.create_index("status")
-        await ads_col.create_index([("type", 1), ("status", 1)])
-        await ad_impressions_col.create_index("ad_id")
-        await ad_impressions_col.create_index("user_id")
-        await ad_impressions_col.create_index("timestamp")
-        await ad_clicks_col.create_index("ad_id")
-        await ad_clicks_col.create_index("user_id")
-        await ad_clicks_col.create_index("timestamp")
-
-        # Analytics Monetization indexes
-        await analytics_events_col.create_index("date")
-        await analytics_events_col.create_index("event")
-        await analytics_events_col.create_index("user_id")
-        await analytics_events_col.create_index("timestamp")
-        await analytics_events_col.create_index("country")
-        await analytics_events_col.create_index("source")
-        await analytics_events_col.create_index([("event", 1), ("timestamp", 1)])
-        await analytics_events_col.create_index([("country", 1), ("timestamp", 1)])
-        await analytics_events_col.create_index([("source", 1), ("timestamp", 1)])
-
-        # New migration indexes
-        await processed_updates_col.create_index("update_id", unique=True)
-        await processed_updates_col.create_index("processed_at", expireAfterSeconds=86400) # TTL index 24h
-        await runtime_lock_col.create_index("lock_name", unique=True)
+        rate_limits_col = db["rate_limits"]
         await rate_limits_col.create_index([("user_id", 1), ("action", 1)])
         await published_posts_col.create_index([("post_id", 1), ("channel_id", 1)])
-        await worker_status_col.create_index("worker_name", unique=True)
-        await file_links_col.create_index("code", unique=True)
 
-        # Migrate traffic attribution for older users
         await users_col.update_many(
             {"source": {"$exists": False}},
             {"$set": {"source": "direct", "campaign": None}}
         )
 
-        logger.info("Database indexes and migrations initialized successfully.")
+        logger.info("Database schema, indexes, and migrations initialized successfully.")
     except Exception as e:
-        logger.error(f"Failed to initialize database indexes/migrations: {e}")
+        logger.error(f"Failed to initialize database: {e}")

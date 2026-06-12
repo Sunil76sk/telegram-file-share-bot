@@ -59,8 +59,15 @@ import handlers.analytics  # noqa: E402
 import handlers.post_builder  # noqa: E402
 import handlers.scheduler  # noqa: E402
 import handlers.templates  # noqa: E402
-import handlers.channel_analytics  # noqa: E402
 import handlers.reactions_handler  # noqa: E402
+import handlers.channel_analytics  # noqa: E402
+import handlers.settings  # noqa: E402
+import handlers.store  # noqa: E402
+
+from utils.worker_framework import register_worker, start_workers, recover_workers, stop_workers  # noqa: E402
+from utils.queue_system import register_handler, recover_interrupted_tasks, process_queue  # noqa: E402
+from utils.draft_recovery import recover_interrupted_drafts  # noqa: E402
+from utils.anti_crash import recover_from_crash  # noqa: E402
 
 
 from utils.web_server import start_web_server, stop_web_server  # noqa: E402
@@ -116,6 +123,51 @@ async def custom_start():
     from handlers.scheduler import start_scheduler_loop
     asyncio.create_task(start_scheduler_loop(app))
 
+    # Recover from any previous crashes or interruptions
+    await recover_from_crash()
+    await recover_interrupted_drafts()
+    await recover_interrupted_tasks()
+    await recover_workers()
+
+    # Register queue handlers
+    async def _media_upload_handler(payload: dict):
+        logger.info(f"Media upload task: {payload.get('file_id')}")
+    register_handler("media_upload", _media_upload_handler)
+
+    async def _broadcast_handler(payload: dict):
+        logger.info(f"Broadcast task for {payload.get('user_id')}")
+    register_handler("broadcast", _broadcast_handler)
+
+    async def _post_schedule_handler(payload: dict):
+        logger.info(f"Scheduled post task: {payload.get('post_id')}")
+    register_handler("post_schedule", _post_schedule_handler)
+
+    async def _metadata_extract_handler(payload: dict):
+        logger.info(f"Metadata extraction for: {payload.get('file_id')}")
+    register_handler("metadata_extract", _metadata_extract_handler)
+
+    # Register and start background workers
+    async def _queue_worker_fn():
+        await process_queue(max_concurrent=5)
+    register_worker("queue_processor", _queue_worker_fn, interval=10, description="Process pending queue tasks")
+
+    async def _queue_cleanup_fn():
+        from utils.queue_system import cleanup_completed_tasks
+        await cleanup_completed_tasks(hours=24)
+    register_worker("queue_cleanup", _queue_cleanup_fn, interval=3600, description="Clean up completed queue tasks")
+
+    async def _draft_cleanup_fn():
+        from utils.draft_recovery import cleanup_draft_recovery
+        await cleanup_draft_recovery(hours=48)
+    register_worker("draft_cleanup", _draft_cleanup_fn, interval=3600, description="Clean up old draft recovery records")
+
+    async def _post_history_cleanup_fn():
+        from database.channel_post_history import cleanup_old_history
+        await cleanup_old_history(days=90)
+    register_worker("post_history_cleanup", _post_history_cleanup_fn, interval=86400, description="Clean up old post history")
+
+    await start_workers()
+
     # Start the local redirect web server
     start_web_server()
 
@@ -145,6 +197,7 @@ original_stop = app.stop
 
 
 async def custom_stop():
+    await stop_workers()
     stop_web_server()
     await original_stop()
 

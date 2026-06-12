@@ -175,6 +175,18 @@ from database.creator_db import (
     delete_creator_channel,
     toggle_reaction,
 )
+from database.channel_post_history import (
+    record_post,
+    get_channel_post_history,
+    get_user_post_history,
+    get_post_history_entry,
+    delete_post_history_entry,
+    increment_post_views,
+    increment_post_clicks,
+    get_channel_post_count,
+    get_user_post_count,
+    cleanup_old_history,
+)
 
 __all__ = [
     "client",
@@ -336,4 +348,14 @@ __all__ = [
     "log_button_click",
     "delete_creator_channel",
     "toggle_reaction",
+    "record_post",
+    "get_channel_post_history",
+    "get_user_post_history",
+    "get_post_history_entry",
+    "delete_post_history_entry",
+    "increment_post_views",
+    "increment_post_clicks",
+    "get_channel_post_count",
+    "get_user_post_count",
+    "cleanup_old_history",
 ]
