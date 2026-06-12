@@ -10,6 +10,17 @@ from bot import app  # noqa: E402
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
+    import os
+    import socket
+    import datetime
+    pid = os.getpid()
+    hostname = socket.gethostname()
+    timestamp = datetime.datetime.now().isoformat()
+    logger.info(f"PID: {pid}")
+    logger.info(f"Hostname: {hostname}")
+    logger.info(f"Timestamp: {timestamp}")
+    logger.info("BOT INSTANCE STARTED")
+    
     logger.info("Starting Telegram File Share Bot...")
     
     # Diagnostic prints

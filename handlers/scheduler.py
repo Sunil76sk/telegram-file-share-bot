@@ -8,7 +8,6 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from bot import app
 import database
 from utils.helpers import banned_filter
-from handlers.post_builder import build_inline_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +42,17 @@ async def scheduler_input_handler(client: Client, message: Message):
                 message.stop_propagation()
                 return
 
+            is_premium = await database.is_user_premium(user_id)
+            max_future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+            if not is_premium and scheduled_time > max_future:
+                await message.reply_text(
+                    "❌ **Advanced Scheduling is a Premium Feature!**\n\n"
+                    "Free creators can only schedule posts up to **24 hours in advance**.\n"
+                    "Please enter a time within 24 hours, or upgrade to Premium with `/premium`."
+                )
+                message.stop_propagation()
+                return
+
             # Save scheduled post
             await database.create_scheduled_post(
                 user_id=user_id,
@@ -54,7 +64,8 @@ async def scheduler_input_handler(client: Client, message: Message):
                 scheduled_time=scheduled_time,
                 reactions=draft["reactions"],
                 comments=draft["comments"],
-                pin=draft["pin"]
+                pin=draft["pin"],
+                caption_above=draft.get("caption_above", False)
             )
             # Update stats
             await database.increment_channel_stat(draft["channel_id"], "scheduled_posts", 1)
@@ -107,7 +118,8 @@ async def scheduler_input_handler(client: Client, message: Message):
                 delete_gap=gap,
                 reactions=draft["reactions"],
                 comments=draft["comments"],
-                pin=draft["pin"]
+                pin=draft["pin"],
+                caption_above=draft.get("caption_above", False)
             )
             await database.delete_post_draft(user_id)
             await message.reply_text("✅ **Auto Reposting Job created and started successfully!**")
@@ -211,6 +223,7 @@ async def delete_repost_callback_handler(client: Client, callback_query: Callbac
 
 async def start_scheduler_loop(client: Client):
     """Loop to process scheduled posts and auto-repost loops."""
+    from handlers.post_builder import build_post_keyboard, get_comments_url
     while True:
         try:
             await asyncio.sleep(15)
@@ -220,13 +233,27 @@ async def start_scheduler_loop(client: Client):
                 post_id = str(post["_id"])
                 channel_id = post["channel_id"]
                 caption = post.get("caption", "")
-                reply_markup = build_inline_keyboard(post.get("buttons", []))
+                
+                comments_url = None
+                if post.get("comments"):
+                    comments_url = await get_comments_url(client, channel_id)
+
+                reply_markup = build_post_keyboard(
+                    buttons_spec=post.get("buttons", []),
+                    reactions=post.get("reactions", []),
+                    reaction_counts=None,
+                    comments_url=comments_url
+                )
 
                 try:
                     if post["media_type"] == "text":
                         msg = await client.send_message(chat_id=channel_id, text=caption, reply_markup=reply_markup)
                     else:
-                        msg = await client.send_cached_media(chat_id=channel_id, file_id=post["file_id"], caption=caption, reply_markup=reply_markup)
+                        if post.get("caption_above"):
+                            msg = await client.send_message(chat_id=channel_id, text=caption, reply_markup=reply_markup)
+                            media_msg = await client.send_cached_media(chat_id=channel_id, file_id=post["file_id"])
+                        else:
+                            msg = await client.send_cached_media(chat_id=channel_id, file_id=post["file_id"], caption=caption, reply_markup=reply_markup)
                     
                     if post.get("pin") and msg:
                         try:
@@ -245,7 +272,17 @@ async def start_scheduler_loop(client: Client):
                 job_id = str(job["_id"])
                 channel_id = job["channel_id"]
                 caption = job.get("caption", "")
-                reply_markup = build_inline_keyboard(job.get("buttons", []))
+                
+                comments_url = None
+                if job.get("comments"):
+                    comments_url = await get_comments_url(client, channel_id)
+
+                reply_markup = build_post_keyboard(
+                    buttons_spec=job.get("buttons", []),
+                    reactions=job.get("reactions", []),
+                    reaction_counts=None,
+                    comments_url=comments_url
+                )
                 
                 # Delete old message if exists
                 if job.get("last_post_id"):
@@ -264,7 +301,11 @@ async def start_scheduler_loop(client: Client):
                     if job["media_type"] == "text":
                         msg = await client.send_message(chat_id=channel_id, text=caption, reply_markup=reply_markup)
                     else:
-                        msg = await client.send_cached_media(chat_id=channel_id, file_id=job["file_id"], caption=caption, reply_markup=reply_markup)
+                        if job.get("caption_above"):
+                            msg = await client.send_message(chat_id=channel_id, text=caption, reply_markup=reply_markup)
+                            media_msg = await client.send_cached_media(chat_id=channel_id, file_id=job["file_id"])
+                        else:
+                            msg = await client.send_cached_media(chat_id=channel_id, file_id=job["file_id"], caption=caption, reply_markup=reply_markup)
                     
                     if job.get("pin") and msg:
                         try:
@@ -280,8 +321,9 @@ async def start_scheduler_loop(client: Client):
                 except Exception as post_err:
                     logger.error(f"Repost job failed for {job_id}: {post_err}")
                     # Push next post time slightly to retry later
+                    from database.mongo import repost_jobs_col
                     next_retry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5)
-                    await database.repost_jobs_col.update_one({"_id": job["_id"]}, {"$set": {"next_post_at": next_retry}})
+                    await repost_jobs_col.update_one({"_id": job["_id"]}, {"$set": {"next_post_at": next_retry}})
 
         except Exception as loop_err:
             logger.error(f"Error in scheduler loop step: {loop_err}")

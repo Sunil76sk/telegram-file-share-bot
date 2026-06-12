@@ -20,6 +20,10 @@ from database.mongo import (
     analytics_events_col,
     upi_pending_col,
     sub_bots_col,
+    post_drafts_col,
+    scheduled_posts_col,
+    templates_col,
+    repost_jobs_col,
     init_db,
 )
 from database.links import (
@@ -141,6 +145,7 @@ from database.state import (
     upsert_ad_draft,
     get_ad_draft,
     clear_ad_draft,
+    delete_expired_drafts_and_states,
 )
 from database.creator_db import (
     add_creator_channel,
@@ -167,6 +172,8 @@ from database.creator_db import (
     increment_channel_stat,
     get_channel_stats,
     log_button_click,
+    delete_creator_channel,
+    toggle_reaction,
 )
 
 __all__ = [
@@ -188,6 +195,10 @@ __all__ = [
     "ad_impressions_col",
     "ad_clicks_col",
     "ad_drafts_col",
+    "post_drafts_col",
+    "scheduled_posts_col",
+    "templates_col",
+    "repost_jobs_col",
     "init_db",
     "create_ad",
     "get_ad",
@@ -277,6 +288,7 @@ __all__ = [
     "upsert_ad_draft",
     "get_ad_draft",
     "clear_ad_draft",
+    "delete_expired_drafts_and_states",
     "analytics_events_col",
     "upi_pending_col",
     "track_event",
@@ -322,4 +334,6 @@ __all__ = [
     "increment_channel_stat",
     "get_channel_stats",
     "log_button_click",
+    "delete_creator_channel",
+    "toggle_reaction",
 ]

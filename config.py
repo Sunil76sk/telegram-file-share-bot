@@ -1,5 +1,7 @@
 import os
 from dotenv import load_dotenv
+import pyrogram.utils
+pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
 
 # Load environmental variables from .env file
 load_dotenv()

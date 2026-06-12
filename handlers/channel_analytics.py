@@ -15,6 +15,14 @@ logger = logging.getLogger(__name__)
 @app.on_message(filters.command("channel_stats") & filters.private & ~banned_filter)
 async def channel_stats_command_handler(client: Client, message: Message):
     user_id = message.from_user.id
+    is_premium = await database.is_user_premium(user_id)
+    if not is_premium:
+        await message.reply_text(
+            "❌ **Channel Analytics are a Premium Feature!**\n\n"
+            "Please upgrade to Premium using `/premium` to view channel performance stats."
+        )
+        return
+
     channels = await database.get_creator_channels(user_id)
     if not channels:
         await message.reply_text("❌ You don't have any channels added. Use `/add_channel` first.")

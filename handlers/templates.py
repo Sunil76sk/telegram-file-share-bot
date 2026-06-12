@@ -6,7 +6,6 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from bot import app
 import database
 from utils.helpers import banned_filter
-from handlers.post_builder import parse_button_string, show_builder_menu
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +19,14 @@ template_creation_drafts = {}
 @app.on_message(filters.command("templates") & filters.private & ~banned_filter)
 async def templates_command_handler(client: Client, message: Message):
     user_id = message.from_user.id
+    is_premium = await database.is_user_premium(user_id)
+    if not is_premium:
+        await message.reply_text(
+            "❌ **Post Templates are a Premium Feature!**\n\n"
+            "Please upgrade to Premium using `/premium` to save and load post templates."
+        )
+        return
+
     templates = await database.get_user_templates(user_id)
     
     text = "📋 **Post Templates Studio**\n\n"
@@ -65,6 +72,7 @@ async def load_template_callback_handler(client: Client, callback_query: Callbac
     
     await callback_query.answer("✅ Template loaded into your draft!", show_alert=True)
     await callback_query.message.delete()
+    from handlers.post_builder import show_builder_menu
     await show_builder_menu(client, callback_query.message, user_id, draft)
 
 
@@ -160,6 +168,7 @@ async def template_creation_input_handler(client: Client, message: Message):
             return
             
         # Parse buttons and extract clean caption
+        from handlers.post_builder import parse_button_string
         buttons = parse_button_string(text)
         
         # Clean caption by removing button tags

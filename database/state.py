@@ -259,6 +259,8 @@ async def finish_delivery(user_id: int, code: str):
 
 
 async def upsert_ad_draft(user_id: int, data: dict) -> None:
+    if "created_at" not in data:
+        data["created_at"] = datetime.datetime.now(datetime.timezone.utc)
     await ad_drafts_col.update_one(
         {"_id": user_id},
         {"$set": data},
@@ -272,6 +274,57 @@ async def get_ad_draft(user_id: int) -> dict | None:
 
 async def clear_ad_draft(user_id: int) -> None:
     await ad_drafts_col.delete_one({"_id": user_id})
+
+
+async def delete_expired_drafts_and_states() -> None:
+    """Clear all drafts and temporary states older than 24 hours on startup or via worker."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    limit_24h = now - datetime.timedelta(hours=24)
+
+    try:
+        # 1. Clear expired ad drafts
+        res = await ad_drafts_col.delete_many({"created_at": {"$lt": limit_24h}})
+        if res.deleted_count > 0:
+            logger.info(f"Deleted {res.deleted_count} expired ad drafts.")
+
+        # 2. Clear expired upload batches
+        res = await batches_col.delete_many({"created_at": {"$lt": limit_24h}})
+        if res.deleted_count > 0:
+            logger.info(f"Deleted {res.deleted_count} expired upload batches.")
+
+        # 3. Clear expired edit sessions
+        res = await edit_sessions_col.delete_many({"created_at": {"$lt": limit_24h}})
+        if res.deleted_count > 0:
+            logger.info(f"Deleted {res.deleted_count} expired edit sessions.")
+
+        # 4. Clear expired password sessions
+        res = await password_settings_col.delete_many({"created_at": {"$lt": limit_24h}})
+        res2 = await password_entries_col.delete_many({"created_at": {"$lt": limit_24h}})
+        if res.deleted_count > 0 or res2.deleted_count > 0:
+            logger.info(f"Deleted {res.deleted_count + res2.deleted_count} expired password sessions.")
+
+        # 5. Clear expired post drafts
+        from database.mongo import post_drafts_col
+        res = await post_drafts_col.delete_many({"updated_at": {"$lt": limit_24h}})
+        if res.deleted_count > 0:
+            logger.info(f"Deleted {res.deleted_count} expired post drafts.")
+
+        # 6. Clear stale user states/drafts (where last_seen < 24h ago)
+        from database.mongo import users_col
+        res = await users_col.update_many(
+            {"last_seen": {"$lt": limit_24h}},
+            {"$unset": {
+                "state": "",
+                "catalog_draft": "",
+                "marketplace_draft": "",
+                "shortener_draft": "",
+                "saas_pending_plan": ""
+            }}
+        )
+        if res.modified_count > 0:
+            logger.info(f"Cleared stale user states/drafts for {res.modified_count} users.")
+    except Exception as e:
+        logger.error(f"Error deleting expired drafts and states: {e}")
 
 
 async def clear_active_deliveries():

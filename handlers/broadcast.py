@@ -5,7 +5,7 @@ import logging
 import time
 
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from pyrogram.errors import (
     FloodWait,
     UserIsBlocked,
@@ -15,7 +15,7 @@ from pyrogram.errors import (
 from bot import app
 import database
 import config
-from utils.helpers import admin_filter
+from utils.helpers import admin_filter, banned_filter
 from utils.locks import broadcast_lock
 
 logger = logging.getLogger(__name__)
@@ -275,8 +275,9 @@ def parse_channel_input(input_str: str):
     return f"@{username}", f"https://t.me/{username}"
 
 
-@app.on_message(filters.command("add_channel") & filters.private & premium_filter)
+@app.on_message(filters.command("add_channel") & filters.private & ~banned_filter)
 async def add_channel_handler(client: Client, message: Message):
+    user_id = message.from_user.id
     if "[channel_id_or_username]" in message.text or "[invite_link]" in message.text:
         await message.reply_text(
             "❌ **Error: You included the placeholder brackets!**\n\n"
@@ -289,33 +290,72 @@ async def add_channel_handler(client: Client, message: Message):
         )
         return
 
+    # Check creator limits
+    is_premium = await database.is_user_premium(user_id)
+    existing_channels = await database.get_creator_channels(user_id)
+    if not is_premium and len(existing_channels) >= 1:
+        await message.reply_text(
+            "❌ **Channel Limit Reached (Free Tier)**\n\n"
+            "Free creators can only manage **1 channel**.\n"
+            "Please upgrade to **Premium** with `/premium` to manage unlimited channels!"
+        )
+        return
+
     args = message.text.split(None, 2)
-    if len(args) < 2:
-        await message.reply_text(
-            "⚠️ Usage: `/add_channel [channel_id_or_username] [invite_link]`"
-        )
-        return
+    chat_id = None
+    invite_link = None
 
-    chat_raw = args[1].strip()
-    chat_id, invite_link = parse_channel_input(chat_raw)
+    # Method 1: Forward channel message
+    if message.reply_to_message and message.reply_to_message.forward_from_chat:
+        chat_id = message.reply_to_message.forward_from_chat.id
+        if len(args) >= 2:
+            invite_link = args[1].strip()
+    else:
+        if len(args) < 2:
+            await message.reply_text(
+                "⚠️ **Usage:**\n"
+                "• Reply to a forwarded channel message with `/add_channel [optional_invite_link]`\n"
+                "• Or use `/add_channel [channel_id_or_username_or_invite_link] [optional_invite_link]`"
+            )
+            return
+        
+        chat_raw = args[1].strip()
+        chat_id, resolved_invite = parse_channel_input(chat_raw)
+        if len(args) >= 3:
+            invite_link = args[2].strip()
+        else:
+            invite_link = resolved_invite
 
-    try:
-        # Check bot access and fetch title
-        chat_info = await client.get_chat(chat_id)
-        title = chat_info.title
-        # If it successfully fetched chat info, use the resolved integer ID for consistency
-        chat_id = chat_info.id
-    except Exception as e:
-        logger.error(f"Failed to access channel info for {chat_id}: {e}")
-        await message.reply_text(
-            "❌ **Invalid channel identifier or Bot is not in the channel.**\n\n"
-            "Please make sure:\n"
-            "1. You provided a valid channel ID, username, or invite link.\n"
-            "2. You **added the bot to the channel as an Administrator** BEFORE running this command."
-        )
-        return
+    # Method 4 & 2/3: Invite link, ID, or Username resolution
+    chat_info = None
+    if isinstance(chat_id, str) and (chat_id.startswith("https://t.me/+") or "joinchat" in chat_id):
+        # Private invite link
+        try:
+            chat_info = await client.join_chat(chat_id)
+            chat_id = chat_info.id
+        except Exception as join_err:
+            logger.warning(f"Could not join chat via invite link {chat_id}: {join_err}")
+            # Try parsing from existing DB channel list or just export/fallback if bot is already there
+            pass
 
-    # Verify bot is an administrator in the channel
+    if not chat_info:
+        try:
+            # Check bot access and fetch title
+            chat_info = await client.get_chat(chat_id)
+            chat_id = chat_info.id
+        except Exception as e:
+            logger.error(f"Failed to access channel info for {chat_id}: {e}")
+            await message.reply_text(
+                "❌ **Invalid channel identifier or Bot is not in the channel.**\n\n"
+                "Please make sure:\n"
+                "1. You provided a valid channel ID, username, or invite link.\n"
+                "2. You **added the bot to the channel as an Administrator** BEFORE running this command."
+            )
+            return
+
+    title = chat_info.title
+
+    # Verify bot is an administrator in the channel and check permissions
     try:
         bot_member = await client.get_chat_member(chat_id, "me")
         bot_status = str(bot_member.status).split(".")[-1].lower()
@@ -331,7 +371,7 @@ async def add_channel_handler(client: Client, message: Message):
                 "The bot must have the following administrator privileges in the channel:\n"
                 "• **Post Messages** (`can_post_messages`)\n"
                 "• **Delete Messages** (`can_delete_messages`)\n\n"
-                "Please enable these permissions for the bot in your channel settings."
+                "Please enable these privileges for the bot in your channel settings."
             )
             return
     except Exception as e:
@@ -339,22 +379,18 @@ async def add_channel_handler(client: Client, message: Message):
         await message.reply_text("❌ Bot is not an administrator in this channel.")
         return
 
-    # Determine invite link (optional override)
-    if len(args) >= 3:
-        invite_link = args[2].strip()
-    else:
-        if not invite_link:
-            if getattr(chat_info, "username", None):
-                invite_link = f"https://t.me/{chat_info.username}"
-            elif getattr(chat_info, "invite_link", None):
-                invite_link = chat_info.invite_link
-            else:
-                try:
-                    invite_link = await client.export_chat_invite_link(chat_id)
-                except Exception as e:
-                    logger.warning(f"Could not export invite link for private channel {chat_id}: {e}")
+    # Determine invite link
+    if not invite_link:
+        if getattr(chat_info, "username", None):
+            invite_link = f"https://t.me/{chat_info.username}"
+        elif getattr(chat_info, "invite_link", None):
+            invite_link = chat_info.invite_link
+        else:
+            try:
+                invite_link = await client.export_chat_invite_link(chat_id)
+            except Exception as e:
+                logger.warning(f"Could not export invite link for private channel {chat_id}: {e}")
 
-    # Fallback default if still not found
     if not invite_link:
         invite_link = f"https://t.me/c/{str(chat_id).replace('-100', '')}/1"
 
@@ -376,8 +412,9 @@ async def add_channel_handler(client: Client, message: Message):
     )
 
 
-@app.on_message(filters.command("del_channel") & filters.private & premium_filter)
+@app.on_message(filters.command("del_channel") & filters.private & ~banned_filter)
 async def del_channel_handler(client: Client, message: Message):
+    user_id = message.from_user.id
     if "[channel_id_or_username]" in message.text:
         await message.reply_text(
             "❌ **Error: You included the placeholder brackets!**\n\n"
@@ -394,24 +431,49 @@ async def del_channel_handler(client: Client, message: Message):
         return
 
     chat_raw = args[1].strip()
-    if chat_raw.startswith("-") or chat_raw.isdigit():
-        try:
-            chat_id = int(chat_raw)
-        except ValueError:
-            await message.reply_text("❌ Invalid ID format.")
-            return
-    else:
-        chat_id = chat_raw
-        if not chat_id.startswith("@"):
-            chat_id = f"@{chat_id}"
+    
+    # Try resolving from the creator's channel list in DB first (in case bot is no longer in channel)
+    channels = await database.get_creator_channels(user_id)
+    resolved_id = None
+    
+    clean_username = chat_raw.replace("@", "").lower()
+    for chan in channels:
+        chan_id_str = str(chan["_id"])
+        chan_username = (chan.get("username") or "").lower()
+        if chan_id_str == chat_raw or chan_username == clean_username:
+            resolved_id = chan["_id"]
+            break
 
-    deleted = await database.delete_force_sub_channel(chat_id)
+    if not resolved_id:
+        if chat_raw.startswith("-") or chat_raw.isdigit():
+            try:
+                resolved_id = int(chat_raw)
+            except ValueError:
+                await message.reply_text("❌ Invalid ID format.")
+                return
+        else:
+            chat_id = chat_raw
+            if not chat_id.startswith("@"):
+                chat_id = f"@{chat_id}"
+            try:
+                chat_info = await client.get_chat(chat_id)
+                resolved_id = chat_info.id
+            except Exception:
+                resolved_id = chat_id
+
+    is_bot_admin = await database.is_admin(user_id, client)
+    deleted = await database.delete_creator_channel(resolved_id, user_id)
+    if not deleted and is_bot_admin:
+        deleted = await database.delete_force_sub_channel(resolved_id)
+
     if deleted:
         await message.reply_text(
-            f"✅ Removed `{chat_id}` from force subscription channels."
+            f"✅ Channel `{chat_raw}` has been successfully removed."
         )
     else:
-        await message.reply_text(f"❌ Channel `{chat_id}` not found in force sub list.")
+        await message.reply_text(
+            f"❌ Channel `{chat_raw}` not found or you do not have permission to delete it."
+        )
 
 
 @app.on_message(filters.command("channels") & filters.private & premium_filter)
@@ -520,7 +582,7 @@ async def broadcast_unlock_handler(client: Client, message: Message):
 
 # ─── CREATOR STUDIO CHANNEL SETTINGS ─────────────────────────────────
 
-@app.on_message(filters.command("my_channels") & filters.private & premium_filter)
+@app.on_message(filters.command("my_channels") & filters.private & ~banned_filter)
 async def my_channels_handler(client: Client, message: Message):
     user_id = message.from_user.id
     channels = await database.get_creator_channels(user_id)
@@ -531,8 +593,9 @@ async def my_channels_handler(client: Client, message: Message):
     text = "📂 **Your Managed Channels:**\n\n"
     buttons = []
     for chan in channels:
-        text += f"• **{chan['title']}** (`{chan['_id']}`)\n"
-        buttons.append([InlineKeyboardButton(f"⚙️ Settings: {chan['title']}", callback_data=f"chan_settings_{chan['_id']}")])
+        title = chan.get("channel_title") or chan.get("title") or str(chan["_id"])
+        text += f"• **{title}** (`{chan['_id']}`)\n"
+        buttons.append([InlineKeyboardButton(f"⚙️ Settings: {title}", callback_data=f"chan_settings_{chan['_id']}")])
         
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -553,8 +616,9 @@ async def chan_settings_callback_handler(client: Client, callback_query: Callbac
         return
         
     status = "Active ✅" if channel.get("service_enabled", True) else "Disabled ❌"
+    title = channel.get("channel_title") or channel.get("title") or str(channel["_id"])
     text = (
-        f"📢 **Channel Settings: {channel.get('title')}**\n"
+        f"📢 **Channel Settings: {title}**\n"
         f"ID: `{channel['_id']}`\n"
         f"Username: `@{channel.get('username') or 'None'}`\n"
         f"Status: **{status}**\n\n"
@@ -613,7 +677,7 @@ async def chan_remove_callback_handler(client: Client, callback_query: CallbackQ
     except ValueError:
         channel_id_val = channel_id
         
-    deleted = await database.delete_force_sub_channel(channel_id_val)
+    deleted = await database.delete_creator_channel(channel_id_val, user_id)
     if deleted:
         await callback_query.answer("🗑 Channel removed successfully.", show_alert=True)
         try:

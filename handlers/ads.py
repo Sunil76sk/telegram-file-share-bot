@@ -274,11 +274,35 @@ async def ads_create_callback(client: Client, callback_query: CallbackQuery):
 @app.on_message(filters.text & filters.private & admin_filter & ~filters.regex(r"^/"), group=2)
 async def ad_create_text_handler(client: Client, message: Message):
     user_id = message.from_user.id
+    
+    # Bypass if user is in an active post builder session
+    pb_draft = await database.get_post_draft(user_id)
+    if pb_draft and pb_draft.get("state") in [
+        "awaiting_media", "awaiting_caption", "awaiting_buttons", "awaiting_reactions",
+        "awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"
+    ]:
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
+
     draft = await database.get_ad_draft(user_id)
     if not draft or draft.get("step") != "awaiting_details":
         from pyrogram import ContinuePropagation
 
         raise ContinuePropagation
+
+    # Expiry Check (24 hours)
+    import datetime
+    created_at = draft.get("created_at")
+    if created_at:
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+        if datetime.datetime.now(datetime.timezone.utc) - created_at > datetime.timedelta(hours=24):
+            await database.clear_ad_draft(user_id)
+            await message.reply_text("❌ Ad creation session expired. Please start over using /ads.")
+            message.stop_propagation()
+            return
+
+    message.stop_propagation()
 
     ad_type = draft.get("ad_type")
     text = message.text.strip()

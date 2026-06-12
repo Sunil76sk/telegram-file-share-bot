@@ -155,61 +155,54 @@ async def batch_cancel_cmd(client: Client, message: Message):
     user_id = message.from_user.id
 
     async with user_locks[user_id]:
-        # Cancel any active wizards or pending states first
-        user_doc = await database.get_user(user_id)
-        if user_doc and user_doc.get("state"):
-            state = user_doc["state"]
-            if state.startswith("catalog_"):
-                await database.users_col.update_one(
-                    {"_id": user_id}, {"$unset": {"state": "", "catalog_draft": ""}}
-                )
-                await message.reply_text("❌ Catalog item creation cancelled.")
-                return
-            elif state.startswith("market_"):
-                await database.users_col.update_one(
-                    {"_id": user_id}, {"$unset": {"state": "", "marketplace_draft": ""}}
-                )
-                await message.reply_text("❌ Product creation cancelled.")
-                return
-            elif state.startswith("sh_"):
-                await database.users_col.update_one(
-                    {"_id": user_id}, {"$unset": {"state": "", "shortener_draft": ""}}
-                )
-                await message.reply_text("❌ Shortener configuration cancelled.")
-                return
-            elif state in ("awaiting_token", "saas_awaiting_token"):
-                await database.users_col.update_one(
-                    {"_id": user_id}, {"$unset": {"state": ""}}
-                )
-                await message.reply_text("❌ Registration cancelled.")
-                return
-            elif state == "saas_awaiting_screenshot":
-                await database.users_col.update_one(
-                    {"_id": user_id}, {"$unset": {"state": "", "saas_pending_plan": ""}}
-                )
-                await message.reply_text("❌ SaaS upgrade cancelled.")
-                return
-
-        # Fallback to standard batch cancel
+        # Delete batch status message if exists
         batch = await database.get_active_batch(user_id)
-        if not batch:
-            await message.reply_text("❌ You do not have an active batch session.")
-            return
+        if batch:
+            status_message_id = batch.get("batch_message_id")
+            if status_message_id:
+                try:
+                    await client.delete_messages(
+                        chat_id=user_id, message_ids=status_message_id
+                    )
+                except Exception:
+                    pass
 
-        # Delete status message
-        status_message_id = batch.get("batch_message_id")
-        if status_message_id:
+        # Clear upload batches
+        await database.delete_batch(user_id)
+
+        # Clear ad drafts
+        await database.clear_ad_draft(user_id)
+
+        # Clear post builder (creator studio) drafts
+        await database.delete_post_draft(user_id)
+
+        # Clear edit sessions, password settings, password entries
+        await database.delete_edit_session(user_id)
+        await database.delete_password_setting_session(user_id)
+        await database.delete_password_entry_session(user_id)
+
+        # Clear template creation drafts
+        from handlers.templates import template_creation_drafts
+        if user_id in template_creation_drafts:
             try:
-                await client.delete_messages(
-                    chat_id=user_id, message_ids=status_message_id
-                )
-            except Exception:
+                del template_creation_drafts[user_id]
+            except KeyError:
                 pass
 
-        await database.delete_batch(user_id)
-        await message.reply_text(
-            "🗑 **Batch session cancelled.** All uploaded temporary files have been cleared."
+        # Clear state/catalog drafts/shorteners/marketplace/saas states in user document
+        await database.users_col.update_one(
+            {"_id": user_id},
+            {"$unset": {
+                "state": "",
+                "catalog_draft": "",
+                "marketplace_draft": "",
+                "shortener_draft": "",
+                "saas_pending_plan": ""
+            }}
         )
+
+        await message.reply_text("✅ Current operation cancelled.")
+        message.stop_propagation()
 
 
 @app.on_message(
@@ -227,6 +220,11 @@ async def batch_cancel_cmd(client: Client, message: Message):
 )
 async def file_uploader(client: Client, message: Message):
     user_id = message.from_user.id
+
+    # Creator Studio bypass: Only let the post builder handle it if they are actively in a capturing state
+    draft = await database.get_post_draft(user_id)
+    if draft and draft.get("state") in ["awaiting_media", "awaiting_caption", "awaiting_buttons", "awaiting_reactions"]:
+        return
 
     user_doc = await database.get_user(user_id)
 

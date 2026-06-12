@@ -364,12 +364,56 @@ not_command_filter = filters.create(_not_command)
 @app.on_message(filters.private & filters.text & not_command_filter, group=1)
 async def text_message_handler(client: Client, message: Message):
     user_id = message.from_user.id
+    logger.info(f"DEBUG BYPASS: user={user_id}, text='{message.text[:20]}...'")
     text = message.text.strip()
 
     if await database.is_banned(user_id):
+        message.stop_propagation()
         return
 
     user_doc = await database.get_user(user_id)
+
+    # Bypass if user is in an active ad draft session (auto-delete if older than 24 hours)
+    ad_draft = await database.get_ad_draft(user_id)
+    if ad_draft:
+        created_at = ad_draft.get("created_at")
+        if created_at:
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+            if datetime.datetime.now(datetime.timezone.utc) - created_at > datetime.timedelta(hours=24):
+                await database.clear_ad_draft(user_id)
+                ad_draft = None
+    if ad_draft and ad_draft.get("step") == "awaiting_details":
+        return
+
+    # Bypass if user is in an active wizard state
+    if user_doc and user_doc.get("state"):
+        return
+
+    # Bypass if user is in an active post builder or scheduling session
+    draft = await database.get_post_draft(user_id)
+    draft_exists = draft is not None
+    draft_state = draft.get("state") if draft_exists else None
+    
+    # Requirements:
+    # 1. user_id
+    # 2. draft exists?
+    # 3. full draft state
+    # 4. draft document
+    # 5. branch taken
+    logger.info(f"[text_message_handler] user_id={user_id}")
+    logger.info(f"[text_message_handler] draft exists={draft_exists}")
+    logger.info(f"[text_message_handler] state={draft_state}")
+    logger.info(f"[text_message_handler] draft doc={draft}")
+    
+    if draft and draft.get("state") in [
+        "awaiting_media", "awaiting_caption", "awaiting_buttons", "awaiting_reactions",
+        "awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"
+    ]:
+        logger.info("[text_message_handler]\ndraft exists=True\nstate=awaiting_caption\nACTION=bypass")
+        return
+    else:
+        logger.info(f"[text_message_handler]\ndraft exists={draft_exists}\nstate={draft_state}\nACTION=send_welcome")
 
     # Intercept shortener registration states
     if user_doc and user_doc.get("state", "").startswith("sh_"):
@@ -378,6 +422,7 @@ async def text_message_handler(client: Client, message: Message):
                 {"_id": user_id}, {"$unset": {"state": "", "shortener_draft": ""}}
             )
             await message.reply_text("❌ Shortener configuration cancelled.")
+            message.stop_propagation()
             return
 
         from handlers.shorteners import handle_shortener_state
@@ -385,6 +430,7 @@ async def text_message_handler(client: Client, message: Message):
         await handle_shortener_state(
             client, message, user_id, user_doc["state"], user_doc
         )
+        message.stop_propagation()
         return
 
     async with user_locks[user_id]:
@@ -400,6 +446,7 @@ async def text_message_handler(client: Client, message: Message):
                 await message.reply_text(
                     "❌ The file link you were trying to access no longer exists."
                 )
+                message.stop_propagation()
                 return
 
             # Check if expired
@@ -410,6 +457,7 @@ async def text_message_handler(client: Client, message: Message):
                 if datetime.datetime.now(datetime.timezone.utc) > expires_at:
                     await database.delete_password_entry_session(user_id)
                     await message.reply_text("❌ This file link has expired.")
+                    message.stop_propagation()
                     return
 
             password_hash = file_doc.get("password_hash")
@@ -446,6 +494,7 @@ async def text_message_handler(client: Client, message: Message):
                         "Please join the channel below and click Try Again to proceed.",
                         reply_markup=InlineKeyboardMarkup(buttons),
                     )
+                    message.stop_propagation()
                     return
 
                 # Deliver files!
@@ -455,11 +504,13 @@ async def text_message_handler(client: Client, message: Message):
                     file_doc,
                     bypass_monetization=bypass_monetization,
                 )
+                message.stop_propagation()
             else:
                 # Wrong password! Keep session open so they can try again
                 await message.reply_text(
                     "❌ **Incorrect Password!** Access denied. Please try again."
                 )
+                message.stop_propagation()
             return
 
         # 2. Check if user is setting a password for a generated link
@@ -490,6 +541,7 @@ async def text_message_handler(client: Client, message: Message):
                 "Please choose how long this share link should remain valid:",
                 reply_markup=buttons,
             )
+            message.stop_propagation()
             return
 
         # 4. Check if user sent a shareable link or raw token
@@ -518,6 +570,7 @@ async def text_message_handler(client: Client, message: Message):
                         expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
                     if datetime.datetime.now(datetime.timezone.utc) > expires_at:
                         await message.reply_text("❌ This file link has expired.")
+                        message.stop_propagation()
                         return
 
                 # Increment view counter
@@ -548,6 +601,7 @@ async def text_message_handler(client: Client, message: Message):
                                         ]
                                     ),
                                 )
+                                message.stop_propagation()
                                 return
 
                         # 2. Pay-to-unlock check
@@ -571,6 +625,7 @@ async def text_message_handler(client: Client, message: Message):
                                     await message.reply_text(
                                         "❌ Failed to generate payment invoice. Please try again."
                                     )
+                                message.stop_propagation()
                                 return
 
                 # Check if password protected
@@ -583,6 +638,7 @@ async def text_message_handler(client: Client, message: Message):
                         "🔒 **Password Protected Link**\n\n"
                         "This link is protected by a password. Please enter the password below to access the files."
                     )
+                    message.stop_propagation()
                     return
 
                 # Check force subscription
@@ -614,6 +670,7 @@ async def text_message_handler(client: Client, message: Message):
                         "Please join the channel below and click Try Again to proceed.",
                         reply_markup=InlineKeyboardMarkup(buttons),
                     )
+                    message.stop_propagation()
                     return
 
                 # Deliver the files
@@ -623,9 +680,12 @@ async def text_message_handler(client: Client, message: Message):
                     file_doc,
                     bypass_monetization=bypass_monetization,
                 )
+                message.stop_propagation()
                 return
 
     # Fallback: unrecognized text
+    logger.info(f"[text_message_handler] SENDING welcome message to user_id={user_id}")
+    logger.info("👋 Hello! I am the File Share Bot")
     await message.reply_text(
         "👋 **Hello!**\n\n"
         "I am the File Share Bot. I can generate permanent shareable links for files stored on Telegram.\n\n"
@@ -635,3 +695,4 @@ async def text_message_handler(client: Client, message: Message):
         "🛍 Use **/store** to browse the premium catalog.\n\n"
         "Type **/start** to see all available commands."
     )
+    message.stop_propagation()

@@ -27,10 +27,12 @@ async def add_creator_channel(
         {"_id": channel_id},
         {
             "$set": {
-                "title": title,
-                "invite_link": invite_link,
                 "user_id": user_id,
+                "channel_id": channel_id,
+                "channel_title": title,
+                "title": title,
                 "username": username,
+                "invite_link": invite_link,
                 "permissions_verified": permissions_verified,
                 "service_enabled": True,
                 "added_at": datetime.datetime.now(datetime.timezone.utc),
@@ -80,6 +82,7 @@ async def create_scheduled_post(
     reactions: list | None = None,
     comments: bool = False,
     pin: bool = False,
+    caption_above: bool = False,
 ) -> str:
     """Create a scheduled post record."""
     doc = {
@@ -93,6 +96,7 @@ async def create_scheduled_post(
         "reactions": reactions or [],
         "comments": comments,
         "pin": pin,
+        "caption_above": caption_above,
         "status": "pending",
         "created_at": datetime.datetime.now(datetime.timezone.utc),
     }
@@ -143,6 +147,7 @@ async def create_repost_job(
     reactions: list | None = None,
     comments: bool = False,
     pin: bool = False,
+    caption_above: bool = False,
 ) -> str:
     """Create a new auto-reposting job configuration."""
     doc = {
@@ -157,6 +162,7 @@ async def create_repost_job(
         "reactions": reactions or [],
         "comments": comments,
         "pin": pin,
+        "caption_above": caption_above,
         "last_post_id": None,
         "last_posted_at": None,
         "next_post_at": datetime.datetime.now(datetime.timezone.utc),
@@ -256,3 +262,47 @@ async def log_button_click(user_id: int, channel_id: int | str, message_id: int,
     }
     await button_clicks_col.insert_one(doc)
     await increment_channel_stat(channel_id, "button_clicks", 1)
+
+
+async def delete_creator_channel(channel_id: int | str, user_id: int) -> bool:
+    """Remove a channel from Creator Studio channels collection, ensuring ownership."""
+    channel = await channels_col.find_one({"_id": channel_id})
+    if not channel:
+        return False
+    if channel.get("user_id") != user_id:
+        return False
+    result = await channels_col.delete_one({"_id": channel_id})
+    return result.deleted_count > 0
+
+
+async def toggle_reaction(chat_id: int, message_id: int, user_id: int, emoji: str) -> dict:
+    """Toggle user's reaction on a message and return updated counts."""
+    from database.mongo import db
+    votes_col = db["reaction_votes"]
+    existing = await votes_col.find_one({
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "user_id": user_id,
+        "emoji": emoji
+    })
+    if existing:
+        await votes_col.delete_one({"_id": existing["_id"]})
+    else:
+        await votes_col.insert_one({
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "user_id": user_id,
+            "emoji": emoji,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc)
+        })
+    
+    cursor = votes_col.find({"chat_id": chat_id, "message_id": message_id})
+    votes = [doc async for doc in cursor]
+    
+    counts = {}
+    for vote in votes:
+        e = vote["emoji"]
+        counts[e] = counts.get(e, 0) + 1
+    return counts
+
+
