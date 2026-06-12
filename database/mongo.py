@@ -80,6 +80,12 @@ movie_templates_col = db["movie_templates"]
 backups_col = db["backups"]
 audit_admin_logs_col = db["audit_admin_logs"]
 audit_error_logs_col = db["audit_error_logs"]
+
+# Products store collections
+products_col = db["products"]
+purchases_col = db["purchases"]
+downloads_col = db["downloads"]
+categories_col = db["categories"]
 audit_event_logs_col = db["audit_event_logs"]
 notification_queue_col = db["notification_queue"]
 notification_preferences_col = db["notification_preferences"]
