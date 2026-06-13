@@ -188,6 +188,24 @@ from database.channel_post_history import (
     cleanup_old_history,
 )
 
+from database.products import (
+    products_col,
+    purchases_col,
+    get_product_by_id,
+    get_product_by_token,
+    verify_purchase,
+    verify_purchase_by_token,
+    record_purchase,
+    increment_product_sales,
+    get_product_stats,
+    create_product,
+    update_product,
+    delete_product,
+    get_products,
+    get_products_by_owner,
+    get_user_purchases,
+)
+
 __all__ = [
     "client",
     "db",
@@ -358,4 +376,19 @@ __all__ = [
     "get_channel_post_count",
     "get_user_post_count",
     "cleanup_old_history",
+    "products_col",
+    "purchases_col",
+    "get_product_by_id",
+    "get_product_by_token",
+    "verify_purchase",
+    "verify_purchase_by_token",
+    "record_purchase",
+    "increment_product_sales",
+    "get_product_stats",
+    "create_product",
+    "update_product",
+    "delete_product",
+    "get_products",
+    "get_products_by_owner",
+    "get_user_purchases",
 ]

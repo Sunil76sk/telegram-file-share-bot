@@ -83,6 +83,7 @@ async def create_scheduled_post(
     comments: bool = False,
     pin: bool = False,
     caption_above: bool = False,
+    poster_url: str | None = None,
 ) -> str:
     """Create a scheduled post record."""
     doc = {
@@ -97,6 +98,7 @@ async def create_scheduled_post(
         "comments": comments,
         "pin": pin,
         "caption_above": caption_above,
+        "poster_url": poster_url,
         "status": "pending",
         "created_at": datetime.datetime.now(datetime.timezone.utc),
     }
@@ -148,6 +150,7 @@ async def create_repost_job(
     comments: bool = False,
     pin: bool = False,
     caption_above: bool = False,
+    poster_url: str | None = None,
 ) -> str:
     """Create a new auto-reposting job configuration."""
     doc = {
@@ -163,6 +166,7 @@ async def create_repost_job(
         "comments": comments,
         "pin": pin,
         "caption_above": caption_above,
+        "poster_url": poster_url,
         "last_post_id": None,
         "last_posted_at": None,
         "next_post_at": datetime.datetime.now(datetime.timezone.utc),

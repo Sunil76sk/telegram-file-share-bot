@@ -84,6 +84,7 @@ async def newpost_command_handler(client: Client, message: Message):
     allowed = await check_rate_limit(user_id, "newpost_command", limit=5, window_seconds=60)
     if not allowed:
         await message.reply_text("❌ **Rate limit exceeded!**\nYou can only trigger `/newpost` 5 times per minute.")
+        message.stop_propagation()
         return
 
     channels = await database.get_creator_channels(user_id)
@@ -93,6 +94,7 @@ async def newpost_command_handler(client: Client, message: Message):
             "You must first add a channel to Creator Studio using:\n"
             "`/add_channel [channel_username_or_id]`"
         )
+        message.stop_propagation()
         return
 
     # Check if they have an active draft to continue editing
@@ -113,6 +115,7 @@ async def newpost_command_handler(client: Client, message: Message):
                 ]
             )
         )
+        message.stop_propagation()
         return
 
     # Choose Target Channel
@@ -123,6 +126,7 @@ async def newpost_command_handler(client: Client, message: Message):
 
     if not buttons:
         await message.reply_text("❌ All your added channels are currently disabled. Please enable them in `/my_channels` settings.")
+        message.stop_propagation()
         return
 
     logger.info(f"[DIAGNOSTIC] handler_name=newpost_command_handler | update_id={message.id} | message_id={message.id} | INSTANCE={INSTANCE}")
@@ -132,6 +136,7 @@ async def newpost_command_handler(client: Client, message: Message):
         f"({INSTANCE})",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
+    message.stop_propagation()
 
 
 @app.on_callback_query(filters.regex(r"^build_select_(.+)"))
@@ -175,6 +180,7 @@ async def build_select_callback(client: Client, callback_query: CallbackQuery):
         "caption_above": False,
         "pin": False,
         "pin_message": False,
+        "poster_url": None,
         "state": "awaiting_media",
         "created_at": datetime.datetime.now(datetime.timezone.utc),
     }
@@ -235,7 +241,7 @@ async def builder_input_handler(client: Client, message: Message):
         return
 
     state = draft.get("state")
-    if not state or state not in ["awaiting_media", "awaiting_caption", "awaiting_buttons", "awaiting_reactions"]:
+    if not state or state not in ["awaiting_media", "awaiting_caption", "awaiting_buttons", "awaiting_reactions", "awaiting_poster"]:
         logger.info(f"[builder_input_handler] ACTION=return | reason=invalid_state | state={state}")
         return
 
@@ -380,31 +386,60 @@ async def builder_input_handler(client: Client, message: Message):
         message.stop_propagation()
         return
 
+    # 5. Capture Poster URL Input
+    elif state == "awaiting_poster":
+        if text.lower() == "none":
+            draft["poster_url"] = None
+            await message.reply_text("🗑️ Poster URL removed!")
+        else:
+            if not (text.startswith("http://") or text.startswith("https://")):
+                await message.reply_text("❌ **Invalid URL!** Please send a URL starting with `http://` or `https://` (or `none` to remove).")
+                message.stop_propagation()
+                return
+            draft["poster_url"] = text
+            await message.reply_text("✅ Poster URL updated!")
+
+        draft["state"] = "active"
+        await database.save_post_draft(user_id, draft)
+        await show_builder_menu(client, message, user_id, draft)
+        message.stop_propagation()
+        return
+
 
 # ─── BUILDER MENU SYSTEM ─────────────────────────────────────────────
 
 async def get_comments_url(client: Client, channel_id: int) -> str:
     try:
         chat = await client.get_chat(channel_id)
-        if chat.linked_chat_id:
+        discussion_id = None
+        if hasattr(chat, "linked_chat"):
+            linked = chat.linked_chat
+            if linked:
+                discussion_id = linked.id
+        discussion_id = discussion_id or getattr(chat, "linked_chat_id", None)
+        if discussion_id:
             try:
-                linked_chat = await client.get_chat(chat.linked_chat_id)
-                if linked_chat.username:
+                linked_chat = await client.get_chat(discussion_id)
+                if getattr(linked_chat, "username", None):
                     return f"https://t.me/{linked_chat.username}"
-                elif linked_chat.invite_link:
+                elif getattr(linked_chat, "invite_link", None):
                     return linked_chat.invite_link
                 else:
-                    return f"https://t.me/c/{str(chat.linked_chat_id).replace('-100', '')}"
+                    return f"https://t.me/c/{str(discussion_id).replace('-100', '')}"
             except Exception:
-                return f"https://t.me/c/{str(chat.linked_chat_id).replace('-100', '')}"
+                return f"https://t.me/c/{str(discussion_id).replace('-100', '')}"
     except Exception:
         pass
     return ""
 
 
-def build_post_keyboard(buttons_spec: list, reactions: list, reaction_counts: dict = None, comments_url: str = None) -> InlineKeyboardMarkup | None:
+def build_post_keyboard(buttons_spec: list, reactions: list, reaction_counts: dict = None, comments_url: str = None, poster_url: str = None) -> InlineKeyboardMarkup | None:
     keyboard = []
     
+    # 0. Poster URL button (always at the very top of keyboard)
+    if poster_url:
+        keyboard.append([InlineKeyboardButton(text="🖼️ View Poster", url=poster_url)])
+        
     # 1. URL buttons
     if buttons_spec:
         for row in buttons_spec:
@@ -446,6 +481,7 @@ async def show_builder_menu(client: Client, message: Message, user_id: int, draf
         f"🔗 **Buttons:** {len(draft.get('buttons', []))} rows\n"
         f"❤️ **Reactions:** {' '.join(draft.get('reactions', [])) or 'Disabled'}\n"
         f"💬 **Comments:** {'Enabled' if draft.get('comments_enabled') or draft.get('comments') else 'Disabled'}\n"
+        f"🖼️ **Poster URL:** `{draft.get('poster_url') or 'None'}`\n"
         f"📌 **Pin Message:** {'Yes' if draft.get('pin_message') or draft.get('pin') else 'No'}\n\n"
         f"Configure your post using the buttons below:"
     )
@@ -454,25 +490,26 @@ async def show_builder_menu(client: Client, message: Message, user_id: int, draf
         [
             [
                 InlineKeyboardButton("📝 Edit Caption", callback_data="build_btn_caption"),
+                InlineKeyboardButton("🖼️ Poster URL", callback_data="build_btn_poster"),
+            ],
+            [
                 InlineKeyboardButton("🔗 URL Buttons", callback_data="build_btn_buttons"),
-            ],
-            [
                 InlineKeyboardButton("❤️ Reactions", callback_data="build_btn_reactions"),
+            ],
+            [
                 InlineKeyboardButton(f"💬 Comments: {'✅' if draft.get('comments_enabled') or draft.get('comments') else '❌'}", callback_data="build_btn_comments"),
-            ],
-            [
                 InlineKeyboardButton(f"📝 Pos: {'Above ⬆️' if draft.get('caption_above') else 'Below ⬇️'}", callback_data="build_btn_pos"),
+            ],
+            [
                 InlineKeyboardButton(f"📌 Pin: {'✅' if draft.get('pin_message') or draft.get('pin') else '❌'}", callback_data="build_btn_pin"),
-            ],
-            [
                 InlineKeyboardButton("👀 Preview", callback_data="build_btn_preview"),
+            ],
+            [
                 InlineKeyboardButton("🚀 Send Now", callback_data="build_btn_send"),
-            ],
-            [
                 InlineKeyboardButton("📅 Schedule", callback_data="build_btn_schedule"),
-                InlineKeyboardButton("🔄 Auto Repost", callback_data="build_btn_repost"),
             ],
             [
+                InlineKeyboardButton("🔄 Auto Repost", callback_data="build_btn_repost"),
                 InlineKeyboardButton("❌ Cancel", callback_data="build_btn_cancel"),
             ]
         ]
@@ -549,7 +586,13 @@ async def builder_menu_callback_handler(client: Client, callback_query: Callback
         channel_id = draft["channel_id"]
         try:
             chat_info = await client.get_chat(channel_id)
-            if not chat_info.linked_chat_id:
+            discussion_id = None
+            if hasattr(chat_info, "linked_chat"):
+                linked = chat_info.linked_chat
+                if linked:
+                    discussion_id = linked.id
+            discussion_id = discussion_id or getattr(chat_info, "linked_chat_id", None)
+            if not discussion_id:
                 await callback_query.answer("❌ No Discussion Group Linked to this channel!", show_alert=True)
                 return
             await callback_query.answer()
@@ -560,8 +603,26 @@ async def builder_menu_callback_handler(client: Client, callback_query: Callback
             await callback_query.message.delete()
             await show_builder_menu(client, callback_query.message, user_id, draft)
         except Exception as e:
-            logger.error(f"Error checking discussion group: {e}")
+            logger.error(f"Error checking discussion group: {e}", exc_info=True)
+            from utils.audit_logger import log_error
+            await log_error(
+                module="post_builder",
+                function="builder_menu_callback_handler_comments",
+                error=str(e),
+                user_id=user_id
+            )
             await callback_query.answer(f"❌ Failed to verify comments status: {e}", show_alert=True)
+
+    elif action == "poster":
+        await callback_query.answer()
+        draft["state"] = "awaiting_poster"
+        await database.save_post_draft(user_id, draft)
+        await callback_query.message.reply_text(
+            "🖼️ **Configure Poster URL**\n\n"
+            "Please send the external URL to the movie poster (starting with http/https):\n"
+            "Example: `https://image.tmdb.org/t/p/w500/path_to_poster.jpg`\n\n"
+            "Send `/cancel` to abort, or `none` to remove the poster."
+        )
 
     elif action == "pos":
         await callback_query.answer()
@@ -588,12 +649,17 @@ async def builder_menu_callback_handler(client: Client, callback_query: Callback
     elif action == "send":
         await callback_query.answer()
         await callback_query.message.delete()
-        sent = await send_post_now(client, user_id, draft)
-        if sent:
+        success, error_msg = await send_post_now(client, user_id, draft)
+        if success:
             await client.send_message(user_id, "🚀 **Post sent successfully!**")
             await database.delete_post_draft(user_id)
         else:
-            await client.send_message(user_id, "❌ **Failed to send post.** Please check bot permissions in the channel.")
+            await client.send_message(
+                user_id,
+                f"❌ **Failed to send post.**\n\n"
+                f"**Error:** `{error_msg}`\n\n"
+                f"Please check bot permissions in the channel."
+            )
 
     elif action == "schedule":
         await callback_query.answer()
@@ -659,7 +725,8 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
         buttons_spec=draft.get("buttons", []),
         reactions=draft.get("reactions", []),
         reaction_counts=None,
-        comments_url=comments_url
+        comments_url=comments_url,
+        poster_url=draft.get("poster_url")
     )
 
     await client.send_message(user_id, "👀 **POST PREVIEW:**\n━━━━━━━━━━━━━━━")
@@ -723,7 +790,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
     await show_builder_menu(client, Message(id=0), user_id, draft)
 
 
-async def send_post_now(client: Client, user_id: int, draft: dict) -> bool:
+async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool, str | None]:
     channel_id = draft["channel_id"]
     caption = draft.get("caption", "")
     comments_url = None
@@ -734,7 +801,8 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> bool:
         buttons_spec=draft.get("buttons", []),
         reactions=draft.get("reactions", []),
         reaction_counts=None,
-        comments_url=comments_url
+        comments_url=comments_url,
+        poster_url=draft.get("poster_url")
     )
 
     try:
@@ -782,8 +850,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> bool:
                     parse_mode="html",
                 )
 
-        
-        if draft.get("pin") or draft.get("pin_message") and msg:
+        if (draft.get("pin") or draft.get("pin_message")) and msg:
             try:
                 await client.pin_chat_message(chat_id=channel_id, message_id=msg.id)
             except Exception as pin_err:
@@ -791,10 +858,19 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> bool:
 
         # Update stats
         await database.increment_channel_stat(channel_id, "publishes", 1)
-        return True
+        return (True, None)
     except Exception as e:
-        logger.error(f"Error publishing post: {e}")
-        return False
+        logger.error(f"Error publishing post: {e}", exc_info=True)
+        from utils.audit_logger import log_error
+        import traceback
+        await log_error(
+            module="post_builder",
+            function="send_post_now",
+            error=str(e),
+            user_id=user_id,
+            trace=traceback.format_exc()
+        )
+        return (False, str(e))
 
 
 # ─── CHANNEL SETTINGS COMMAND ────────────────────────────────────────

@@ -64,6 +64,7 @@ import handlers.channel_analytics  # noqa: E402
 import handlers.settings  # noqa: E402
 import handlers.store  # noqa: E402
 import handlers.movie_search  # noqa: E402
+import handlers.marketplace  # noqa: E402
 
 from utils.worker_framework import register_worker, start_workers, recover_workers, stop_workers  # noqa: E402
 from utils.queue_system import register_handler, recover_interrupted_tasks, process_queue  # noqa: E402
@@ -87,6 +88,8 @@ async def custom_start():
     config.BOT_USERNAME = bot_me.username
 
     await database.init_db()
+    from utils.multi_lang import load_translations
+    await load_translations()
     await database.clear_active_deliveries()
     await database.delete_expired_drafts_and_states()
     await database.batches_col.delete_many({})

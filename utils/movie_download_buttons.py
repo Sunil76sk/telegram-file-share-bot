@@ -80,9 +80,12 @@ async def generate_download_buttons(
     additional_buttons: list[list[dict[str, str]]] | None = None,
 ) -> InlineKeyboardMarkup | None:
     keyboard: list[list[InlineKeyboardButton]] = []
+    import config as bot_config
+    bot_username = bot_config.BOT_USERNAME or "bot"
 
     for config in configs:
-        link_url = config.get("link_url", "")
+        config_id = str(config.get("_id"))
+        link_url = f"https://t.me/{bot_username}?start=dl_{config_id}"
         link_type = config.get("link_type", "direct")
         label = config.get("button_label", DEFAULT_BUTTON_LABELS.get("download", "📥 Download"))
 
@@ -90,14 +93,12 @@ async def generate_download_buttons(
             from database.users import is_user_premium
             if not await is_user_premium(user_id):
                 label = "⭐ Premium Only"
-                link_url = "https://t.me/"
         elif link_type == "password" and user_id:
             from database.state import get_password_entry_session
-            session = await get_password_entry_session(user_id, config.get("_id"))
+            session = await get_password_entry_session(user_id, f"btn_{config_id}")
             if not session:
                 label = "🔒 Unlock"
         elif link_type == "paid" and user_id:
-            from database.premium_store import get_upi_payment
             # Tag as paid
             label = f"💰 {label}"
 

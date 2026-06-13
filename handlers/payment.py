@@ -218,29 +218,65 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                         user_id, token, action="purchase", method="stars", amount=amount
                     )
 
-                    file_doc = await database.get_file_link(token)
-                    if file_doc:
-                        try:
-                            await client.send_message(
-                                chat_id=user_id,
-                                text=(
-                                    "🔓 **File Link Unlocked!**\n\n"
-                                    "Your payment was received successfully. We are delivering your files now..."
-                                ),
-                            )
-                        except Exception:
-                            pass
-                        await deliver_files(
-                            client, user_id, file_doc, bypass_monetization=True
-                        )
+                    if token.startswith("btn_"):
+                        config_id = token.replace("btn_", "", 1)
+                        from utils.movie_download_buttons import get_download_button_config
+                        btn_config = await get_download_button_config(config_id)
+                        if btn_config:
+                            try:
+                                await client.send_message(
+                                    chat_id=user_id,
+                                    text=(
+                                        "🔓 **Download Unlocked!**\n\n"
+                                        "Your payment was received successfully. We are delivering your files now..."
+                                    ),
+                                )
+                            except Exception:
+                                pass
+                            
+                            # Create a dummy message class since deliver_button_config expects it
+                            class DummyChat:
+                                def __init__(self, chat_id):
+                                    self.id = chat_id
+                            class DummyMessage:
+                                def __init__(self, chat_id):
+                                    self.chat = DummyChat(chat_id)
+                            
+                            dummy_msg = DummyMessage(user_id)
+                            from handlers.start import deliver_button_config
+                            await deliver_button_config(client, dummy_msg, btn_config)
+                        else:
+                            try:
+                                await client.send_message(
+                                    chat_id=user_id,
+                                    text="❌ **Download Configuration Not Found!**\n\nWe could not find the config for this button.",
+                                )
+                            except Exception:
+                                pass
                     else:
-                        try:
-                            await client.send_message(
-                                chat_id=user_id,
-                                text=(
-                                    "❌ **Files Not Found!**\n\n"
-                                    "The link was unlocked successfully, but the files have been deleted by the admin."
-                                ),
+                        file_doc = await database.get_file_link(token)
+                        if file_doc:
+                            try:
+                                await client.send_message(
+                                    chat_id=user_id,
+                                    text=(
+                                        "🔓 **File Link Unlocked!**\n\n"
+                                        "Your payment was received successfully. We are delivering your files now..."
+                                    ),
+                                )
+                            except Exception:
+                                pass
+                            await deliver_files(
+                                client, user_id, file_doc, bypass_monetization=True
                             )
-                        except Exception:
-                            pass
+                        else:
+                            try:
+                                await client.send_message(
+                                    chat_id=user_id,
+                                    text=(
+                                        "❌ **Files Not Found!**\n\n"
+                                        "The link was unlocked successfully, but the files have been deleted by the admin."
+                                    ),
+                                )
+                            except Exception:
+                                pass

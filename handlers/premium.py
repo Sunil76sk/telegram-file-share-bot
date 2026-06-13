@@ -369,40 +369,70 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
     if action == "approve":
         success = await database.approve_upi(payment_id, admin_id)
         if success:
-            parts = plan_name.split("_")
-            tier = parts[0]
-            duration = parts[1]
-            days = 0
-            if duration == "weekly":
-                days = 7
-            elif duration == "monthly":
-                days = 30
-            elif duration == "lifetime":
+            if plan_name.startswith("prod_"):
+                prod_id = plan_name.split("_")[1]
+                from bson import ObjectId
+                try:
+                    product = await database.get_product_by_id(ObjectId(prod_id))
+                except Exception:
+                    product = None
+
+                if product:
+                    # Issue 7: Prevent duplicate purchases
+                    if not await database.verify_purchase(user_id, product["_id"]):
+                        await database.record_purchase(
+                            user_id=user_id,
+                            product_id=product["_id"],
+                            product_token=product.get("token", ""),
+                            amount_paid=int(amount),
+                            payment_id=payment_id,
+                            status="completed",
+                            files_delivered=product.get("files", [])
+                        )
+                        await database.increment_product_sales(product["_id"])
+
+                    from handlers.marketplace import deliver_product_files
+                    await deliver_product_files(client, user_id, payment, product)
+                else:
+                    await client.send_message(
+                        chat_id=user_id,
+                        text="❌ **UPI Payment Approved, but the product could not be found.** Please contact support."
+                    )
+            else:
+                parts = plan_name.split("_")
+                tier = parts[0]
+                duration = parts[1]
                 days = 0
+                if duration == "weekly":
+                    days = 7
+                elif duration == "monthly":
+                    days = 30
+                elif duration == "lifetime":
+                    days = 0
 
-            await database.set_user_premium(user_id, days, tier)
-            await database.log_access(
-                user_id,
-                token="",
-                action="subscription_activate",
-                method="upi",
-                amount=amount,
-                extra=plan_name,
-            )
-
-            expiry_str = await database.get_premium_expiry_str(user_id)
-            try:
-                await client.send_message(
-                    chat_id=user_id,
-                    text=(
-                        f"🌟 **Premium Membership Activated!** 🌟\n\n"
-                        f"Your UPI payment of **₹{amount}** for the **{tier.capitalize()} {duration.capitalize()}** plan has been approved.\n"
-                        f"Status: **{expiry_str}**\n\n"
-                        f"Thank you for your support!"
-                    ),
+                await database.set_user_premium(user_id, days, tier)
+                await database.log_access(
+                    user_id,
+                    token="",
+                    action="subscription_activate",
+                    method="upi",
+                    amount=amount,
+                    extra=plan_name,
                 )
-            except Exception as e:
-                logger.error(f"Failed to notify user {user_id} of UPI approval: {e}")
+
+                expiry_str = await database.get_premium_expiry_str(user_id)
+                try:
+                    await client.send_message(
+                        chat_id=user_id,
+                        text=(
+                            f"🌟 **Premium Membership Activated!** 🌟\n\n"
+                            f"Your UPI payment of **₹{amount}** for the **{tier.capitalize()} {duration.capitalize()}** plan has been approved.\n"
+                            f"Status: **{expiry_str}**\n\n"
+                            f"Thank you for your support!"
+                        ),
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify user {user_id} of UPI approval: {e}")
 
             await callback_query.answer("✅ UPI Payment Approved!", show_alert=True)
             try:
@@ -419,11 +449,24 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
         success = await database.reject_upi(payment_id, admin_id)
         if success:
             try:
+                clean_plan_name = plan_name
+                if plan_name.startswith("prod_"):
+                    prod_id = plan_name.split("_")[1]
+                    from bson import ObjectId
+                    try:
+                        product = await database.get_product_by_id(ObjectId(prod_id))
+                        if product:
+                            clean_plan_name = product["name"]
+                    except Exception:
+                        pass
+                else:
+                    clean_plan_name = plan_name.replace('_', ' ').title()
+
                 await client.send_message(
                     chat_id=user_id,
                     text=(
                         "❌ **UPI Payment Rejected**\n\n"
-                        f"Your UPI payment verification request for the **{plan_name.replace('_', ' ').title()}** plan was rejected.\n"
+                        f"Your UPI payment verification request for **{clean_plan_name}** was rejected.\n"
                         "Please verify your payment screenshot and try again, or contact support."
                     ),
                 )
@@ -458,7 +501,18 @@ async def upi_pending_command_handler(client: Client, message: Message):
     for payment in pending_list:
         pay_id = str(payment["_id"])
         user_info = f"User ID: `{payment['user_id']}`"
-        plan_desc = f"Plan: `{payment['plan'].replace('_', ' ').title()}`"
+        plan_name = payment["plan"]
+        if plan_name.startswith("prod_"):
+            prod_id = plan_name.split("_")[1]
+            try:
+                from bson import ObjectId
+                product = await database.get_product_by_id(ObjectId(prod_id))
+                plan_desc = f"Product: `{product['name']}`" if product else f"Product ID: `{prod_id}`"
+            except Exception:
+                plan_desc = f"Product ID: `{prod_id}`"
+        else:
+            plan_desc = f"Plan: `{plan_name.replace('_', ' ').title()}`"
+
         amount_desc = f"Amount: `₹{payment['amount_inr']}`"
         created_str = payment["created_at"].strftime("%Y-%m-%d %H:%M:%S UTC")
         

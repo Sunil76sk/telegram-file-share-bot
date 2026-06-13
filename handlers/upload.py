@@ -232,7 +232,28 @@ async def file_uploader(client: Client, message: Message):
     import datetime
 
     pending = await database.get_pending_upi(user_id)
-    if pending and pending.get("screenshot_msg_id") is None:
+    state = user_doc.get("state", "") if user_doc else ""
+    is_awaiting_upi = state.startswith("awaiting_upi_screenshot") or (pending and pending.get("screenshot_msg_id") is None)
+
+    if is_awaiting_upi:
+        is_valid = False
+        if message.photo:
+            is_valid = True
+        elif message.document:
+            file_name = message.document.file_name or ""
+            ext = file_name.split(".")[-1].lower() if "." in file_name else ""
+            if ext in ["jpg", "jpeg", "png"]:
+                is_valid = True
+
+        if not is_valid:
+            await message.reply_text(
+                "❌ **Invalid File Format!**\n\n"
+                "Please upload only image files (`.jpg`, `.jpeg`, `.png`) as UPI payment screenshots.\n"
+                "Files like `.apk`, `.exe`, `.zip`, or `.mp4` are not accepted."
+            )
+            message.stop_propagation()
+            return
+
         file_id = None
         if message.photo:
             file_id = message.photo.file_id
@@ -240,22 +261,47 @@ async def file_uploader(client: Client, message: Message):
             file_id = message.document.file_id
 
         if file_id:
-            payment_id = str(pending["_id"])
+            payment_id = str(pending["_id"]) if pending else state.replace("awaiting_upi_screenshot_", "")
+            payment = await database.get_upi_payment(payment_id)
+            if not payment:
+                payment = pending
+                if not payment:
+                    await message.reply_text("❌ No pending UPI payment found. Please type /premium or /store to checkout.")
+                    await database.users_col.update_one({"_id": user_id}, {"$unset": {"state": ""}})
+                    message.stop_propagation()
+                    return
+                payment_id = str(payment["_id"])
+
             await database.set_upi_screenshot(payment_id, message.id)
+
+            # Clear state
+            await database.users_col.update_one(
+                {"_id": user_id},
+                {"$unset": {"state": ""}}
+            )
 
             await message.reply_text(
                 "✅ **Payment screenshot received!**\n\n"
-                "Our team is verifying the payment details. We will notify you once your premium access is activated."
+                "Our team is verifying the payment details. We will notify you once your purchase/premium access is activated."
             )
 
-            plan_desc = pending["plan"]
-            plan_desc = f"Subscription: {plan_desc.replace('_', ' ').title()}"
+            plan_desc = payment["plan"]
+            if plan_desc.startswith("prod_"):
+                prod_id = plan_desc.replace("prod_", "", 1)
+                try:
+                    from bson import ObjectId
+                    product = await database.get_product_by_id(ObjectId(prod_id))
+                    plan_desc = f"Product: {product['name']}" if product else f"Product ID: {prod_id}"
+                except Exception:
+                    plan_desc = f"Product ID: {prod_id}"
+            else:
+                plan_desc = f"Subscription: {plan_desc.replace('_', ' ').title()}"
 
             admin_msg = (
                 "🔔 **New UPI Payment Submission:**\n\n"
                 f"👤 **User:** {message.from_user.mention} (`{user_id}`)\n"
                 f"📦 **Plan/Item:** `{plan_desc}`\n"
-                f"💰 **Amount:** ₹{pending['amount_inr']}\n"
+                f"💰 **Amount:** ₹{payment['amount_inr']}\n"
                 f"🕒 **Submitted:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 "Please review the attached screenshot and select an action:"
             )
@@ -283,6 +329,7 @@ async def file_uploader(client: Client, message: Message):
                     logger.error(
                         f"Failed to forward UPI screenshot to admin {admin_id}: {e}"
                     )
+            message.stop_propagation()
             return
 
     # Extract file details

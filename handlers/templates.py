@@ -62,12 +62,100 @@ async def load_template_callback_handler(client: Client, callback_query: Callbac
     # Get active draft
     draft = await database.get_post_draft(user_id)
     if not draft:
-        await callback_query.answer("❌ You don't have an active post builder session. Start one with `/newpost` first.", show_alert=True)
+        # Load creator channels
+        channels = await database.get_creator_channels(user_id)
+        if not channels:
+            await callback_query.answer("❌ No channels found! Add a channel first using /add_channel.", show_alert=True)
+            return
+
+        # Save template ID in user state to apply after channel selection
+        await database.users_col.update_one(
+            {"_id": user_id},
+            {"$set": {"state": f"temp_apply_{temp_id}"}}
+        )
+
+        # Ask user to choose channel
+        buttons = []
+        for chan in channels:
+            if chan.get("service_enabled", True):
+                buttons.append([
+                    InlineKeyboardButton(
+                        chan.get("channel_title") or chan.get("title") or str(chan["_id"]),
+                        callback_data=f"temp_select_{chan['_id']}"
+                    )
+                ])
+
+        if not buttons:
+            await callback_query.answer("❌ Please enable at least one channel in settings first.", show_alert=True)
+            return
+
+        await callback_query.message.edit_text(
+            "📝 **Choose Target Channel**\n\n"
+            "Please select the target channel to apply this template to:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
         return
         
     # Apply template to draft
     draft["caption"] = template.get("caption", "")
     draft["buttons"] = template.get("buttons", [])
+    await database.save_post_draft(user_id, draft)
+    
+    await callback_query.answer("✅ Template loaded into your draft!", show_alert=True)
+    await callback_query.message.delete()
+    from handlers.post_builder import show_builder_menu
+    await show_builder_menu(client, callback_query.message, user_id, draft)
+
+
+@app.on_callback_query(filters.regex(r"^temp_select_(.+)"))
+async def temp_select_callback_handler(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    channel_id = callback_query.matches[0].group(1)
+    try:
+        channel_id_val = int(channel_id)
+    except ValueError:
+        channel_id_val = channel_id
+        
+    user_doc = await database.get_user(user_id)
+    state = user_doc.get("state") if user_doc else None
+    if not state or not state.startswith("temp_apply_"):
+        await callback_query.answer("❌ Selection expired. Please start over.", show_alert=True)
+        return
+        
+    temp_id = state.replace("temp_apply_", "", 1)
+    template = await database.get_template(temp_id)
+    if not template:
+        await callback_query.answer("❌ Template not found.", show_alert=True)
+        return
+        
+    # Clear state
+    await database.users_col.update_one(
+        {"_id": user_id},
+        {"$unset": {"state": ""}}
+    )
+    
+    import datetime
+    # Create draft automatically
+    draft = {
+        "draft_id": str(user_id),
+        "user_id": user_id,
+        "channel_id": channel_id_val,
+        "media_type": "text",
+        "file_id": None,
+        "media_files": [],
+        "caption": template.get("caption", ""),
+        "buttons": template.get("buttons", []),
+        "reactions": [],
+        "reactions_enabled": False,
+        "comments": False,
+        "comments_enabled": False,
+        "caption_above": False,
+        "pin": False,
+        "pin_message": False,
+        "poster_url": None,
+        "state": "active",
+        "created_at": datetime.datetime.now(datetime.timezone.utc),
+    }
     await database.save_post_draft(user_id, draft)
     
     await callback_query.answer("✅ Template loaded into your draft!", show_alert=True)

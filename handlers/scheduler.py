@@ -65,7 +65,8 @@ async def scheduler_input_handler(client: Client, message: Message):
                 reactions=draft["reactions"],
                 comments=draft["comments"],
                 pin=draft["pin"],
-                caption_above=draft.get("caption_above", False)
+                caption_above=draft.get("caption_above", False),
+                poster_url=draft.get("poster_url")
             )
             # Update stats
             await database.increment_channel_stat(draft["channel_id"], "scheduled_posts", 1)
@@ -119,7 +120,8 @@ async def scheduler_input_handler(client: Client, message: Message):
                 reactions=draft["reactions"],
                 comments=draft["comments"],
                 pin=draft["pin"],
-                caption_above=draft.get("caption_above", False)
+                caption_above=draft.get("caption_above", False),
+                poster_url=draft.get("poster_url")
             )
             await database.delete_post_draft(user_id)
             await message.reply_text("✅ **Auto Reposting Job created and started successfully!**")
@@ -242,7 +244,8 @@ async def start_scheduler_loop(client: Client):
                     buttons_spec=post.get("buttons", []),
                     reactions=post.get("reactions", []),
                     reaction_counts=None,
-                    comments_url=comments_url
+                    comments_url=comments_url,
+                    poster_url=post.get("poster_url")
                 )
 
                 try:
@@ -281,7 +284,8 @@ async def start_scheduler_loop(client: Client):
                     buttons_spec=job.get("buttons", []),
                     reactions=job.get("reactions", []),
                     reaction_counts=None,
-                    comments_url=comments_url
+                    comments_url=comments_url,
+                    poster_url=job.get("poster_url")
                 )
                 
                 # Delete old message if exists

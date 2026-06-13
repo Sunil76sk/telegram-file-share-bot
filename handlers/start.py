@@ -11,10 +11,12 @@ from utils.helpers import (
     get_not_subscribed_channels,
     is_valid_token,
     send_stars_invoice,
+    banned_filter,
 )
 from utils.locks import user_locks
 from utils.security import verify_password, hash_password
 from utils.delivery import deliver_files
+from utils.movie_download_buttons import get_download_button_config
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +204,79 @@ async def start_handler(client: Client, message: Message):
         else:
             token = token[len("unl_") :]
         bypass_monetization = True
+
+    # Check for deep-linked movie download button configuration
+    if token.startswith("dl_"):
+        config_id = token.replace("dl_", "", 1)
+        btn_config = await get_download_button_config(config_id)
+        if not btn_config:
+            await message.reply_text("❌ Download configuration not found.")
+            message.stop_propagation()
+            return
+
+        # 1. Premium Check
+        if btn_config.get("requires_premium") or btn_config.get("link_type") == "premium":
+            is_premium = await database.is_user_premium(user_id)
+            if not is_premium:
+                await message.reply_text(
+                    "🌟 **Premium Only File** 🌟\n\n"
+                    "This file is reserved for Premium subscribers. Please upgrade to premium to access it!",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🎫 Subscribe to Premium", callback_data="premium_menu_home")]])
+                )
+                message.stop_propagation()
+                return
+
+        # 2. Paid Check
+        price = btn_config.get("price", 0)
+        if price > 0 or btn_config.get("link_type") == "paid":
+            has_unlocked = await database.has_user_unlocked_link(user_id, f"btn_{config_id}")
+            if not has_unlocked:
+                try:
+                    await send_stars_invoice(
+                        client=client,
+                        chat_id=user_id,
+                        title="Unlock Premium Download",
+                        description=f"Pay {price} Stars to permanently unlock access to this download.",
+                        payload=f"unlock_btn_{config_id}",
+                        amount=int(price),
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send unlock invoice for button: {e}")
+                    await message.reply_text("❌ Failed to generate payment invoice. Please try again.")
+                message.stop_propagation()
+                return
+
+        # 3. Password Check
+        password = btn_config.get("password")
+        if (btn_config.get("requires_password") or btn_config.get("link_type") == "password") and password:
+            await database.create_password_entry_session(user_id, f"btn_{config_id}", bypass_monetization=bypass_monetization)
+            await message.reply_text(
+                "🔒 **Password Protected Download**\n\n"
+                "This download is protected by a password. Please enter the password below to proceed."
+            )
+            message.stop_propagation()
+            return
+
+        # 4. Force Join Check
+        not_joined = await get_not_subscribed_channels(client, user_id)
+        if not_joined:
+            buttons = []
+            for index, channel in enumerate(not_joined, start=1):
+                btn_label = "📢 Join Channel" if len(not_joined) == 1 else f"📢 Join Channel {index}"
+                buttons.append([InlineKeyboardButton(btn_label, url=channel["invite_link"])])
+            buttons.append([InlineKeyboardButton("🔄 Try Again", callback_data=f"checksub_dl_{config_id}")])
+            await message.reply_text(
+                "⚠️ **Access Denied!**\n\n"
+                "You must join our channel before you can download this file. Please join the channel below and click Try Again to proceed.",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            message.stop_propagation()
+            return
+
+        # 5. Deliver
+        await deliver_button_config(client, message, btn_config)
+        message.stop_propagation()
+        return
 
     file_doc = await database.get_file_link(token)
 
@@ -453,6 +528,41 @@ async def text_message_handler(client: Client, message: Message):
         if entry_session:
             token = entry_session["code"]
             bypass_monetization = entry_session.get("bypass_monetization", False)
+
+            if token.startswith("btn_"):
+                config_id = token.replace("btn_", "", 1)
+                btn_config = await get_download_button_config(config_id)
+                if not btn_config:
+                    await database.delete_password_entry_session(user_id)
+                    await message.reply_text("❌ The download configuration no longer exists.")
+                    message.stop_propagation()
+                    return
+
+                expected_password = btn_config.get("password")
+                if not expected_password or verify_password(expected_password, text) or expected_password == text:
+                    await database.delete_password_entry_session(user_id)
+
+                    not_joined = await get_not_subscribed_channels(client, user_id)
+                    if not_joined:
+                        buttons = []
+                        for index, channel in enumerate(not_joined, start=1):
+                            btn_label = "📢 Join Channel" if len(not_joined) == 1 else f"📢 Join Channel {index}"
+                            buttons.append([InlineKeyboardButton(btn_label, url=channel["invite_link"])])
+                        buttons.append([InlineKeyboardButton("🔄 Try Again", callback_data=f"checksub_dl_{config_id}")])
+                        await message.reply_text(
+                            "⚠️ **Access Denied!**\n\n"
+                            "Password verified successfully! However, you must join our channel before you can download this file. Please join the channel below and click Try Again to proceed.",
+                            reply_markup=InlineKeyboardMarkup(buttons)
+                        )
+                        message.stop_propagation()
+                        return
+
+                    await deliver_button_config(client, message, btn_config)
+                    message.stop_propagation()
+                else:
+                    await message.reply_text("❌ **Incorrect Password!** Access denied. Please try again.")
+                    message.stop_propagation()
+                return
 
             file_doc = await database.get_file_link(token)
             if not file_doc:
@@ -708,5 +818,72 @@ async def text_message_handler(client: Client, message: Message):
         "💰 Use **/premium** to view subscription plans.\n"
         "🛍 Use **/store** to browse the premium catalog.\n\n"
         "Type **/start** to see all available commands."
+    )
+    message.stop_propagation()
+
+
+async def deliver_button_config(client: Client, message: Message, btn_config: dict):
+    chat_id = message.chat.id
+    file_id = btn_config.get("file_id")
+    link_url = btn_config.get("link_url")
+
+    # Track download click count
+    from utils.movie_download_buttons import increment_download_click
+    await increment_download_click(str(btn_config["_id"]))
+
+    if file_id:
+        file_doc = {
+            "token": f"btn_{btn_config['_id']}",
+            "files": [{"file_id": file_id, "file_name": btn_config.get("name", "File"), "file_size": 0, "media_type": "document"}]
+        }
+        await deliver_files(client, chat_id, file_doc, bypass_monetization=True)
+    elif link_url:
+        await client.send_message(
+            chat_id=chat_id,
+            text=f"📂 **Your Download Link is Ready!**\n\nClick the button below to open your destination:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Open Link", url=link_url)]])
+        )
+
+
+@app.on_message(filters.command("help") & filters.private & ~banned_filter)
+async def help_command_handler(client: Client, message: Message):
+    user_id = message.from_user.id
+    
+    help_text = (
+        "❓ **File Share Bot Help Menu**\n\n"
+        "**Available Commands:**\n"
+        "• `/newpost` — Create a new channel post\n"
+        "• `/templates` — Post Template Studio\n"
+        "• `/schedule` — Manage scheduled posts\n"
+        "• `/reposts` — Manage auto-repost jobs\n"
+        "• `/upload` — Upload single file instructions\n"
+        "• `/batch` — Create combined files batch\n"
+        "• `/stats` — View performance statistics\n"
+        "• `/store` — Browse the premium catalog\n"
+        "• `/premium` — Upgrade to premium membership\n"
+        "• `/referral` — Referral program link & points\n"
+        "• `/settings` — Customize user preferences\n"
+        "• `/help` — Display this help menu"
+    )
+    
+    if await database.is_admin(user_id, client):
+        help_text += (
+            "\n\n🛠 **Admin Commands:**\n"
+            "• `/diag` — Run system health diagnostics\n"
+            "• `/upi_pending` — View pending UPI requests\n"
+            "• `/broadcast` — Send message to all users\n"
+            "• `/shorteners` — Manage URL shorteners"
+        )
+        
+    await message.reply_text(help_text)
+    message.stop_propagation()
+
+
+@app.on_message(filters.command("upload") & filters.private & ~banned_filter)
+async def upload_command_handler(client: Client, message: Message):
+    await message.reply_text(
+        "📤 **How to upload files:**\n\n"
+        "Simply send any file (photo, video, document, audio, animation) directly to me in this chat! "
+        "I will automatically generate a permanent, shareable download link for it."
     )
     message.stop_propagation()

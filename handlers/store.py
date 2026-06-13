@@ -82,11 +82,13 @@ async def store_callback_handler(client: Client, callback_query: CallbackQuery):
 async def show_featured_products(client: Client, msg: Message, user_id: int, edit: bool = False):
     products = await get_featured_products(limit=10)
     text = "⭐ **Featured Products**\n\n"
+    buttons = []
     if products:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
             text += f"{i}. {icon} **{p['name']}** — {p['price']} ⭐️\n"
-        buttons = [[InlineKeyboardButton("🛒 View All", callback_data="store_back")]]
+            buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
         text += "_No featured products yet._"
         buttons = [[InlineKeyboardButton("🔙 Back", callback_data="store_back")]]
@@ -101,11 +103,13 @@ async def show_featured_products(client: Client, msg: Message, user_id: int, edi
 async def show_newest_products(client: Client, msg: Message, user_id: int, edit: bool = False):
     products = await get_newest_products(limit=10)
     text = "🆕 **Newest Products**\n\n"
+    buttons = []
     if products:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
             text += f"{i}. {icon} **{p['name']}** — {p['price']} ⭐️\n"
-        buttons = [[InlineKeyboardButton("🔙 Back", callback_data="store_back")]]
+            buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
         text += "_No products yet._"
         buttons = [[InlineKeyboardButton("🔙 Back", callback_data="store_back")]]
@@ -120,11 +124,13 @@ async def show_newest_products(client: Client, msg: Message, user_id: int, edit:
 async def show_top_products(client: Client, msg: Message, user_id: int, edit: bool = False):
     products = await get_top_selling_products(limit=10)
     text = "🏆 **Top Selling Products**\n\n"
+    buttons = []
     if products:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
             text += f"{i}. {icon} **{p['name']}** — {p['price']} ⭐️ ({p.get('sales_count', 0)} sold)\n"
-        buttons = [[InlineKeyboardButton("🔙 Back", callback_data="store_back")]]
+            buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
         text += "_No sales data yet._"
         buttons = [[InlineKeyboardButton("🔙 Back", callback_data="store_back")]]
@@ -164,12 +170,15 @@ async def store_category_callback_handler(client: Client, callback_query: Callba
         products = []
 
     text = "📂 **Category Products**\n\n"
+    buttons = []
     if products:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
             text += f"{i}. {icon} **{p['name']}** — {p['price']} ⭐️\n"
+            buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
+        buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="store_categories")])
     else:
         text += "_No products in this category._"
+        buttons = [[InlineKeyboardButton("🔙 Back to Categories", callback_data="store_categories")]]
 
-    buttons = [[InlineKeyboardButton("🔙 Back to Categories", callback_data="store_categories")]]
     await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
