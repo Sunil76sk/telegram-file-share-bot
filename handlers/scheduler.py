@@ -255,20 +255,30 @@ async def _process_repost_jobs(client: Client):
 
 # ─── STATE HANDLERS FOR POST BUILDER INTEGRATION ──────────────────────
 
-@app.on_message(filters.private & ~banned_filter, group=6)
+@app.on_message(filters.private & ~banned_filter, group=4)
 async def scheduler_input_handler(client: Client, message: Message):
+    """Handle schedule time, repost interval, and delete gap inputs.
+    
+    Registered in group 4 to run BEFORE builder_input_handler (group 5)
+    so schedule-specific states are processed first.
+    """
     user_id = message.from_user.id
     draft = await database.get_post_draft(user_id)
+    
+    # STATE GUARD: Only process if user is in one of our states
     if not draft or draft.get("state") not in ["awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"]:
-        return
+        return  # Not our message, let other handlers process
 
     state = draft.get("state")
     text = message.text.strip() if message.text else ""
+    
+    logger.info(f"[scheduler_input_handler] user={user_id} state={state} text={text[:30]}")
 
     if text.lower() == "/cancel":
         await database.delete_post_draft(user_id)
         await message.reply_text("Post builder session cancelled.")
-        message.stop_propagation()
+        logger.info(f"[scheduler_input_handler] Cancelled session for user {user_id}")
+        message.stop_propagation()  # Stop here - we handled it
         return
 
     # 1. Parse Schedule Time (timezone-aware)

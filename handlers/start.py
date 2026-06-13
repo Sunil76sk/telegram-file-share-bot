@@ -499,7 +499,7 @@ async def text_message_handler(client: Client, message: Message):
         "awaiting_media", "awaiting_caption", "awaiting_buttons", "awaiting_reactions",
         "awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"
     ]:
-        logger.info("[text_message_handler]\ndraft exists=True\nstate=awaiting_caption\nACTION=bypass")
+        logger.info(f"[text_message_handler] draft exists=True state={draft_state} ACTION=bypass")
         return
     else:
         logger.info(f"[text_message_handler]\ndraft exists={draft_exists}\nstate={draft_state}\nACTION=send_welcome")
