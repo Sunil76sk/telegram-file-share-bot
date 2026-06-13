@@ -98,7 +98,7 @@ async def load_template_callback_handler(client: Client, callback_query: Callbac
         
     # Apply template to draft
     draft["caption"] = template.get("caption", "")
-    draft["buttons"] = template.get("buttons", [])
+    draft["custom_buttons"] = template.get("buttons", [])
     await database.save_post_draft(user_id, draft)
     
     await callback_query.answer("✅ Template loaded into your draft!", show_alert=True)
@@ -144,15 +144,21 @@ async def temp_select_callback_handler(client: Client, callback_query: CallbackQ
         "file_id": None,
         "media_files": [],
         "caption": template.get("caption", ""),
-        "buttons": template.get("buttons", []),
+        "custom_buttons": template.get("buttons", []),
         "reactions": [],
         "reactions_enabled": False,
-        "comments": False,
         "comments_enabled": False,
         "caption_above": False,
-        "pin": False,
         "pin_message": False,
-        "poster_url": None,
+        "poster_media": {"type": None, "file_id": None},
+        "download_files": [],
+        "layout_type": "layout_a",
+        "timezone": "Asia/Kolkata",
+        "schedule_enabled": False,
+        "scheduled_time": None,
+        "auto_repost_enabled": False,
+        "repost_interval": None,
+        "delete_gap": None,
         "state": "active",
         "created_at": datetime.datetime.now(datetime.timezone.utc),
     }

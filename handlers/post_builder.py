@@ -6,6 +6,7 @@ import re
 from zoneinfo import ZoneInfo
 
 from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import (
     Message,
     InlineKeyboardMarkup,
@@ -419,7 +420,22 @@ async def builder_input_handler(client: Client, message: Message):
 
     # ── awaiting_reactions ──
     if state == "awaiting_reactions":
-        reactions = [r.strip() for r in text.split() if r.strip()]
+        import unicodedata
+        raw = [r.strip() for r in text.split() if r.strip()]
+        reactions = []
+        for r in raw:
+            if len(r) <= 8 and all(
+                unicodedata.category(c).startswith(("So", "Sk", "Sm", "Sc"))
+                or unicodedata.category(c).startswith("M")
+                or unicodedata.category(c).startswith("L")
+                or c in ("\ufe0f", "\ufe0e", "\u200d", "\u20e3")
+                for c in r
+            ):
+                reactions.append(r)
+            else:
+                await message.reply_text(f"Invalid emoji skipped: `{r}`\nPlease send valid emojis only.")
+                message.stop_propagation()
+                return
         is_premium = await database.is_user_premium(user_id)
         allowed_free = ["\u2764\ufe0f", "\ud83d\udd25", "\u26a1", "\ud83d\udc4d", "\ud83d\ude02", "\ud83c\udf89"]
         if not is_premium:
@@ -600,53 +616,58 @@ async def show_builder_menu(client: Client, message: Message, user_id: int, draf
     channel = await database.get_channel_by_id(draft["channel_id"])
     channel_title = channel.get("channel_title") if channel else str(draft["channel_id"])
     poster = draft.get("poster_media") or {}
-    poster_type = poster.get("type") or "None"
-    layout = draft.get("layout_type", "layout_a")
+    poster_type = poster.get("type")
+    has_poster = poster_type is not None and poster.get("file_id") is not None
     dl_count = len(draft.get("download_files", []))
     btn_count = len(draft.get("custom_buttons", []))
-    reactions_str = " ".join(draft.get("reactions", [])) or "Disabled"
+    reactions = draft.get("reactions", [])
     comments_on = draft.get("comments_enabled", False)
     pin_on = draft.get("pin_message", False)
+    caption = draft.get("caption", "")
+
+    poster_status = f"{poster_type.upper()}" if has_poster else "None"
+    caption_status = f"{len(caption)} chars" if caption else "None"
+    reactions_status = " ".join(reactions) if reactions else "Disabled"
+    comments_status = "Enabled" if comments_on else "Disabled"
+    pin_status = "Enabled" if pin_on else "Disabled"
 
     menu_text = (
-        f"Post Builder Menu\n\n"
-        f"Channel: {channel_title}\n"
-        f"Media: {draft['media_type'].upper()}\n"
-        f"Caption: {len(draft.get('caption', ''))} chars\n"
-        f"Poster: {poster_type}\n"
-        f"Layout: {layout.upper()}\n"
-        f"Downloads: {dl_count}\n"
-        f"Buttons: {btn_count} rows\n"
-        f"Reactions: {reactions_str}\n"
-        f"Comments: {'On' if comments_on else 'Off'}\n"
-        f"Pin: {'On' if pin_on else 'Off'}\n\n"
-        f"Configure your post:"
+        f"POST BUILDER\n\n"
+        f"Channel: {channel_title}\n\n"
+        f"Poster: {poster_status}\n"
+        f"Caption: {caption_status}\n"
+        f"Downloads: {dl_count} Files\n"
+        f"Buttons: {btn_count}\n"
+        f"Reactions: {reactions_status}\n"
+        f"Comments: {comments_status}\n"
+        f"Pin Post: {pin_status}\n\n"
+        f"Select Action:"
     )
 
     keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("Edit Caption", callback_data="build_btn_caption"),
             InlineKeyboardButton("Poster", callback_data="build_btn_poster"),
+            InlineKeyboardButton("Caption", callback_data="build_btn_caption"),
         ],
         [
-            InlineKeyboardButton("URL Buttons", callback_data="build_btn_buttons"),
+            InlineKeyboardButton("Downloads", callback_data="build_btn_download_files"),
+            InlineKeyboardButton("Buttons", callback_data="build_btn_buttons"),
+        ],
+        [
             InlineKeyboardButton("Reactions", callback_data="build_btn_reactions"),
+            InlineKeyboardButton("Comments", callback_data="build_btn_comments"),
         ],
         [
-            InlineKeyboardButton(f"Comments: {'On' if comments_on else 'Off'}", callback_data="build_btn_comments"),
-            InlineKeyboardButton(f"Layout: {layout.upper()}", callback_data="build_btn_layout"),
-        ],
-        [
-            InlineKeyboardButton(f"Pin: {'On' if pin_on else 'Off'}", callback_data="build_btn_pin"),
-            InlineKeyboardButton("Download Files", callback_data="build_btn_download_files"),
+            InlineKeyboardButton("Layout", callback_data="build_btn_layout"),
+            InlineKeyboardButton("Pin", callback_data="build_btn_pin"),
         ],
         [
             InlineKeyboardButton("Preview", callback_data="build_btn_preview"),
-            InlineKeyboardButton("Send Now", callback_data="build_btn_send"),
+            InlineKeyboardButton("Publish", callback_data="build_btn_send"),
         ],
         [
             InlineKeyboardButton("Schedule", callback_data="build_btn_schedule"),
-            InlineKeyboardButton("Auto Repost", callback_data="build_btn_repost"),
+            InlineKeyboardButton("Repost", callback_data="build_btn_repost"),
         ],
         [
             InlineKeyboardButton("Cancel", callback_data="build_btn_cancel"),
@@ -846,9 +867,11 @@ async def builder_menu_callback_handler(client: Client, callback_query: Callback
             await client.send_message(user_id, "Post sent successfully!")
             await database.delete_post_draft(user_id)
         else:
+            import traceback
+            logger.error(f"Send post failed for user {user_id}: {error_msg}")
             await client.send_message(
                 user_id,
-                f"Failed to send post.\n\nError: `{error_msg}`\n\nCheck bot permissions in the channel.",
+                f"Publish failed:\n\n`{error_msg}`",
             )
 
     # ── schedule ──
@@ -1044,7 +1067,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     chat_id=user_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 await client.send_photo(
                     chat_id=user_id,
@@ -1056,7 +1079,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     photo=poster_file_id,
                     caption=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 await client.send_photo(
@@ -1071,7 +1094,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     chat_id=user_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 await client.send_video(
                     chat_id=user_id,
@@ -1083,7 +1106,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     video=poster_file_id,
                     caption=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 await client.send_video(
@@ -1097,7 +1120,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                 chat_id=user_id,
                 text=build_telegram_caption_html(caption) if caption else "",
                 reply_markup=reply_markup,
-                parse_mode="html",
+                parse_mode=ParseMode.HTML,
             )
 
         elif media_type == "album":
@@ -1113,7 +1136,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     chat_id=user_id,
                     text=build_telegram_caption_html(caption or ""),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
 
         elif media_type in ("photo",) and file_id:
@@ -1122,7 +1145,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     chat_id=user_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 await client.send_cached_media(chat_id=user_id, file_id=file_id)
             elif caption:
@@ -1131,7 +1154,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     file_id=file_id,
                     caption=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 await client.send_cached_media(chat_id=user_id, file_id=file_id)
@@ -1142,7 +1165,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     chat_id=user_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 await client.send_cached_media(chat_id=user_id, file_id=file_id)
             elif caption:
@@ -1151,7 +1174,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     file_id=file_id,
                     caption=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 await client.send_cached_media(chat_id=user_id, file_id=file_id)
@@ -1162,7 +1185,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                 file_id=file_id,
                 caption=build_telegram_caption_html(caption) if caption else "",
                 reply_markup=reply_markup,
-                parse_mode="html" if caption else None,
+                parse_mode=ParseMode.HTML if caption else None,
             )
 
         else:
@@ -1171,7 +1194,7 @@ async def show_post_preview(client: Client, user_id: int, draft: dict):
                     chat_id=user_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
 
     except Exception as e:
@@ -1218,7 +1241,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     chat_id=channel_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 msg = await client.send_photo(
                     chat_id=channel_id,
@@ -1230,7 +1253,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     photo=poster_file_id,
                     caption=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 msg = await client.send_photo(
@@ -1245,7 +1268,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     chat_id=channel_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 msg = await client.send_video(
                     chat_id=channel_id,
@@ -1257,7 +1280,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     video=poster_file_id,
                     caption=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 msg = await client.send_video(
@@ -1271,7 +1294,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                 chat_id=channel_id,
                 text=build_telegram_caption_html(caption) if caption else "",
                 reply_markup=reply_markup,
-                parse_mode="html",
+                parse_mode=ParseMode.HTML,
             )
 
         elif media_type == "album":
@@ -1287,7 +1310,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                 chat_id=channel_id,
                 text=build_telegram_caption_html(caption or ""),
                 reply_markup=reply_markup,
-                parse_mode="html",
+                parse_mode=ParseMode.HTML,
             )
 
         elif media_type in ("photo",) and file_id:
@@ -1296,7 +1319,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     chat_id=channel_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 msg = await client.send_cached_media(chat_id=channel_id, file_id=file_id)
             elif caption:
@@ -1305,7 +1328,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     file_id=file_id,
                     caption=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 msg = await client.send_cached_media(chat_id=channel_id, file_id=file_id)
@@ -1316,7 +1339,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     chat_id=channel_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 msg = await client.send_cached_media(chat_id=channel_id, file_id=file_id)
             elif caption:
@@ -1325,7 +1348,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     file_id=file_id,
                     caption=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 msg = await client.send_cached_media(chat_id=channel_id, file_id=file_id)
@@ -1336,7 +1359,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                 file_id=file_id,
                 caption=build_telegram_caption_html(caption) if caption else "",
                 reply_markup=reply_markup,
-                parse_mode="html" if caption else None,
+                parse_mode=ParseMode.HTML if caption else None,
             )
 
         else:
@@ -1345,7 +1368,7 @@ async def send_post_now(client: Client, user_id: int, draft: dict) -> tuple[bool
                     chat_id=channel_id,
                     text=build_telegram_caption_html(caption),
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
 
         if draft.get("pin_message") and msg:

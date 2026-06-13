@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pyrogram.enums import ParseMode
 from pyrogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
@@ -57,7 +58,7 @@ async def render_post(
         "media_type": media_type,
         "caption": parsed_caption,
         "reply_markup": reply_markup,
-        "parse_mode": "html",
+        "parse_mode": ParseMode.HTML,
     }
 
     if media_type == "text":
@@ -115,7 +116,7 @@ async def render_preview(
             chat_id=user_id,
             text=result["caption"],
             reply_markup=result["reply_markup"],
-            parse_mode="html",
+            parse_mode=ParseMode.HTML,
         )
     elif media_type == "album" and result.get("media"):
         if media_files:
@@ -129,7 +130,7 @@ async def render_preview(
             chat_id=user_id,
             text=result["caption"],
             reply_markup=result["reply_markup"],
-            parse_mode="html",
+            parse_mode=ParseMode.HTML,
         )
     else:
         if caption_above:
@@ -137,7 +138,7 @@ async def render_preview(
                 chat_id=user_id,
                 text=result["caption"],
                 reply_markup=result["reply_markup"],
-                parse_mode="html",
+                parse_mode=ParseMode.HTML,
             )
             await client.send_cached_media(chat_id=user_id, file_id=file_id)
         else:
@@ -146,7 +147,7 @@ async def render_preview(
                 file_id=file_id,
                 caption=result["caption"],
                 reply_markup=result["reply_markup"],
-                parse_mode="html",
+                parse_mode=ParseMode.HTML,
             )
 
     return result
@@ -175,7 +176,7 @@ async def send_post(
                 chat_id=chat_id,
                 text=parsed_caption,
                 reply_markup=reply_markup,
-                parse_mode="html",
+                parse_mode=ParseMode.HTML,
             )
         elif media_type == "album":
             media_list = []
@@ -191,7 +192,7 @@ async def send_post(
                 chat_id=chat_id,
                 text=parsed_caption or "👇",
                 reply_markup=reply_markup,
-                parse_mode="html",
+                parse_mode=ParseMode.HTML,
             )
         else:
             if caption_above:
@@ -199,7 +200,7 @@ async def send_post(
                     chat_id=chat_id,
                     text=parsed_caption,
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
                 await client.send_cached_media(chat_id=chat_id, file_id=file_id)
             else:
@@ -208,7 +209,7 @@ async def send_post(
                     file_id=file_id,
                     caption=parsed_caption,
                     reply_markup=reply_markup,
-                    parse_mode="html",
+                    parse_mode=ParseMode.HTML,
                 )
     except Exception as e:
         logger.error(f"Failed to send post to {chat_id}: {e}")

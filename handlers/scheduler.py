@@ -4,12 +4,14 @@ import logging
 import asyncio
 import datetime
 from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram.errors import FloodWait
 from bot import app
 import config
 import database
 from utils.helpers import banned_filter
+from utils.caption_builder import build_telegram_caption_html
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ async def _process_scheduled_posts(client: Client):
 
             reply_markup = build_post_keyboard(
                 layout_type=layout_type,
-                download_files=download_files,
+                download_configs=download_files,
                 custom_buttons=custom_buttons,
                 reactions=post.get("reactions", []),
                 comments_url=comments_url,
@@ -91,35 +93,42 @@ async def _process_scheduled_posts(client: Client):
 
             poster_type = poster_media.get("type") if poster_media else None
             poster_fid = poster_media.get("file_id") if poster_media else None
+            parsed_caption = build_telegram_caption_html(caption) if caption else ""
 
             if poster_type == "photo":
                 msg = await client.send_photo(
                     chat_id=channel_id, photo=poster_fid,
-                    caption=caption, reply_markup=reply_markup,
+                    caption=parsed_caption, reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML if parsed_caption else None,
                 )
             elif poster_type == "video":
                 msg = await client.send_video(
                     chat_id=channel_id, video=poster_fid,
-                    caption=caption, reply_markup=reply_markup,
+                    caption=parsed_caption, reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML if parsed_caption else None,
                 )
             elif post.get("media_type") == "text":
                 msg = await client.send_message(
-                    chat_id=channel_id, text=caption, reply_markup=reply_markup,
+                    chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML if parsed_caption else None,
                 )
             else:
                 if post.get("caption_above") and post.get("file_id"):
                     msg = await client.send_message(
-                        chat_id=channel_id, text=caption, reply_markup=reply_markup,
+                        chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
+                        parse_mode=ParseMode.HTML if parsed_caption else None,
                     )
                     await client.send_cached_media(chat_id=channel_id, file_id=post["file_id"])
                 elif post.get("file_id"):
                     msg = await client.send_cached_media(
                         chat_id=channel_id, file_id=post["file_id"],
-                        caption=caption, reply_markup=reply_markup,
+                        caption=parsed_caption, reply_markup=reply_markup,
+                        parse_mode=ParseMode.HTML if parsed_caption else None,
                     )
                 else:
                     msg = await client.send_message(
-                        chat_id=channel_id, text=caption, reply_markup=reply_markup,
+                        chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
+                        parse_mode=ParseMode.HTML if parsed_caption else None,
                     )
 
             if post.get("pin") and msg:
@@ -164,7 +173,7 @@ async def _process_repost_jobs(client: Client):
 
             reply_markup = build_post_keyboard(
                 layout_type=layout_type,
-                download_files=download_files,
+                download_configs=download_files,
                 custom_buttons=custom_buttons,
                 reactions=job.get("reactions", []),
                 comments_url=comments_url,
@@ -186,35 +195,42 @@ async def _process_repost_jobs(client: Client):
             # Send new message
             poster_type = poster_media.get("type") if poster_media else None
             poster_fid = poster_media.get("file_id") if poster_media else None
+            parsed_caption = build_telegram_caption_html(caption) if caption else ""
 
             if poster_type == "photo":
                 msg = await client.send_photo(
                     chat_id=channel_id, photo=poster_fid,
-                    caption=caption, reply_markup=reply_markup,
+                    caption=parsed_caption, reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML if parsed_caption else None,
                 )
             elif poster_type == "video":
                 msg = await client.send_video(
                     chat_id=channel_id, video=poster_fid,
-                    caption=caption, reply_markup=reply_markup,
+                    caption=parsed_caption, reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML if parsed_caption else None,
                 )
             elif job.get("media_type") == "text":
                 msg = await client.send_message(
-                    chat_id=channel_id, text=caption, reply_markup=reply_markup,
+                    chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML if parsed_caption else None,
                 )
             else:
                 if job.get("caption_above") and job.get("file_id"):
                     msg = await client.send_message(
-                        chat_id=channel_id, text=caption, reply_markup=reply_markup,
+                        chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
+                        parse_mode=ParseMode.HTML if parsed_caption else None,
                     )
                     await client.send_cached_media(chat_id=channel_id, file_id=job["file_id"])
                 elif job.get("file_id"):
                     msg = await client.send_cached_media(
                         chat_id=channel_id, file_id=job["file_id"],
-                        caption=caption, reply_markup=reply_markup,
+                        caption=parsed_caption, reply_markup=reply_markup,
+                        parse_mode=ParseMode.HTML if parsed_caption else None,
                     )
                 else:
                     msg = await client.send_message(
-                        chat_id=channel_id, text=caption, reply_markup=reply_markup,
+                        chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
+                        parse_mode=ParseMode.HTML if parsed_caption else None,
                     )
 
             if job.get("pin") and msg:
