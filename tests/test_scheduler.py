@@ -131,3 +131,28 @@ class TestAutoRepost:
         delete_gap = 10
         assert isinstance(delete_gap, int)
         assert delete_gap >= 0
+
+
+class TestSchedulerLocalization:
+    """Test scheduler input localization and DST boundaries."""
+
+    def test_dst_localization(self):
+        """Test that pytz localization correctly handles DST transitions (unlike replace)."""
+        import pytz
+        
+        # Naive datetime in Summer (DST active in Europe/London)
+        naive_dst = datetime.datetime(2026, 6, 15, 12, 0)
+        
+        # Localize using pytz
+        london_tz = pytz.timezone("Europe/London")
+        aware_dst = london_tz.localize(naive_dst)
+        
+        # Europe/London is UTC+1 in June
+        assert aware_dst.utcoffset() == datetime.timedelta(hours=1)
+        
+        # Naive datetime in Winter (No DST in Europe/London)
+        naive_standard = datetime.datetime(2026, 12, 15, 12, 0)
+        aware_standard = london_tz.localize(naive_standard)
+        
+        # Europe/London is UTC+0 in December
+        assert aware_standard.utcoffset() == datetime.timedelta(hours=0)

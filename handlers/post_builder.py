@@ -307,6 +307,12 @@ async def builder_input_handler(client: Client, message: Message):
         return
 
     state = draft.get("state")
+    
+    # CRITICAL: Do not steal scheduler's messages
+    if state in ["awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"]:
+        message.continue_propagation()
+        return
+
     valid_states = [
         "awaiting_media",
         "awaiting_caption",

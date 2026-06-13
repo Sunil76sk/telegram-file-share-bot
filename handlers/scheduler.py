@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import asyncio
 import datetime
+import pytz
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -269,9 +270,13 @@ async def scheduler_input_handler(client: Client, message: Message):
     if not draft or draft.get("state") not in ["awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"]:
         return  # Not our message, let other handlers process
 
-    state = draft.get("state")
     text = message.text.strip() if message.text else ""
     
+    # Allow commands (excluding /cancel) to pass through to command handlers
+    if text.startswith("/") and text.lower() != "/cancel":
+        return
+
+    state = draft.get("state")
     logger.info(f"[scheduler_input_handler] user={user_id} state={state} text={text[:30]}")
 
     if text.lower() == "/cancel":
@@ -283,15 +288,7 @@ async def scheduler_input_handler(client: Client, message: Message):
 
     # 1. Parse Schedule Time (timezone-aware)
     if state == "awaiting_schedule_time":
-        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-        user_doc = await database.get_user(user_id)
-        user_tz = (user_doc or {}).get("timezone", "Asia/Kolkata")
-
-        try:
-            tz = ZoneInfo(user_tz)
-        except (ZoneInfoNotFoundError, KeyError):
-            tz = ZoneInfo("Asia/Kolkata")
+        user_tz_str = draft.get("timezone") or (await database.get_user(user_id) or {}).get("timezone", "Asia/Kolkata")
 
         try:
             # Parse user input as naive datetime
@@ -313,24 +310,29 @@ async def scheduler_input_handler(client: Client, message: Message):
                     "❌ **Invalid format!**\n\n"
                     "Send time in format: `YYYY-MM-DD HH:MM`\n"
                     "Example: `2026-06-15 14:30`\n\n"
-                    f"Your timezone: {user_tz}"
+                    f"Your timezone: {user_tz_str}"
                 )
                 message.stop_propagation()
                 return
 
             # Localize to user's timezone (naive → aware)
-            scheduled_aware = scheduled_naive.replace(tzinfo=tz)
+            try:
+                user_tz = pytz.timezone(user_tz_str)
+            except pytz.UnknownTimeZoneError:
+                user_tz = pytz.timezone("Asia/Kolkata")
+            
+            scheduled_aware = user_tz.localize(scheduled_naive)
             
             # Convert to UTC for storage and comparison
-            scheduled_utc = scheduled_aware.astimezone(datetime.timezone.utc)
-            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            scheduled_utc = scheduled_aware.astimezone(pytz.utc)
+            now_utc = datetime.datetime.now(pytz.utc)
 
             # Validate: must be in future
             if scheduled_utc <= now_utc:
-                now_in_tz = now_utc.astimezone(tz)
+                now_in_tz = now_utc.astimezone(user_tz)
                 await message.reply_text(
                     f"❌ **Time is in the past!**\n\n"
-                    f"Current time: `{now_in_tz.strftime('%Y-%m-%d %H:%M')} {user_tz}`\n"
+                    f"Current time: `{now_in_tz.strftime('%Y-%m-%d %H:%M')} {user_tz_str}`\n"
                     f"Please enter a future time."
                 )
                 message.stop_propagation()
@@ -340,11 +342,11 @@ async def scheduler_input_handler(client: Client, message: Message):
             is_premium = await database.is_user_premium(user_id)
             max_future_utc = now_utc + datetime.timedelta(days=1)
             if not is_premium and scheduled_utc > max_future_utc:
-                max_future_tz = max_future_utc.astimezone(tz)
+                max_future_tz = max_future_utc.astimezone(user_tz)
                 await message.reply_text(
                     "⏰ **Advanced Scheduling is a Premium Feature!**\n\n"
                     "Free creators can only schedule posts up to **24 hours in advance**.\n\n"
-                    f"Max allowed: `{max_future_tz.strftime('%Y-%m-%d %H:%M')} {user_tz}`\n"
+                    f"Max allowed: `{max_future_tz.strftime('%Y-%m-%d %H:%M')} {user_tz_str}`\n"
                     "Upgrade to Premium with `/premium` for unlimited scheduling."
                 )
                 message.stop_propagation()
@@ -352,9 +354,9 @@ async def scheduler_input_handler(client: Client, message: Message):
 
             # Format display time in user's timezone
             try:
-                tz_abbrev = tz.tzname(scheduled_aware) or user_tz.split("/")[-1]
+                tz_abbrev = user_tz.tzname(scheduled_aware) or user_tz_str.split("/")[-1]
             except Exception:
-                tz_abbrev = user_tz.split("/")[-1]
+                tz_abbrev = user_tz_str.split("/")[-1]
 
             display_time = scheduled_aware.strftime("%Y-%m-%d %I:%M %p")
 
