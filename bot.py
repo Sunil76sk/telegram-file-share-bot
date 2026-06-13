@@ -65,6 +65,7 @@ import handlers.settings  # noqa: E402
 import handlers.store  # noqa: E402
 import handlers.movie_search  # noqa: E402
 import handlers.marketplace  # noqa: E402
+import handlers.help  # noqa: E402
 
 from utils.worker_framework import register_worker, start_workers, recover_workers, stop_workers  # noqa: E402
 from utils.queue_system import register_handler, recover_interrupted_tasks, process_queue  # noqa: E402
@@ -124,8 +125,8 @@ async def custom_start():
     asyncio.create_task(expiry_worker())
     from utils.ads_engine import ads_scheduler_worker
     asyncio.create_task(ads_scheduler_worker(app))
-    from handlers.scheduler import start_scheduler_loop
-    asyncio.create_task(start_scheduler_loop(app))
+    from handlers.scheduler import init_scheduler
+    await init_scheduler(app)
 
     # Recover from any previous crashes or interruptions
     await recover_from_crash()
@@ -205,6 +206,8 @@ original_stop = app.stop
 
 
 async def custom_stop():
+    from handlers.scheduler import stop_scheduler
+    await stop_scheduler()
     await stop_workers()
     stop_web_server()
     await original_stop()

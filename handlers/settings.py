@@ -15,6 +15,15 @@ from utils.multi_lang import get_supported_languages, set_user_lang, get_user_la
 
 logger = logging.getLogger(__name__)
 
+TIMEZONES = {
+    "Asia/Kolkata": "IST (UTC+5:30)",
+    "Asia/Dubai": "GST (UTC+4)",
+    "Asia/Singapore": "SGT (UTC+8)",
+    "Europe/London": "GMT/BST",
+    "America/New_York": "EST/EDT",
+    "America/Los_Angeles": "PST/PDT",
+}
+
 
 @app.on_message(filters.command("settings") & filters.private & ~banned_filter)
 async def settings_command_handler(client: Client, message: Message):
@@ -28,10 +37,13 @@ async def show_settings_menu(client: Client, msg: Message, user_id: int):
     lang = await get_user_lang(user_id) or "en"
     is_premium = await database.is_user_premium(user_id)
     points = await database.get_user_points(user_id)
+    user_tz = (user or {}).get("timezone", "Asia/Kolkata")
+    tz_label = TIMEZONES.get(user_tz, user_tz)
 
     text = (
         "⚙️ **User Settings**\n\n"
         f"🌐 **Language:** `{lang.upper()}`\n"
+        f"🌍 **Timezone:** `{tz_label}`\n"
         f"🔔 **Notifications:** {'Enabled' if notif_prefs else 'Disabled'}\n"
         f"⭐ **Premium:** {'Yes' if is_premium else 'No'}\n"
         f"💰 **Points:** `{points}`\n\n"
@@ -40,6 +52,7 @@ async def show_settings_menu(client: Client, msg: Message, user_id: int):
 
     buttons = InlineKeyboardMarkup([
         [InlineKeyboardButton("🌐 Language", callback_data="settings_lang")],
+        [InlineKeyboardButton("🌍 Timezone", callback_data="settings_tz")],
         [InlineKeyboardButton(f"🔔 Notifications: {'✅' if notif_prefs else '❌'}", callback_data="settings_notif")],
         [InlineKeyboardButton("🎫 Premium / Subscription", callback_data="premium_menu_home")],
         [InlineKeyboardButton("👥 Referral Program", callback_data="settings_referral")],
@@ -50,7 +63,7 @@ async def show_settings_menu(client: Client, msg: Message, user_id: int):
     await msg.reply_text(text, reply_markup=buttons)
 
 
-@app.on_callback_query(filters.regex(r"^settings_(lang|notif|referral|channels|autodel|menu)"))
+@app.on_callback_query(filters.regex(r"^settings_(lang|tz|notif|referral|channels|autodel|menu)$"))
 async def settings_callback_handler(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     action = callback_query.matches[0].group(1)
@@ -65,6 +78,18 @@ async def settings_callback_handler(client: Client, callback_query: CallbackQuer
         await callback_query.message.edit_text(
             "🌐 **Select Language**",
             reply_markup=InlineKeyboardMarkup(kb),
+        )
+
+    elif action == "tz":
+        await callback_query.answer()
+        buttons = []
+        for tz, label in TIMEZONES.items():
+            buttons.append([InlineKeyboardButton(label, callback_data=f"settz_{tz}")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="settings_menu")])
+        await callback_query.message.edit_text(
+            "🌍 **Select Your Timezone**\n\n"
+            "This is used for scheduling posts at your local time.",
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
 
     elif action == "notif":
@@ -101,6 +126,22 @@ async def settings_callback_handler(client: Client, callback_query: CallbackQuer
     elif action == "menu":
         await callback_query.answer()
         await show_settings_menu(client, callback_query.message, user_id)
+
+
+@app.on_callback_query(filters.regex(r"^settz_(.+)$"))
+async def set_timezone_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    tz = callback_query.matches[0].group(1)
+    if tz not in TIMEZONES:
+        await callback_query.answer("Invalid timezone.", show_alert=True)
+        return
+    await database.users_col.update_one(
+        {"_id": user_id},
+        {"$set": {"timezone": tz}},
+        upsert=True,
+    )
+    await callback_query.answer(f"Timezone set to {TIMEZONES[tz]}!", show_alert=True)
+    await show_settings_menu(client, callback_query.message, user_id)
 
 
 @app.on_callback_query(filters.regex(r"^setlang_([a-z]{2}(_[A-Z]{2})?)$"))

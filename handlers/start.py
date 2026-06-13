@@ -845,40 +845,6 @@ async def deliver_button_config(client: Client, message: Message, btn_config: di
         )
 
 
-@app.on_message(filters.command("help") & filters.private & ~banned_filter)
-async def help_command_handler(client: Client, message: Message):
-    user_id = message.from_user.id
-    
-    help_text = (
-        "❓ **File Share Bot Help Menu**\n\n"
-        "**Available Commands:**\n"
-        "• `/newpost` — Create a new channel post\n"
-        "• `/templates` — Post Template Studio\n"
-        "• `/schedule` — Manage scheduled posts\n"
-        "• `/reposts` — Manage auto-repost jobs\n"
-        "• `/upload` — Upload single file instructions\n"
-        "• `/batch` — Create combined files batch\n"
-        "• `/stats` — View performance statistics\n"
-        "• `/store` — Browse the premium catalog\n"
-        "• `/premium` — Upgrade to premium membership\n"
-        "• `/referral` — Referral program link & points\n"
-        "• `/settings` — Customize user preferences\n"
-        "• `/help` — Display this help menu"
-    )
-    
-    if await database.is_admin(user_id, client):
-        help_text += (
-            "\n\n🛠 **Admin Commands:**\n"
-            "• `/diag` — Run system health diagnostics\n"
-            "• `/upi_pending` — View pending UPI requests\n"
-            "• `/broadcast` — Send message to all users\n"
-            "• `/shorteners` — Manage URL shorteners"
-        )
-        
-    await message.reply_text(help_text)
-    message.stop_propagation()
-
-
 @app.on_message(filters.command("upload") & filters.private & ~banned_filter)
 async def upload_command_handler(client: Client, message: Message):
     await message.reply_text(

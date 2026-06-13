@@ -1,7 +1,11 @@
 import os
 from dotenv import load_dotenv
-import pyrogram.utils
-pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
+
+try:
+    import pyrogram.utils
+    pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
+except (AttributeError, ImportError):
+    pass
 
 # Load environmental variables from .env file
 load_dotenv()
@@ -146,6 +150,9 @@ SAAS_AGENCY_PRICE = get_env_int("SAAS_AGENCY_PRICE", 4999)
 SAAS_UPI_ID = os.getenv("SAAS_UPI_ID")
 if not SAAS_UPI_ID or SAAS_UPI_ID.strip() == "":
     SAAS_UPI_ID = UPI_ID
+
+# Scheduler Timezone
+SCHEDULER_TIMEZONE = os.getenv("SCHEDULER_TIMEZONE", "UTC")
 
 # Runtime-populated: set by bot.py on startup
 BOT_USERNAME: str = ""

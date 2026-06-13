@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import uuid
 from typing import Any
 
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -61,12 +62,55 @@ async def create_download_button_config(
     return str(result.inserted_id)
 
 
+async def create_uuid_download_config(
+    user_id: int,
+    name: str,
+    button_label: str,
+    link_type: str,
+    link_url: str = "",
+    file_id: str | None = None,
+    requires_premium: bool = False,
+    requires_password: bool = False,
+    password: str | None = None,
+    price: float | None = None,
+) -> tuple[str, str]:
+    """Create download button config with UUID token (never predictable IDs).
+
+    Returns (token, config_id).
+    """
+    token = f"dl_{uuid.uuid4().hex[:16]}"
+    doc = {
+        "token": token,
+        "user_id": user_id,
+        "name": name,
+        "button_label": button_label,
+        "link_type": link_type,
+        "link_url": link_url,
+        "file_id": file_id,
+        "requires_premium": requires_premium,
+        "requires_password": requires_password,
+        "password": password,
+        "price": price,
+        "click_count": 0,
+        "created_at": datetime.datetime.now(datetime.timezone.utc),
+        "updated_at": datetime.datetime.now(datetime.timezone.utc),
+    }
+    result = await DOWNLOAD_BUTTONS_COL.insert_one(doc)
+    logger.info(f"UUID download config created: {name} token={token} by user {user_id}")
+    return token, str(result.inserted_id)
+
+
 async def get_download_button_config(config_id: str) -> dict | None:
     from bson import ObjectId
     try:
         return await DOWNLOAD_BUTTONS_COL.find_one({"_id": ObjectId(config_id)})
     except Exception:
         return None
+
+
+async def get_download_config_by_token(token: str) -> dict | None:
+    """Fetch download config by UUID token (for dl_TOKEN deep links)."""
+    return await DOWNLOAD_BUTTONS_COL.find_one({"token": token})
 
 
 async def get_user_download_button_configs(user_id: int) -> list[dict]:
@@ -85,7 +129,11 @@ async def generate_download_buttons(
 
     for config in configs:
         config_id = str(config.get("_id"))
-        link_url = f"https://t.me/{bot_username}?start=dl_{config_id}"
+        token = config.get("token")
+        if token:
+            link_url = f"https://t.me/{bot_username}?start={token}"
+        else:
+            link_url = f"https://t.me/{bot_username}?start=dl_{config_id}"
         link_type = config.get("link_type", "direct")
         label = config.get("button_label", DEFAULT_BUTTON_LABELS.get("download", "📥 Download"))
 
@@ -99,7 +147,6 @@ async def generate_download_buttons(
             if not session:
                 label = "🔒 Unlock"
         elif link_type == "paid" and user_id:
-            # Tag as paid
             label = f"💰 {label}"
 
         keyboard.append([

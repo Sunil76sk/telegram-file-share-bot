@@ -128,27 +128,42 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
 
                     product = await database.get_product_by_id(ObjectId(prod_id))
                     if product:
-                        purchase = await database.record_purchase(
-                            user_id=user_id,
-                            product_id=product["_id"],
-                            product_token=product["token"],
-                            amount_paid=amount,
-                            payment_id=charge_id,
-                            status="completed",
-                            files_delivered=product["files"],
-                        )
-                        await database.increment_product_sales(product["_id"])
-                        try:
-                            await client.send_message(
-                                chat_id=user_id,
-                                text=f"🎉 **Purchase Successful!**\n\nYou successfully bought **{product['name']}**! Delivering your files now...",
+                        # Prevent duplicate purchases
+                        if await database.verify_purchase(user_id, product["_id"]):
+                            purchase = await database.purchases_col.find_one({
+                                "user_id": user_id, "product_id": product["_id"], "status": "completed"
+                            })
+                            try:
+                                await client.send_message(
+                                    chat_id=user_id,
+                                    text=f"✅ **Already Purchased!**\n\nYou already own **{product['name']}**. Delivering your files...",
+                                )
+                            except Exception:
+                                pass
+                            from handlers.marketplace import deliver_product_files
+                            await deliver_product_files(client, user_id, purchase, product)
+                        else:
+                            purchase = await database.record_purchase(
+                                user_id=user_id,
+                                product_id=product["_id"],
+                                product_token=product["token"],
+                                amount_paid=amount,
+                                payment_id=charge_id,
+                                status="completed",
+                                files_delivered=product["files"],
                             )
-                        except Exception:
-                            pass
+                            await database.increment_product_sales(product["_id"])
+                            try:
+                                await client.send_message(
+                                    chat_id=user_id,
+                                    text=f"🎉 **Purchase Successful!**\n\nYou successfully bought **{product['name']}**! Delivering your files now...",
+                                )
+                            except Exception:
+                                pass
 
-                        from handlers.marketplace import deliver_product_files
+                            from handlers.marketplace import deliver_product_files
 
-                        await deliver_product_files(client, user_id, purchase, product)
+                            await deliver_product_files(client, user_id, purchase, product)
                     else:
                         try:
                             await client.send_message(

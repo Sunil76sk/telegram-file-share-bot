@@ -84,6 +84,10 @@ async def create_scheduled_post(
     pin: bool = False,
     caption_above: bool = False,
     poster_url: str | None = None,
+    poster_media: dict | None = None,
+    layout_type: str = "layout_a",
+    download_files: list | None = None,
+    custom_buttons: list | None = None,
 ) -> str:
     """Create a scheduled post record."""
     doc = {
@@ -99,7 +103,13 @@ async def create_scheduled_post(
         "pin": pin,
         "caption_above": caption_above,
         "poster_url": poster_url,
+        "poster_media": poster_media or {"type": None, "file_id": None},
+        "layout_type": layout_type,
+        "download_files": download_files or [],
+        "custom_buttons": custom_buttons or [],
         "status": "pending",
+        "retry_count": 0,
+        "failure_reason": None,
         "created_at": datetime.datetime.now(datetime.timezone.utc),
     }
     result = await scheduled_posts_col.insert_one(doc)
@@ -119,10 +129,17 @@ async def mark_post_sent(post_id: str):
     )
 
 async def mark_post_failed(post_id: str, error_msg: str):
-    """Mark scheduled post as failed."""
+    """Mark scheduled post as failed after all retries exhausted."""
     await scheduled_posts_col.update_one(
         {"_id": ObjectId(post_id)},
-        {"$set": {"status": "failed", "error": error_msg, "failed_at": datetime.datetime.now(datetime.timezone.utc)}},
+        {"$set": {"status": "failed", "failure_reason": error_msg, "failed_at": datetime.datetime.now(datetime.timezone.utc)}},
+    )
+
+async def mark_post_retry(post_id: str, retry_count: int, error_msg: str):
+    """Increment retry count for a scheduled post (stays pending for retry)."""
+    await scheduled_posts_col.update_one(
+        {"_id": ObjectId(post_id)},
+        {"$set": {"retry_count": retry_count, "last_error": error_msg, "status": "pending"}},
     )
 
 async def get_scheduled_posts_by_user(user_id: int) -> list:
@@ -151,8 +168,13 @@ async def create_repost_job(
     pin: bool = False,
     caption_above: bool = False,
     poster_url: str | None = None,
+    poster_media: dict | None = None,
+    layout_type: str = "layout_a",
+    download_files: list | None = None,
+    custom_buttons: list | None = None,
 ) -> str:
     """Create a new auto-reposting job configuration."""
+    now = datetime.datetime.now(datetime.timezone.utc)
     doc = {
         "user_id": user_id,
         "channel_id": channel_id,
@@ -160,18 +182,24 @@ async def create_repost_job(
         "file_id": file_id,
         "caption": caption,
         "buttons": buttons,
-        "repost_interval": repost_interval,  # in minutes
-        "delete_gap": delete_gap,  # in seconds
+        "repost_interval": repost_interval,
+        "delete_gap": delete_gap,
         "reactions": reactions or [],
         "comments": comments,
         "pin": pin,
         "caption_above": caption_above,
         "poster_url": poster_url,
+        "poster_media": poster_media or {"type": None, "file_id": None},
+        "layout_type": layout_type,
+        "download_files": download_files or [],
+        "custom_buttons": custom_buttons or [],
         "last_post_id": None,
         "last_posted_at": None,
-        "next_post_at": datetime.datetime.now(datetime.timezone.utc),
-        "created_at": datetime.datetime.now(datetime.timezone.utc),
+        "next_post_at": now,
+        "created_at": now,
         "status": "active",
+        "retry_count": 0,
+        "failure_reason": None,
     }
     result = await repost_jobs_col.insert_one(doc)
     return str(result.inserted_id)
@@ -191,8 +219,25 @@ async def update_repost_job_run(job_id: str, last_post_id: int, next_post_at: da
                 "last_post_id": last_post_id,
                 "last_posted_at": datetime.datetime.now(datetime.timezone.utc),
                 "next_post_at": next_post_at,
+                "retry_count": 0,
+                "failure_reason": None,
             }
         },
+    )
+
+async def mark_repost_job_failed(job_id: str, error_msg: str):
+    """Mark repost job as failed after all retries exhausted."""
+    await repost_jobs_col.update_one(
+        {"_id": ObjectId(job_id)},
+        {"$set": {"status": "failed", "failure_reason": error_msg, "failed_at": datetime.datetime.now(datetime.timezone.utc)}},
+    )
+
+async def mark_repost_job_retry(job_id: str, retry_count: int, error_msg: str):
+    """Increment retry count for repost job (schedule retry in 5 minutes)."""
+    next_retry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5)
+    await repost_jobs_col.update_one(
+        {"_id": ObjectId(job_id)},
+        {"$set": {"retry_count": retry_count, "last_error": error_msg, "next_post_at": next_retry}},
     )
 
 async def get_repost_jobs_by_user(user_id: int) -> list:
@@ -212,7 +257,7 @@ async def save_template(user_id: int, name: str, template_type: str, caption: st
     doc = {
         "user_id": user_id,
         "name": name,
-        "type": template_type,  # 'movie', 'affiliate', etc.
+        "type": template_type,
         "caption": caption,
         "buttons": buttons,
         "created_at": datetime.datetime.now(datetime.timezone.utc),
@@ -308,5 +353,3 @@ async def toggle_reaction(chat_id: int, message_id: int, user_id: int, emoji: st
         e = vote["emoji"]
         counts[e] = counts.get(e, 0) + 1
     return counts
-
-
