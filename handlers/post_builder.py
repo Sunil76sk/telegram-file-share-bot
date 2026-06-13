@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import datetime
 import re
-from zoneinfo import ZoneInfo
 
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
@@ -316,9 +315,6 @@ async def builder_input_handler(client: Client, message: Message):
         "awaiting_poster_photo",
         "awaiting_poster_video",
         "awaiting_download_files",
-        "awaiting_schedule_time",
-        "awaiting_repost_interval",
-        "awaiting_delete_gap",
     ]
     if not state or state not in valid_states:
         return
@@ -541,73 +537,8 @@ async def builder_input_handler(client: Client, message: Message):
         message.stop_propagation()
         return
 
-    # ── awaiting_schedule_time ──
-    if state == "awaiting_schedule_time":
-        try:
-            user_doc = await database.get_user(user_id)
-            user_tz = user_doc.get("timezone", "Asia/Kolkata") if user_doc else "Asia/Kolkata"
-            tz = ZoneInfo(user_tz)
-            local_time = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M")
-            local_time = local_time.replace(tzinfo=tz)
-            utc_time = local_time.astimezone(datetime.timezone.utc)
-
-            if utc_time <= datetime.datetime.now(datetime.timezone.utc):
-                await message.reply_text("Scheduled time must be in the future. Try again.")
-                message.stop_propagation()
-                return
-
-            draft["scheduled_time"] = utc_time.isoformat()
-            draft["schedule_enabled"] = True
-            draft["state"] = "active"
-            await database.save_post_draft(user_id, draft)
-
-            display_time = local_time.strftime("%Y-%m-%d %I:%M %p")
-            await message.reply_text(f"Scheduled for {display_time} {user_tz}")
-            await show_builder_menu(client, message, user_id, draft)
-        except ValueError:
-            await message.reply_text(
-                "Invalid format. Send time as: `YYYY-MM-DD HH:MM`\n"
-                "Example: `2026-06-15 14:30`"
-            )
-        except Exception as e:
-            logger.error(f"Schedule time parse error: {e}")
-            await message.reply_text(f"Error parsing time: {e}")
-
-        message.stop_propagation()
-        return
-
-    # ── awaiting_repost_interval ──
-    if state == "awaiting_repost_interval":
-        try:
-            interval = int(text)
-            if interval < 1:
-                raise ValueError
-            draft["repost_interval"] = interval
-            draft["auto_repost_enabled"] = True
-            draft["state"] = "active"
-            await database.save_post_draft(user_id, draft)
-            await message.reply_text(f"Auto repost interval set: {interval} minutes")
-            await show_builder_menu(client, message, user_id, draft)
-        except ValueError:
-            await message.reply_text("Enter a valid interval in minutes (e.g. `60`).")
-        message.stop_propagation()
-        return
-
-    # ── awaiting_delete_gap ──
-    if state == "awaiting_delete_gap":
-        try:
-            gap = int(text)
-            if gap < 0:
-                raise ValueError
-            draft["delete_gap"] = gap
-            draft["state"] = "active"
-            await database.save_post_draft(user_id, draft)
-            await message.reply_text(f"Delete gap set: {gap} minutes")
-            await show_builder_menu(client, message, user_id, draft)
-        except ValueError:
-            await message.reply_text("Enter a valid number in minutes (e.g. `30`).")
-        message.stop_propagation()
-        return
+    # ── awaiting_schedule_time / awaiting_repost_interval / awaiting_delete_gap ──
+    # These states are handled by handlers/scheduler.py (group=6)
 
 
 # ─── SHOW BUILDER MENU ────────────────────────────────────────────────

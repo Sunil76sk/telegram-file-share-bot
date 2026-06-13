@@ -284,34 +284,71 @@ async def scheduler_input_handler(client: Client, message: Message):
             tz = ZoneInfo("Asia/Kolkata")
 
         try:
-            local_time = datetime.datetime.strptime(text, "%Y-%m-%d %H:%M")
-            local_time = local_time.replace(tzinfo=tz)
-            utc_time = local_time.astimezone(datetime.timezone.utc)
-
-            if utc_time <= datetime.datetime.now(datetime.timezone.utc):
-                await message.reply_text("Scheduled time must be in the future. Please send again:")
-                message.stop_propagation()
-                return
-
-            is_premium = await database.is_user_premium(user_id)
-            max_future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-            if not is_premium and utc_time > max_future:
+            # Parse user input as naive datetime
+            text_clean = text.strip()
+            if not text_clean:
                 await message.reply_text(
-                    "Advanced Scheduling is a Premium Feature!\n\n"
-                    "Free creators can only schedule posts up to **24 hours in advance**.\n"
-                    "Please enter a time within 24 hours, or upgrade to Premium with `/premium`."
+                    "❌ **Empty input!**\n\n"
+                    "Send time in format: `YYYY-MM-DD HH:MM`\n"
+                    "Example: `2026-06-15 14:30`"
                 )
                 message.stop_propagation()
                 return
 
-            # Get user's timezone abbreviation for display
             try:
-                tz_abbrev = tz.tzname(None) or user_tz.split("/")[-1]
+                scheduled_naive = datetime.datetime.strptime(text_clean, "%Y-%m-%d %H:%M")
+            except ValueError as parse_err:
+                logger.error(f"strptime failed for user {user_id}, input '{text_clean}': {parse_err}")
+                await message.reply_text(
+                    "❌ **Invalid format!**\n\n"
+                    "Send time in format: `YYYY-MM-DD HH:MM`\n"
+                    "Example: `2026-06-15 14:30`\n\n"
+                    f"Your timezone: {user_tz}"
+                )
+                message.stop_propagation()
+                return
+
+            # Localize to user's timezone (naive → aware)
+            scheduled_aware = scheduled_naive.replace(tzinfo=tz)
+            
+            # Convert to UTC for storage and comparison
+            scheduled_utc = scheduled_aware.astimezone(datetime.timezone.utc)
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+
+            # Validate: must be in future
+            if scheduled_utc <= now_utc:
+                now_in_tz = now_utc.astimezone(tz)
+                await message.reply_text(
+                    f"❌ **Time is in the past!**\n\n"
+                    f"Current time: `{now_in_tz.strftime('%Y-%m-%d %H:%M')} {user_tz}`\n"
+                    f"Please enter a future time."
+                )
+                message.stop_propagation()
+                return
+
+            # Validate: premium users only can schedule > 24 hours ahead
+            is_premium = await database.is_user_premium(user_id)
+            max_future_utc = now_utc + datetime.timedelta(days=1)
+            if not is_premium and scheduled_utc > max_future_utc:
+                max_future_tz = max_future_utc.astimezone(tz)
+                await message.reply_text(
+                    "⏰ **Advanced Scheduling is a Premium Feature!**\n\n"
+                    "Free creators can only schedule posts up to **24 hours in advance**.\n\n"
+                    f"Max allowed: `{max_future_tz.strftime('%Y-%m-%d %H:%M')} {user_tz}`\n"
+                    "Upgrade to Premium with `/premium` for unlimited scheduling."
+                )
+                message.stop_propagation()
+                return
+
+            # Format display time in user's timezone
+            try:
+                tz_abbrev = tz.tzname(scheduled_aware) or user_tz.split("/")[-1]
             except Exception:
                 tz_abbrev = user_tz.split("/")[-1]
 
-            display_time = utc_time.astimezone(tz).strftime("%Y-%m-%d %I:%M %p")
+            display_time = scheduled_aware.strftime("%Y-%m-%d %I:%M %p")
 
+            # Create scheduled post (store UTC time)
             await database.create_scheduled_post(
                 user_id=user_id,
                 channel_id=draft["channel_id"],
@@ -319,7 +356,7 @@ async def scheduler_input_handler(client: Client, message: Message):
                 file_id=draft["file_id"],
                 caption=draft["caption"],
                 buttons=draft.get("custom_buttons", []),
-                scheduled_time=utc_time,
+                scheduled_time=scheduled_utc,
                 reactions=draft.get("reactions", []),
                 comments=draft.get("comments_enabled", False),
                 pin=draft.get("pin_message", False),
@@ -331,9 +368,18 @@ async def scheduler_input_handler(client: Client, message: Message):
             )
             await database.increment_channel_stat(draft["channel_id"], "scheduled_posts", 1)
             await database.delete_post_draft(user_id)
-            await message.reply_text(f"Post scheduled successfully for **{display_time} {tz_abbrev}**!")
-        except ValueError:
-            await message.reply_text("Invalid format. Please send in `YYYY-MM-DD HH:MM` format (e.g. `2026-06-15 14:30`):")
+            
+            await message.reply_text(
+                f"✅ **Post scheduled successfully!**\n\n"
+                f"**Time:** {display_time} {tz_abbrev}\n"
+                f"**UTC:** {scheduled_utc.strftime('%Y-%m-%d %H:%M')} UTC"
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error scheduling post for user {user_id}: {e}", exc_info=True)
+            await message.reply_text(
+                "❌ **Error scheduling post**\n\n"
+                "An unexpected error occurred. Please try again or contact support."
+            )
         message.stop_propagation()
         return
 
@@ -467,19 +513,4 @@ async def delete_repost_callback_handler(client: Client, callback_query: Callbac
         await callback_query.answer("Failed to stop job.", show_alert=True)
 
 
-# Add auto repost entrypoint to builder menu
-@app.on_callback_query(filters.regex(r"^build_btn_repost$"))
-async def build_btn_repost_callback(client: Client, callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    draft = await database.get_post_draft(user_id)
-    if not draft:
-        await callback_query.answer("Draft expired.", show_alert=True)
-        return
-    await callback_query.answer()
-    draft["state"] = "awaiting_repost_interval"
-    await database.save_post_draft(user_id, draft)
-    await callback_query.message.edit_text(
-        "Auto Reposting Setup\n\n"
-        "Please enter the **Repost Interval** (in minutes) after which the post should be auto-reposted:\n"
-        "Example: `60` (for every 1 hour)"
-    )
+
