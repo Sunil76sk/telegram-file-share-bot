@@ -15,6 +15,7 @@ from bot import app, INSTANCE_ID, current_update_info
 import database
 from utils.helpers import banned_filter, extract_file_details
 from utils.caption_builder import build_telegram_caption_html
+from utils.rate_limiter import check_rate_limit
 
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,13 @@ async def newpost_command_handler(client: Client, message: Message):
     logger.info(log_msg)
     print(log_msg, flush=True)
     user_id = message.from_user.id
+    
+    # Enforce Rate Limit: New Post (5/min) (Module 26)
+    allowed = await check_rate_limit(user_id, "newpost_command", limit=5, window_seconds=60)
+    if not allowed:
+        await message.reply_text("❌ **Rate limit exceeded!**\nYou can only trigger `/newpost` 5 times per minute.")
+        return
+
     channels = await database.get_creator_channels(user_id)
     if not channels:
         await message.reply_text(

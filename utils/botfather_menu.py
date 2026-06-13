@@ -106,3 +106,23 @@ async def get_formatted_command_list() -> str:
         text += f"/{cmd['command']} — {cmd['description']}\n"
 
     return text
+
+
+async def sync_bot_commands(client: Any):
+    """Register command lists on startup using client.set_bot_commands."""
+    from pyrogram.types import BotCommand
+    try:
+        commands = []
+        for cmd in DEFAULT_COMMANDS:
+            commands.append(BotCommand(cmd["command"], cmd["description"]))
+        for cmd in CREATOR_COMMANDS:
+            commands.append(BotCommand(cmd["command"], cmd["description"]))
+        
+        await client.set_bot_commands(commands)
+        logger.info("Successfully synced default commands with BotFather.")
+        
+        # Save snapshot to DB
+        payload = await get_sync_payload()
+        await save_menu_snapshot("default", payload)
+    except Exception as e:
+        logger.error(f"Failed to sync bot commands with BotFather: {e}")

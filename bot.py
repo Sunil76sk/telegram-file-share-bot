@@ -63,6 +63,7 @@ import handlers.reactions_handler  # noqa: E402
 import handlers.channel_analytics  # noqa: E402
 import handlers.settings  # noqa: E402
 import handlers.store  # noqa: E402
+import handlers.movie_search  # noqa: E402
 
 from utils.worker_framework import register_worker, start_workers, recover_workers, stop_workers  # noqa: E402
 from utils.queue_system import register_handler, recover_interrupted_tasks, process_queue  # noqa: E402
@@ -170,6 +171,10 @@ async def custom_start():
 
     # Start the local redirect web server
     start_web_server()
+
+    # Sync commands with BotFather (Module 30)
+    from utils.botfather_menu import sync_bot_commands
+    await sync_bot_commands(app)
 
     # Debug print all registered handlers
     logger.info("--- REGISTERED HANDLERS ON STARTUP ---")
@@ -322,6 +327,16 @@ async def log_incoming_callback(client: Client, callback_query: CallbackQuery):
     except Exception:
         # Already processed or write conflict, drop callback
         logger.warning(f"Duplicate update key {update_key} detected. Dropping callback.")
+        callback_query.stop_propagation()
+        return
+
+    # Rate Limit: Callback queries (50/min) (Module 26)
+    user_id = callback_query.from_user.id
+    from utils.rate_limiter import check_rate_limit
+    allowed = await check_rate_limit(user_id, "callback_query", limit=50, window_seconds=60)
+    if not allowed:
+        logger.warning(f"Callback query rate limit exceeded for user {user_id}")
+        await callback_query.answer("❌ Rate limit exceeded (50/min). Please slow down.", show_alert=True)
         callback_query.stop_propagation()
         return
 

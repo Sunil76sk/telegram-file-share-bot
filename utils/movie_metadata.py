@@ -266,3 +266,89 @@ async def import_existing_post(
     except Exception as e:
         logger.error(f"Failed to import post: {e}")
         return None
+
+
+async def fetch_movie_from_api(title: str, year: int | None = None) -> dict | None:
+    """Fetch movie details dynamically from TMDB or OMDB API using env credentials."""
+    import urllib.request
+    import urllib.parse
+    import json
+    import os
+    import asyncio
+
+    tmdb_key = os.getenv("TMDB_API_KEY")
+    omdb_key = os.getenv("OMDB_API_KEY")
+
+    if tmdb_key:
+        try:
+            query = urllib.parse.quote(title)
+            url = f"https://api.themoviedb.org/3/search/movie?api_key={tmdb_key}&query={query}"
+            if year:
+                url += f"&year={year}"
+            
+            def _get():
+                req = urllib.request.Request(url, headers={"Accept": "application/json"})
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    return json.loads(r.read().decode("utf-8"))
+            res = await asyncio.to_thread(_get)
+            if res.get("results"):
+                movie = res["results"][0]
+                movie_id = movie["id"]
+                detail_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={tmdb_key}"
+                def _get_details():
+                    with urllib.request.urlopen(detail_url, timeout=5) as r:
+                        return json.loads(r.read().decode("utf-8"))
+                details = await asyncio.to_thread(_get_details)
+                
+                poster_path = details.get("poster_path")
+                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
+                
+                return {
+                    "title": details.get("title", title),
+                    "description": details.get("overview", ""),
+                    "year": int(details.get("release_date", "0000").split("-")[0]) if details.get("release_date") else year,
+                    "genre": ", ".join([g["name"] for g in details.get("genres", [])]) if details.get("genres") else "general",
+                    "language": details.get("original_language", "en"),
+                    "imdb_id": details.get("imdb_id"),
+                    "poster_url": poster_url,
+                    "rating": details.get("vote_average", 0.0),
+                    "duration_minutes": details.get("runtime", 0),
+                    "director": "",
+                    "cast": []
+                }
+        except Exception as e:
+            logger.error(f"Error fetching from TMDB: {e}")
+
+    if omdb_key:
+        try:
+            query = urllib.parse.quote(title)
+            url = f"http://www.omdbapi.com/?apikey={omdb_key}&t={query}"
+            if year:
+                url += f"&y={year}"
+            def _get():
+                with urllib.request.urlopen(url, timeout=5) as r:
+                    return json.loads(r.read().decode("utf-8"))
+            res = await asyncio.to_thread(_get)
+            if res.get("Response") == "True":
+                runtime_str = res.get("Runtime", "0").split()[0]
+                try:
+                    duration = int(runtime_str)
+                except ValueError:
+                    duration = 0
+                return {
+                    "title": res.get("Title", title),
+                    "description": res.get("Plot", ""),
+                    "year": int(res.get("Year", "0")) if res.get("Year", "").isdigit() else year,
+                    "genre": res.get("Genre", "general"),
+                    "language": res.get("Language", "en"),
+                    "imdb_id": res.get("imdbID"),
+                    "poster_url": res.get("Poster") if res.get("Poster") != "N/A" else None,
+                    "rating": float(res.get("imdbRating", 0.0)) if res.get("imdbRating") != "N/A" else 0.0,
+                    "duration_minutes": duration,
+                    "director": res.get("Director", ""),
+                    "cast": [c.strip() for c in res.get("Actors", "").split(",") if c.strip()]
+                }
+        except Exception as e:
+            logger.error(f"Error fetching from OMDB: {e}")
+
+    return None

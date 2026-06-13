@@ -518,6 +518,14 @@ async def ensure_indexes():
         col = db[col_name]
         for spec in specs:
             keys, options = spec
+            if isinstance(keys, tuple):
+                if keys and isinstance(keys[0], str):
+                    keys = [keys]
+                else:
+                    keys = list(keys)
+            # Skip _id index as MongoDB manages it automatically
+            if keys == "_id" or (isinstance(keys, list) and len(keys) == 1 and keys[0][0] == "_id"):
+                continue
             if isinstance(options, bool):
                 kwargs: dict = {"unique": options}
             elif isinstance(options, dict):
