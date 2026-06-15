@@ -424,7 +424,7 @@ async def text_message_handler(client: Client, message: Message):
     if draft:
         state = draft.get("state", "")
         is_builder_state = any(state.startswith(s) for s in [
-            "awaiting_tmdb_search", "awaiting_manual_caption", "awaiting_poster_upload",
+            "awaiting_tmdb_search", "awaiting_manual_caption", "awaiting_manual_movie_details", "awaiting_poster_upload",
             "awaiting_edited_caption", "awaiting_btn_text", "awaiting_btn_url",
             "awaiting_btn_edit_text", "awaiting_btn_edit_url", "awaiting_custom_timezone",
             "awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"

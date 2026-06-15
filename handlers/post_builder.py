@@ -29,6 +29,161 @@ image_converter = ImageConverter()
 # List of default emojis for reactions toggle
 DEFAULT_REACTIONS = ["❤️", "🔥", "😂", "👍", "🎉", "🤔"]
 
+# Genres list & languages list for manual entry flows
+MANUAL_GENRES = ["Action", "Comedy", "Drama", "Horror", "Romance", "Thriller", "Fantasy", "Animation", "Crime", "Adventure", "Sci-Fi", "Mystery"]
+MANUAL_LANGUAGES = ["hi", "kn", "ta", "te", "ml", "en", "es", "fr", "ko", "ja"]
+
+def generate_genre_keyboard(selected_genres: list[str]) -> InlineKeyboardMarkup:
+    rows = []
+    current_row = []
+    for g in MANUAL_GENRES:
+        status = "✅" if g in selected_genres else "❌"
+        current_row.append(InlineKeyboardButton(f"{g} {status}", callback_data=f"manual_genre_toggle_{g}"))
+        if len(current_row) == 3:
+            rows.append(current_row)
+            current_row = []
+    if current_row:
+        rows.append(current_row)
+    rows.append([InlineKeyboardButton("✨ Confirm Genres", callback_data="manual_genre_confirm")])
+    return InlineKeyboardMarkup(rows)
+
+def generate_language_keyboard(selected_lang: str) -> InlineKeyboardMarkup:
+    rows = []
+    current_row = []
+    for l in MANUAL_LANGUAGES:
+        formatted = tmdb_client.format_language(l)
+        status = "✅" if l == selected_lang else "❌"
+        current_row.append(InlineKeyboardButton(f"{formatted} {status}", callback_data=f"manual_lang_select_{l}"))
+        if len(current_row) == 2:
+            rows.append(current_row)
+            current_row = []
+    if current_row:
+        rows.append(current_row)
+    rows.append([InlineKeyboardButton("❌ Skip Language", callback_data="manual_lang_skip")])
+    return InlineKeyboardMarkup(rows)
+
+# Callbacks for Genre & Language Selection in Manual Flow
+@app.on_callback_query(filters.regex(r"^manual_genre_toggle_(.+)$"))
+async def manual_genre_toggle_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    genre = callback_query.matches[0].group(1)
+    
+    draft = await database.get_post_draft(user_id)
+    if not draft or callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Invalid session", show_alert=True)
+        return
+        
+    genres = draft.get("genres") or []
+    if genre in genres:
+        genres.remove(genre)
+    else:
+        genres.append(genre)
+        
+    draft["genres"] = genres
+    await database.save_post_draft(user_id, draft)
+    await callback_query.answer()
+    
+    try:
+        await callback_query.message.edit_reply_markup(reply_markup=generate_genre_keyboard(genres))
+    except MessageNotModified:
+        pass
+
+@app.on_callback_query(filters.regex(r"^manual_genre_confirm$"))
+async def manual_genre_confirm_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    draft = await database.get_post_draft(user_id)
+    if not draft or callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Invalid session", show_alert=True)
+        return
+        
+    draft["state"] = "awaiting_manual_lang"
+    await database.save_post_draft(user_id, draft)
+    await callback_query.answer()
+    
+    await callback_query.message.edit_text(
+        "🌐 **Select Movie Language**:\n"
+        "Choose the primary language for this movie:",
+        reply_markup=generate_language_keyboard(draft.get("language", ""))
+    )
+
+async def build_and_save_manual_caption(user_id: int, draft: dict):
+    # Format manual details to the EXACT caption format
+    caption_lines = []
+    
+    title = draft.get("movie_title")
+    year = draft.get("movie_year")
+    if title:
+        year_str = f" [{year}]" if year and year != "N/A" else ""
+        caption_lines.append(f"<b>Movie:</b> {title}{year_str}")
+        
+    aka = draft.get("also_known_as")
+    if aka and aka != "N/A":
+        caption_lines.append(f"<i>Also Known As:</i> {aka}")
+        
+    rating = draft.get("rating", 0.0)
+    rating_count = draft.get("rating_count", 0)
+    if rating > 0.0:
+        caption_lines.append(f"<b>Rating</b> ⭐: {rating} / 10 ({rating_count} user ratings)")
+        
+    runtime = draft.get("runtime")
+    if runtime and runtime != "N/A":
+        caption_lines.append(f"<b>Runtime:</b> {runtime}")
+        
+    rel_info = draft.get("release_info")
+    if rel_info and rel_info != "N/A":
+        caption_lines.append(f"<b>Release Info:</b> {rel_info}")
+        
+    genres = draft.get("genres")
+    if genres:
+        genre_emojis = tmdb_client.format_genres(genres)
+        if genre_emojis:
+            caption_lines.append(f"<b>Genre:</b> {genre_emojis}")
+            
+    lang = draft.get("language")
+    if lang and lang != "N/A":
+        caption_lines.append(f"<b>Language:</b> {lang}")
+
+    draft["caption_html"] = "\n".join(caption_lines)
+    draft["state"] = "awaiting_poster_upload"
+    await database.save_post_draft(user_id, draft)
+
+@app.on_callback_query(filters.regex(r"^manual_lang_select_(.+)$"))
+async def manual_lang_select_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    lang_code = callback_query.matches[0].group(1)
+    
+    draft = await database.get_post_draft(user_id)
+    if not draft or callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Invalid session", show_alert=True)
+        return
+        
+    draft["language"] = tmdb_client.format_language(lang_code)
+    await build_and_save_manual_caption(user_id, draft)
+    await callback_query.answer()
+    
+    await callback_query.message.edit_text(
+        "🖼 **Post Builder — Upload Poster**\n\n"
+        "Caption saved! Now, please upload the poster image (JPG/PNG):"
+    )
+
+@app.on_callback_query(filters.regex(r"^manual_lang_skip$"))
+async def manual_lang_skip_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    draft = await database.get_post_draft(user_id)
+    if not draft or callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Invalid session", show_alert=True)
+        return
+        
+    draft["language"] = "N/A"
+    await build_and_save_manual_caption(user_id, draft)
+    await callback_query.answer()
+    
+    await callback_query.message.edit_text(
+        "🖼 **Post Builder — Upload Poster**\n\n"
+        "Caption saved! Now, please upload the poster image (JPG/PNG):"
+    )
+
+
 # Helper: Show Main Builder Menu
 async def show_builder_menu(client: Client, chat_id: int, draft: dict):
     channel_name = draft.get("channel_name") or "Unknown"
@@ -196,14 +351,26 @@ async def tmdb_skip_callback(client: Client, callback_query: CallbackQuery):
         await callback_query.answer("❌ Not your session", show_alert=True)
         return
 
-    draft["state"] = "awaiting_manual_caption"
+    draft["state"] = "awaiting_manual_movie_details"
     await database.save_post_draft(user_id, draft)
     await callback_query.answer()
     
-    await callback_query.message.edit_text(
-        "📝 **Post Builder — Manual Caption**\n\n"
-        "Please send the manual HTML caption text for this post:"
+    template_text = (
+        "🎬 **Post Builder — Enter Movie Details**\n\n"
+        "Copy the template below, fill it out, and send it back:\n\n"
+        "```\n"
+        "Title: Bhooth Bangla\n"
+        "Year: 2026\n"
+        "AKA: Ghost House\n"
+        "Rating: 7.5\n"
+        "Rating Count: 1240\n"
+        "Runtime: 2h 30min\n"
+        "Release: 15/5/2026 (India)\n"
+        "```\n\n"
+        "Send `/cancel` to abort."
     )
+    await callback_query.message.edit_text(template_text)
+
 
 # Callback: Movie selected
 @app.on_callback_query(filters.regex(r"^tmdb_select_(\d+)$"))
@@ -722,8 +889,8 @@ async def builder_input_handler(client: Client, message: Message):
         return
 
     state = draft.get("state")
-    if not state or state in ["awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"]:
-        # Exclude scheduler and repost states (they are handled in their own modules)
+    if not state or state in ["awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap", "awaiting_manual_genre", "awaiting_manual_lang"]:
+        # Exclude scheduler, repost, and manual genre/language query states
         message.continue_propagation()
         return
 
@@ -765,22 +932,66 @@ async def builder_input_handler(client: Client, message: Message):
         message.stop_propagation()
         return
 
-    # STATE 2 Alternative: awaiting_manual_caption
-    elif state == "awaiting_manual_caption":
+    # STATE 2 Alternative: awaiting_manual_movie_details
+    elif state == "awaiting_manual_movie_details":
         if not text:
-            await message.reply_text("❌ Caption text cannot be empty. Send caption:")
+            await message.reply_text("❌ Input cannot be empty.")
             return
 
-        draft["caption_html"] = text
-        draft["state"] = "awaiting_poster_upload"
+        import re
+        lines = text.split("\n")
+        data = {}
+        for line in lines:
+            if ":" in line:
+                key, val = line.split(":", 1)
+                data[key.strip().lower()] = val.strip()
+
+        title = data.get("title") or data.get("movie title")
+        if not title:
+            await message.reply_text("❌ Title is required. Please follow the template format exactly.")
+            return
+
+        year = data.get("year", "N/A")
+        aka = data.get("aka", "N/A")
+        rating_str = data.get("rating", "0.0")
+        try:
+            rating = float(rating_str)
+        except ValueError:
+            rating = 0.0
+        rating_count_str = data.get("rating count", "0")
+        try:
+            rating_count = int(rating_count_str)
+        except ValueError:
+            rating_count = 0
+
+        runtime = data.get("runtime", "N/A")
+        release = data.get("release", "N/A")
+
+        draft.update({
+            "movie_title": title,
+            "movie_year": year,
+            "also_known_as": aka,
+            "rating": rating,
+            "rating_count": rating_count,
+            "runtime": runtime,
+            "release_info": release,
+            "genres": [],
+            "language": "N/A"
+        })
+
+        draft["state"] = "awaiting_manual_genre"
         await database.save_post_draft(user_id, draft)
 
+        # Show Genre selection buttons
+        kb = generate_genre_keyboard([])
         await message.reply_text(
-            "🖼 **Post Builder — Upload Poster**\n\n"
-            "Caption saved! Now, please upload the poster image (JPG/PNG):"
+            "🎭 **Select Movie Genre(s)**:\n"
+            "You can select multiple. Click Confirm when finished.",
+            reply_markup=kb
         )
         message.stop_propagation()
         return
+
 
     # STATE 3: awaiting_poster_upload
     elif state == "awaiting_poster_upload":
