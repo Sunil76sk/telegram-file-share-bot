@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 async def send_repost_menu(client: Client, chat_id: int, draft: dict):
     interval = draft.get("repost_interval_minutes")
     interval_str = f"{interval} minutes" if interval else "Not Set"
-    delete_old = "Yes" if draft.get("repost_delete_old", False) else "No"
+    delete_old = "Yes" if draft.get("repost_delete_old", True) else "No"
     
     text = (
         "🔄 **Auto Repost Configuration**\n\n"
@@ -54,7 +54,7 @@ async def send_repost_menu(client: Client, chat_id: int, draft: dict):
 async def edit_repost_menu(message: Message, draft: dict):
     interval = draft.get("repost_interval_minutes")
     interval_str = f"{interval} minutes" if interval else "Not Set"
-    delete_old = "Yes" if draft.get("repost_delete_old", False) else "No"
+    delete_old = "Yes" if draft.get("repost_delete_old", True) else "No"
     
     text = (
         "🔄 **Auto Repost Configuration**\n\n"
@@ -150,7 +150,7 @@ async def repost_toggle_delete_callback(client: Client, callback_query: Callback
         await callback_query.answer("❌ Not your session", show_alert=True)
         return
 
-    draft["repost_delete_old"] = not draft.get("repost_delete_old", False)
+    draft["repost_delete_old"] = not draft.get("repost_delete_old", True)
     await database.save_post_draft(user_id, draft)
     await callback_query.answer(f"Delete old post: {'Yes' if draft['repost_delete_old'] else 'No'}")
     await edit_repost_menu(callback_query.message, draft)
@@ -235,12 +235,8 @@ async def repost_confirm_callback(client: Client, callback_query: CallbackQuery)
             reactions=draft.get("reactions") or [],
             comments=draft.get("comments_enabled", False),
             pin=draft.get("pin_message", False),
-        )
-        
-        # Save custom field delete_old in DB
-        await db.repost_jobs.update_one(
-            {"_id": ObjectId(job_id)},
-            {"$set": {"delete_old": draft.get("repost_delete_old", False)}}
+            delete_old=draft.get("repost_delete_old", True),
+            caption_above=draft.get("caption_above", False),
         )
         
         # Schedule in APScheduler immediately
@@ -265,7 +261,7 @@ async def repost_confirm_callback(client: Client, callback_query: CallbackQuery)
             f"✅ **Auto Repost successfully enabled!**\n\n"
             f"📢 **Channel:** {draft['channel_name']}\n"
             f"⏱ **Interval:** every {draft['repost_interval_minutes']} minutes\n"
-            f"🗑 **Delete Old Post:** {'Yes' if draft['repost_delete_old'] else 'No'}\n\n"
+            f"🗑 **Delete Old Post:** {'Yes' if draft.get('repost_delete_old', True) else 'No'}\n\n"
             "Bot will execute the first repost now."
         )
     except Exception as e:
@@ -330,6 +326,7 @@ async def run_repost_job(job_id: str):
             "reactions": job.get("reactions") or [],
             "comments_enabled": job.get("comments") or False,
             "pin_message": job.get("pin") or False,
+            "caption_above": job.get("caption_above", False),
             "repost_enabled": True
         }
         
@@ -340,7 +337,7 @@ async def run_repost_job(job_id: str):
         logger.info(f"Repost job {job_id} published new message: {new_msg_id}")
         
         # Delete old post if enabled and last_post_id is set
-        if job.get("delete_old") and job.get("last_post_id"):
+        if job.get("delete_old", True) and job.get("last_post_id"):
             old_msg_id = job["last_post_id"]
             try:
                 await app.delete_messages(chat_id=channel_id, message_ids=[old_msg_id])

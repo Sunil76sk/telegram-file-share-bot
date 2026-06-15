@@ -340,7 +340,9 @@ async def schedule_confirm_callback(client: Client, callback_query: CallbackQuer
         "reactions": draft["reactions"],
         "comments_enabled": draft["comments_enabled"],
         "pin_message": draft["pin_message"],
+        "caption_above": draft.get("caption_above", False),
         "schedule_enabled": True,
+
         "scheduled_time": scheduled_utc,
         "schedule_timezone": draft["schedule_timezone"],
         "repost_enabled": False,

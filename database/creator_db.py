@@ -198,6 +198,7 @@ async def create_repost_job(
     layout_type: str = "layout_a",
     download_files: list | None = None,
     custom_buttons: list | None = None,
+    delete_old: bool = True,
 ) -> str:
     """Create a new auto-reposting job configuration."""
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -219,6 +220,7 @@ async def create_repost_job(
         "layout_type": layout_type,
         "download_files": download_files or [],
         "custom_buttons": custom_buttons or [],
+        "delete_old": delete_old,
         "last_post_id": None,
         "last_posted_at": None,
         "next_post_at": now,

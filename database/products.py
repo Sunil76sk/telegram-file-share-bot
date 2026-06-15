@@ -66,7 +66,8 @@ async def create_category(
         "updated_at": datetime.datetime.now(datetime.timezone.utc),
     }
     result = await categories_col.insert_one(category_doc)
-    return await categories_col.find_one({"_id": result.inserted_id})
+    res = await categories_col.find_one({"_id": result.inserted_id})
+    return res if res is not None else {}
 
 
 async def get_category_by_id(category_id: ObjectId) -> Optional[Dict[str, Any]]:
@@ -112,12 +113,12 @@ async def create_product(
     owner_id: int,
     category_id: Optional[ObjectId] = None,
     product_type: str = "lightroom_presets",
-    files: List[Dict[str, Any]] = None,
+    files: Optional[List[Dict[str, Any]]] = None,
     thumbnail: Optional[str] = None,
     is_active: bool = True,
     is_featured: bool = False,
     stock: Optional[int] = None,
-    tags: List[str] = None,
+    tags: Optional[List[str]] = None,
     price_upi: float = 0.0,
 ) -> Dict[str, Any]:
     """Create a new digital product."""
@@ -147,7 +148,8 @@ async def create_product(
         "updated_at": datetime.datetime.now(datetime.timezone.utc),
     }
     result = await products_col.insert_one(product_doc)
-    return await products_col.find_one({"_id": result.inserted_id})
+    res = await products_col.find_one({"_id": result.inserted_id})
+    return res if res is not None else {}
 
 
 async def get_product_by_id(product_id: ObjectId) -> Optional[Dict[str, Any]]:
@@ -173,7 +175,7 @@ async def get_products(
     sort_order: int = -1,
 ) -> List[Dict[str, Any]]:
     """Get products with optional filters."""
-    query = {"is_active": is_active}
+    query: Dict[str, Any] = {"is_active": is_active}
 
     if category_id:
         query["category_id"] = category_id
@@ -299,7 +301,7 @@ async def record_purchase(
     amount_paid: int,
     payment_id: str,
     status: str = "completed",
-    files_delivered: List[Dict[str, Any]] = None,
+    files_delivered: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Record a new purchase."""
     if files_delivered is None:
@@ -317,7 +319,8 @@ async def record_purchase(
         "updated_at": datetime.datetime.now(datetime.timezone.utc),
     }
     result = await purchases_col.insert_one(purchase_doc)
-    return await purchases_col.find_one({"_id": result.inserted_id})
+    res = await purchases_col.find_one({"_id": result.inserted_id})
+    return res if res is not None else {}
 
 
 async def get_purchase_by_id(purchase_id: ObjectId) -> Optional[Dict[str, Any]]:
@@ -422,7 +425,8 @@ async def record_download(
         "user_agent": user_agent,
     }
     result = await downloads_col.insert_one(download_doc)
-    return await downloads_col.find_one({"_id": result.inserted_id})
+    res = await downloads_col.find_one({"_id": result.inserted_id})
+    return res if res is not None else {}
 
 
 async def get_downloads_by_purchase(purchase_id: ObjectId) -> List[Dict[str, Any]]:
@@ -520,7 +524,7 @@ async def get_product_stats(product_id: ObjectId) -> Dict[str, Any]:
 
 async def seed_marketplace_categories() -> None:
     """Seed the default product categories if they don't exist."""
-    categories_data = [
+    categories_data: List[Dict[str, Any]] = [
         {
             "name": "Lightroom Presets",
             "slug": "lightroom_presets",

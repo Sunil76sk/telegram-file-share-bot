@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Dict, Any
 import datetime
 import uuid
 import io
@@ -202,6 +203,9 @@ async def show_builder_menu(client: Client, chat_id: int, draft: dict):
     comments_status = "Enabled" if draft.get("comments_enabled") else "Disabled"
     pin_status = "Enabled" if draft.get("pin_message") else "Disabled"
     
+    caption_above = draft.get("caption_above", False)
+    caption_pos_label = "Top (Above Media)" if caption_above else "Bottom (Below Media)"
+
     menu_text = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "📢 **POST BUILDER**\n\n"
@@ -213,6 +217,7 @@ async def show_builder_menu(client: Client, chat_id: int, draft: dict):
         f"❤️ **Reactions:** {reactions_status}\n"
         f"💬 **Comments:** {comments_status}\n"
         f"📌 **Pin:** {pin_status}\n"
+        f"🔼 **Caption Pos:** {caption_pos_label}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
     
@@ -227,13 +232,14 @@ async def show_builder_menu(client: Client, chat_id: int, draft: dict):
         ],
         [
             InlineKeyboardButton("📌 Pin Post", callback_data="builder_pin"),
-            InlineKeyboardButton("👁 Preview", callback_data="builder_preview")
+            InlineKeyboardButton(f"🔼 Caption: {'Bottom' if caption_above else 'Top'}", callback_data="builder_toggle_caption_pos")
         ],
         [
-            InlineKeyboardButton("🚀 Send Now", callback_data="builder_send_now"),
-            InlineKeyboardButton("📅 Schedule", callback_data="builder_schedule")
+            InlineKeyboardButton("👁 Preview", callback_data="builder_preview"),
+            InlineKeyboardButton("🚀 Send Now", callback_data="builder_send_now")
         ],
         [
+            InlineKeyboardButton("📅 Schedule", callback_data="builder_schedule"),
             InlineKeyboardButton("🔄 Auto Repost", callback_data="builder_repost")
         ],
         [
@@ -323,7 +329,7 @@ async def build_select_callback(client: Client, callback_query: CallbackQuery):
         "schedule_timezone": "Asia/Kolkata",
         "repost_enabled": False,
         "repost_interval_minutes": None,
-        "repost_delete_old": False,
+        "repost_delete_old": True,
         "state": "awaiting_tmdb_search",
         "created_at": datetime.datetime.now(datetime.timezone.utc),
         "updated_at": datetime.datetime.now(datetime.timezone.utc),
@@ -752,6 +758,28 @@ async def builder_pin_callback(client: Client, callback_query: CallbackQuery):
     await callback_query.message.delete()
     await show_builder_menu(client, user_id, draft)
 
+# Callback: Toggle Caption Position
+@app.on_callback_query(filters.regex(r"^builder_toggle_caption_pos$"))
+async def builder_toggle_caption_pos_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    draft = await database.get_post_draft(user_id)
+    if not draft:
+        await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
+        return
+        
+    if callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Not your session", show_alert=True)
+        return
+
+    draft["caption_above"] = not draft.get("caption_above", False)
+    await database.save_post_draft(user_id, draft)
+    
+    pos_str = "Above Media" if draft["caption_above"] else "Below Media"
+    await callback_query.answer(f"Caption position set to {pos_str}")
+    
+    await callback_query.message.delete()
+    await show_builder_menu(client, user_id, draft)
+
 # Callback: Show Live Preview
 @app.on_callback_query(filters.regex(r"^builder_preview$"))
 async def builder_preview_callback(client: Client, callback_query: CallbackQuery):
@@ -792,9 +820,11 @@ async def builder_preview_callback(client: Client, callback_query: CallbackQuery
         
     keyboard = InlineKeyboardMarkup([buttons[i:i+1] for i in range(len(buttons))])
 
-    kwargs = {}
+    kwargs: Dict[str, Any] = {}
     if buttons:
         kwargs["reply_markup"] = keyboard
+    if draft.get("caption_above", False):
+        kwargs["show_caption_above_media"] = True
 
     await client.send_message(user_id, "👁 **LIVE PREVIEW**")
     try:

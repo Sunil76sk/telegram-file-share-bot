@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Dict, Any
 from pyrogram import Client
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -51,9 +52,12 @@ async def publish_post(draft: dict, client: Client, delete_draft: bool = True) -
     if not photo_file_id:
         raise ValueError("No poster file_id found to publish.")
 
-    kwargs = {}
+    kwargs: Dict[str, Any] = {}
     if buttons:
         kwargs["reply_markup"] = keyboard
+    if draft.get("caption_above", False):
+        kwargs["show_caption_above_media"] = True
+
 
     msg = await client.send_photo(
         chat_id=channel_id,

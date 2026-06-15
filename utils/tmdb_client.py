@@ -188,9 +188,9 @@ class TMDBClient:
         """
         emoji_map = {
             "Action": "⚔️",
-            "Comedy": "🤣",
+            "Comedy": "😂",
             "Drama": "🎭",
-            "Horror": "👻",
+            "Horror": "🧟",
             "Romance": "💕",
             "Thriller": "😱",
             "Fantasy": "🫧",
@@ -214,7 +214,7 @@ class TMDBClient:
                 formatted.append(f"{emoji} #{tag_name}")
             else:
                 formatted.append(f"#{tag_name}")
-        return ", ".join(formatted)
+        return " ".join(formatted)
 
     def format_language(self, lang_code: str) -> str:
         """Convert language codes."""
