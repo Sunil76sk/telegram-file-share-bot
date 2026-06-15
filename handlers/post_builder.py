@@ -332,10 +332,14 @@ async def build_select_callback(client: Client, callback_query: CallbackQuery):
     await database.save_post_draft(user_id, draft)
     await callback_query.answer()
     
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Skip TMDB - Manual Caption", callback_data="tmdb_skip")]
+    ])
     await callback_query.message.edit_text(
         "🎬 **Post Builder — Movie Search**\n\n"
         "Enter the movie name to search TMDB:\n"
-        "Example: `Bhooth Bangla 2026`"
+        "Example: `Bhooth Bangla 2026`",
+        reply_markup=keyboard
     )
 
 # Callback: Skip TMDB (Manual caption)
@@ -508,7 +512,8 @@ async def poster_style_callback(client: Client, callback_query: CallbackQuery):
             processed_fid = sent_photo.photo.file_id
             await sent_photo.delete()
         else:
-            raise Exception("Failed to send processed poster photo")
+            await callback_query.message.reply_text("⚠️ Failed to upload processed poster.")
+            return
 
         # Update draft
         draft["poster_file_id"] = processed_fid
@@ -787,11 +792,12 @@ async def builder_preview_callback(client: Client, callback_query: CallbackQuery
         
     keyboard = InlineKeyboardMarkup([buttons[i:i+1] for i in range(len(buttons))])
 
+    kwargs = {}
+    if buttons:
+        kwargs["reply_markup"] = keyboard
+
     await client.send_message(user_id, "👁 **LIVE PREVIEW**")
     try:
-        kwargs = {}
-        if buttons:
-            kwargs["reply_markup"] = keyboard
         if poster_fid:
             await client.send_photo(
                 chat_id=user_id,
@@ -914,7 +920,13 @@ async def builder_input_handler(client: Client, message: Message):
         try:
             results = await tmdb_client.search_movies(text)
             if not results:
-                await typing_msg.edit_text("❌ No results found. Try a different name:")
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ Skip TMDB - Manual Caption", callback_data="tmdb_skip")]
+                ])
+                await typing_msg.edit_text(
+                    "❌ No results found. Try a different name or use manual details:",
+                    reply_markup=keyboard
+                )
                 return
 
             # Render movie options
@@ -956,18 +968,32 @@ async def builder_input_handler(client: Client, message: Message):
                 key, val = line.split(":", 1)
                 data[key.strip().lower()] = val.strip()
 
-        title = data.get("title") or data.get("movie title")
+        title = data.get("title") or data.get("movie title") or data.get("movie")
         if not title:
-            await message.reply_text("❌ Title is required. Please follow the template format exactly.")
+            await message.reply_text("❌ Title/Movie is required. Please follow the template format exactly.")
             return
 
-        year = data.get("year", "N/A")
-        aka = data.get("aka", "N/A")
-        rating_str = data.get("rating", "0.0")
+        year = data.get("year")
+        # Extract year from bracketed title if it exists
+        year_match = re.search(r'[\[\(](\d{4})[\]\)]', title)
+        if year_match:
+            extracted_year = year_match.group(1)
+            title = re.sub(r'\s*[\[\(]\d{4}[\]\)]', '', title).strip()
+            if not year or year == "N/A":
+                year = extracted_year
+        if not year:
+            year = "N/A"
+
+        aka = data.get("aka") or data.get("also known as") or "N/A"
+        
+        # Support Rating Star: 8.7 / 10
+        rating_str = data.get("rating") or data.get("rating star") or "0.0"
+        rating_str = rating_str.split("/")[0].strip()
         try:
             rating = float(rating_str)
         except ValueError:
             rating = 0.0
+            
         rating_count_str = data.get("rating count", "0")
         try:
             rating_count = int(rating_count_str)
@@ -975,7 +1001,7 @@ async def builder_input_handler(client: Client, message: Message):
             rating_count = 0
 
         runtime = data.get("runtime", "N/A")
-        release = data.get("release", "N/A")
+        release = data.get("release") or data.get("release info") or "N/A"
 
         draft.update({
             "movie_title": title,
@@ -1020,10 +1046,10 @@ async def builder_input_handler(client: Client, message: Message):
         temp_file = None
         try:
             # Download photo bytes
-            temp_file = await message.download()
-            if not temp_file or not isinstance(temp_file, str):
-                raise Exception("Failed to download poster photo file")
-
+            downloaded = await message.download()
+            if not downloaded or not isinstance(downloaded, str):
+                raise Exception("Failed to download poster image.")
+            temp_file = downloaded
             with open(temp_file, "rb") as f:
                 img_bytes = f.read()
 
@@ -1039,7 +1065,7 @@ async def builder_input_handler(client: Client, message: Message):
                 processed_fid = sent_photo.photo.file_id
                 await sent_photo.delete()
             else:
-                raise Exception("Failed to send processed poster photo")
+                raise Exception("Failed to upload processed poster photo.")
 
             # Save to draft
             draft["original_photo_file_id"] = message.photo.file_id

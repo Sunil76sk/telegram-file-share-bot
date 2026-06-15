@@ -56,7 +56,7 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                     payload = payload.decode("utf-8")
 
                 amount = action.total_amount
-                charge_id = action.charge.id if getattr(action, "charge", None) else f"charge_{int(datetime.datetime.now().timestamp())}"
+                charge_id = action.charge.id if hasattr(action, "charge") and action.charge else f"charge_{int(datetime.datetime.now(datetime.timezone.utc).timestamp())}"
 
                 logger.info(
                     f"Successful payment from user {user_id}: payload={payload}, amount={amount} Stars, charge={charge_id}"

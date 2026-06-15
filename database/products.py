@@ -584,11 +584,11 @@ async def seed_marketplace_categories() -> None:
 
 
 # =============================================================================
-# BACKWARD COMPATIBILITY CATALOG HELPERS
+# BACKWARD COMPATIBILITY CATALOG HELPER FUNCTIONS
 # =============================================================================
 
 async def get_catalog_item(item_id: str | ObjectId) -> Optional[Dict[str, Any]]:
-    """Helper for backward compatibility with catalog items, mapping to products."""
+    """Helper for backward compatibility with catalog items."""
     if isinstance(item_id, str):
         try:
             item_id = ObjectId(item_id)
@@ -598,12 +598,12 @@ async def get_catalog_item(item_id: str | ObjectId) -> Optional[Dict[str, Any]]:
 
 
 async def get_catalog_item_by_token(token: str) -> Optional[Dict[str, Any]]:
-    """Helper for backward compatibility with catalog items, mapping to products."""
+    """Helper for backward compatibility with catalog items."""
     return await get_product_by_token(token)
 
 
 async def increment_catalog_purchases(item_id: str | ObjectId, amount: int = 0) -> None:
-    """Helper for backward compatibility with catalog items, mapping to product sales."""
+    """Helper for backward compatibility with catalog items."""
     if isinstance(item_id, str):
         try:
             item_id = ObjectId(item_id)
