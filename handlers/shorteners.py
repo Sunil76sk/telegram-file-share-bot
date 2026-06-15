@@ -8,8 +8,10 @@ from pyrogram.types import (
     InlineKeyboardButton,
     CallbackQuery,
 )
+import asyncio
 from bot import app
 import database
+from handlers.settings import re_shorten_tutorial_url
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +208,7 @@ async def sh_toggle_callback(client: Client, callback_query: CallbackQuery):
 
     new_status = "inactive" if sh["status"] == "active" else "active"
     await database.update_shortener(sh_id, {"status": new_status})
+    asyncio.create_task(re_shorten_tutorial_url())
     await callback_query.answer(f"Status changed to {new_status}!")
 
     bot_id = None
@@ -225,6 +228,7 @@ async def sh_delete_callback(client: Client, callback_query: CallbackQuery):
 
     deleted = await database.delete_shortener(sh_id)
     if deleted:
+        asyncio.create_task(re_shorten_tutorial_url())
         await callback_query.answer("🗑 Shortener deleted successfully!")
     else:
         await callback_query.answer("❌ Failed to delete shortener", show_alert=True)
@@ -378,6 +382,7 @@ async def handle_shortener_state(
             cpm=draft["cpm"],
             bot_id=bot_id,
         )
+        asyncio.create_task(re_shorten_tutorial_url())
 
         # Clear state
         await database.users_col.update_one(

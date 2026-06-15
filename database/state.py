@@ -304,8 +304,8 @@ async def delete_expired_drafts_and_states() -> None:
             logger.info(f"Deleted {res.deleted_count + res2.deleted_count} expired password sessions.")
 
         # 5. Clear expired post drafts
-        from database.mongo import post_drafts_col
-        res = await post_drafts_col.delete_many({"updated_at": {"$lt": limit_24h}})
+        from database.mongo import drafts_col
+        res = await drafts_col.delete_many({"updated_at": {"$lt": limit_24h}})
         if res.deleted_count > 0:
             logger.info(f"Deleted {res.deleted_count} expired post drafts.")
 

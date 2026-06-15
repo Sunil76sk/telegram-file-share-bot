@@ -7,7 +7,8 @@ from database.mongo import (
     scheduled_posts_col,
     templates_col,
     repost_jobs_col,
-    post_drafts_col,
+    drafts_col,
+    settings_col,
     channel_stats_col,
     button_clicks_col,
 )
@@ -55,19 +56,44 @@ async def get_channel_by_id(channel_id: int | str):
 async def save_post_draft(user_id: int, draft: dict):
     """Save or update a creator's current post draft builder session."""
     draft["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
-    await post_drafts_col.update_one(
-        {"_id": user_id},
+    await drafts_col.update_one(
+        {"user_id": user_id},
         {"$set": draft},
         upsert=True,
     )
 
 async def get_post_draft(user_id: int):
     """Get the active post draft for a user."""
-    return await post_drafts_col.find_one({"_id": user_id})
+    return await drafts_col.find_one({"user_id": user_id})
 
 async def delete_post_draft(user_id: int):
     """Delete a user's post draft session."""
-    await post_drafts_col.delete_one({"_id": user_id})
+    await drafts_col.delete_one({"user_id": user_id})
+
+# ─── GLOBAL SETTINGS HELPERS ─────────────────────────────────────────
+
+async def get_settings() -> dict:
+    """Get global settings, creating default if not exists."""
+    settings = await settings_col.find_one({"_id": "global"})
+    if not settings:
+        settings = {
+            "_id": "global",
+            "tmdb_api_key": None,
+            "tmdb_default_language": "en",
+            "tutorial_video_url": None,
+            "tutorial_shortened_url": None,
+            "tutorial_show_on_post": False
+        }
+        await settings_col.insert_one(settings)
+    return settings
+
+async def update_settings(updates: dict):
+    """Update global settings fields."""
+    await settings_col.update_one(
+        {"_id": "global"},
+        {"$set": updates},
+        upsert=True
+    )
 
 # ─── SCHEDULED POST HELPERS ──────────────────────────────────────────
 

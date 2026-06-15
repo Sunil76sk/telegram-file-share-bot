@@ -1,528 +1,525 @@
 from __future__ import annotations
 
 import logging
-import asyncio
 import datetime
+import calendar
 import pytz
+from bson import ObjectId
 from pyrogram import Client, filters
-from pyrogram.enums import ParseMode
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from pyrogram.errors import FloodWait
+from pyrogram.errors import MessageNotModified
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.mongodb import MongoDBJobStore
+
 from bot import app
 import config
 import database
 from utils.helpers import banned_filter
-from utils.caption_builder import build_telegram_caption_html
+from utils.publisher import publish_post
 
 logger = logging.getLogger(__name__)
 
-_scheduler = None
+# Configure APScheduler with MongoDB jobstore
+jobstores = {
+    "default": MongoDBJobStore(
+        database=config.DB_NAME,
+        collection="apscheduler_jobs",
+        host=config.MONGO_URI
+    )
+}
 
+scheduler = AsyncIOScheduler(
+    jobstores=jobstores,
+    job_defaults={
+        "coalesce": True,
+        "max_instances": 1,
+        "misfire_grace_time": 300
+    },
+    timezone=pytz.utc
+)
+
+_scheduler_started = False
 
 async def init_scheduler(client: Client):
-    """Initialize APScheduler and start background jobs."""
-    global _scheduler
-    try:
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from apscheduler.triggers.interval import IntervalTrigger
-    except ImportError:
-        logger.error("APScheduler not installed. Run: pip install apscheduler")
-        return
-
-    _scheduler = AsyncIOScheduler(timezone=getattr(config, "SCHEDULER_TIMEZONE", "UTC"))
-
-    _scheduler.add_job(
-        _process_scheduled_posts,
-        IntervalTrigger(seconds=15),
-        args=[client],
-        id="scheduled_posts_checker",
-        replace_existing=True,
-        max_instances=1,
-    )
-
-    _scheduler.add_job(
-        _process_repost_jobs,
-        IntervalTrigger(seconds=30),
-        args=[client],
-        id="repost_jobs_checker",
-        replace_existing=True,
-        max_instances=1,
-    )
-
-    _scheduler.start()
-    logger.info("APScheduler started with scheduled_posts_checker (15s) and repost_jobs_checker (30s).")
-
+    global _scheduler_started
+    if not _scheduler_started:
+        scheduler.start()
+        _scheduler_started = True
+        logger.info("APScheduler started with MongoDB jobstore.")
 
 async def stop_scheduler():
-    """Shutdown the scheduler gracefully."""
-    global _scheduler
-    if _scheduler and _scheduler.running:
-        _scheduler.shutdown(wait=False)
-        logger.info("APScheduler shut down.")
+    global _scheduler_started
+    if _scheduler_started and scheduler.running:
+        scheduler.shutdown(wait=False)
+        _scheduler_started = False
+        logger.info("APScheduler shut down gracefully.")
 
+# Job wrapper function that gets executed by APScheduler
+async def publish_scheduled_post(post_id: str):
+    """APScheduler task to publish a scheduled post."""
+    try:
+        from database.mongo import db
+        post = await db.scheduled_posts.find_one({"_id": ObjectId(post_id)})
+        if not post:
+            logger.error(f"Scheduled post {post_id} not found in database.")
+            return
 
-# ─── BACKGROUND WORKER: SCHEDULED POSTS ──────────────────────────────
+        if post.get("status") != "pending":
+            logger.info(f"Scheduled post {post_id} already has status {post.get('status')}. Skipping.")
+            return
 
-async def _process_scheduled_posts(client: Client):
-    """Process pending scheduled posts with retry logic."""
-    from handlers.post_builder import build_post_keyboard, get_comments_url
+        # Publish the post
+        await publish_post(post, app, delete_draft=False)
 
-    pending = await database.get_pending_scheduled_posts()
-    for post in pending:
-        post_id = str(post["_id"])
-        retry_count = post.get("retry_count", 0)
-
+        # Mark as completed
+        await db.scheduled_posts.update_one(
+            {"_id": ObjectId(post_id)},
+            {"$set": {"status": "completed", "sent_at": datetime.datetime.now(datetime.timezone.utc)}}
+        )
+        logger.info(f"Scheduled post {post_id} published successfully.")
+    except Exception as e:
+        logger.error(f"Failed to publish scheduled post {post_id}: {e}", exc_info=True)
         try:
-            channel_id = post["channel_id"]
-            caption = post.get("caption", "")
-            poster_media = post.get("poster_media") or {}
-            layout_type = post.get("layout_type", "layout_a")
-            download_files = post.get("download_files", [])
-            custom_buttons = post.get("custom_buttons", [])
-
-            comments_url = None
-            if post.get("comments"):
-                comments_url = await get_comments_url(client, channel_id)
-
-            reply_markup = build_post_keyboard(
-                layout_type=layout_type,
-                download_configs=download_files,
-                custom_buttons=custom_buttons,
-                reactions=post.get("reactions", []),
-                comments_url=comments_url,
+            from database.mongo import db
+            await db.scheduled_posts.update_one(
+                {"_id": ObjectId(post_id)},
+                {"$set": {"status": "failed", "failure_reason": str(e), "failed_at": datetime.datetime.now(datetime.timezone.utc)}}
             )
+        except:
+            pass
 
-            poster_type = poster_media.get("type") if poster_media else None
-            poster_fid = poster_media.get("file_id") if poster_media else None
-            parsed_caption = build_telegram_caption_html(caption) if caption else ""
-
-            if poster_type == "photo":
-                msg = await client.send_photo(
-                    chat_id=channel_id, photo=poster_fid,
-                    caption=parsed_caption, reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML if parsed_caption else None,
-                )
-            elif poster_type == "video":
-                msg = await client.send_video(
-                    chat_id=channel_id, video=poster_fid,
-                    caption=parsed_caption, reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML if parsed_caption else None,
-                )
-            elif post.get("media_type") == "text":
-                msg = await client.send_message(
-                    chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML if parsed_caption else None,
-                )
+# Helper: Build Calendar Inline Keyboard
+def get_calendar_keyboard(year: int, month: int, timezone_str: str) -> InlineKeyboardMarkup:
+    try:
+        tz = pytz.timezone(timezone_str)
+    except pytz.UnknownTimeZoneError:
+        tz = pytz.timezone("Asia/Kolkata")
+        
+    now_local = datetime.datetime.now(tz).date()
+    max_date = now_local + datetime.timedelta(days=30)
+    
+    kb_rows = []
+    
+    # Month Header Row
+    month_name = calendar.month_name[month]
+    kb_rows.append([
+        InlineKeyboardButton("◀️", callback_data=f"schedule_month_prev_{year}_{month}"),
+        InlineKeyboardButton(f"{month_name} {year}", callback_data="noop"),
+        InlineKeyboardButton("▶️", callback_data=f"schedule_month_next_{year}_{month}")
+    ])
+    
+    # Weekday Header Row
+    kb_rows.append([
+        InlineKeyboardButton(day, callback_data="noop") for day in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+    ])
+    
+    # Weeks
+    cal = calendar.Calendar(firstweekday=0)
+    month_days = cal.monthdayscalendar(year, month)
+    
+    for week in month_days:
+        row = []
+        for day in week:
+            if day == 0:
+                row.append(InlineKeyboardButton(" ", callback_data="noop"))
             else:
-                if post.get("caption_above") and post.get("file_id"):
-                    msg = await client.send_message(
-                        chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
-                        parse_mode=ParseMode.HTML if parsed_caption else None,
-                    )
-                    await client.send_cached_media(chat_id=channel_id, file_id=post["file_id"])
-                elif post.get("file_id"):
-                    msg = await client.send_cached_media(
-                        chat_id=channel_id, file_id=post["file_id"],
-                        caption=parsed_caption, reply_markup=reply_markup,
-                        parse_mode=ParseMode.HTML if parsed_caption else None,
-                    )
+                date_obj = datetime.date(year, month, day)
+                if date_obj < now_local or date_obj > max_date:
+                    # Past or >30 days out -> disabled
+                    row.append(InlineKeyboardButton(f"~{day}~", callback_data="noop"))
                 else:
-                    msg = await client.send_message(
-                        chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
-                        parse_mode=ParseMode.HTML if parsed_caption else None,
-                    )
+                    # Highlight today
+                    if date_obj == now_local:
+                        label = f"•{day}•"
+                    else:
+                        label = str(day)
+                    date_str = date_obj.strftime("%Y%m%d")
+                    row.append(InlineKeyboardButton(label, callback_data=f"schedule_date_{date_str}"))
+        kb_rows.append(row)
+        
+    # Quick select buttons
+    today_str = now_local.strftime("%Y%m%d")
+    tomorrow_str = (now_local + datetime.timedelta(days=1)).strftime("%Y%m%d")
+    plus3_str = (now_local + datetime.timedelta(days=3)).strftime("%Y%m%d")
+    
+    kb_rows.append([
+        InlineKeyboardButton("Today", callback_data=f"schedule_date_{today_str}"),
+        InlineKeyboardButton("Tomorrow", callback_data=f"schedule_date_{tomorrow_str}"),
+        InlineKeyboardButton("+3 Days", callback_data=f"schedule_date_{plus3_str}")
+    ])
+    
+    kb_rows.append([
+        InlineKeyboardButton("↩️ Cancel", callback_data="build_btn_back")
+    ])
+    
+    return InlineKeyboardMarkup(kb_rows)
 
-            if post.get("pin") and msg:
-                try:
-                    await client.pin_chat_message(chat_id=channel_id, message_id=msg.id)
-                except Exception:
-                    pass
+# Callback: Open Schedule Flow (STEP 1: Timezone Selection)
+@app.on_callback_query(filters.regex(r"^builder_schedule$"))
+async def builder_schedule_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    try:
+        draft = await database.get_post_draft(user_id)
+        if not draft:
+            await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
+            return
+            
+        if callback_query.from_user.id != draft.get("user_id"):
+            await callback_query.answer("❌ Not your session", show_alert=True)
+            return
 
-            await database.mark_post_sent(post_id)
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🇮🇳 Asia/Kolkata (IST)", callback_data="schedule_tz_Asia/Kolkata"),
+                InlineKeyboardButton("🇦🇪 Asia/Dubai (GST)", callback_data="schedule_tz_Asia/Dubai")
+            ],
+            [
+                InlineKeyboardButton("🇸🇬 Asia/Singapore (SGT)", callback_data="schedule_tz_Asia/Singapore"),
+                InlineKeyboardButton("🌐 UTC", callback_data="schedule_tz_UTC")
+            ],
+            [
+                InlineKeyboardButton("✏️ Custom Timezone", callback_data="schedule_tz_custom")
+            ],
+            [
+                InlineKeyboardButton("↩️ Back", callback_data="build_btn_back")
+            ]
+        ])
 
-        except Exception as post_err:
-            logger.error(f"Scheduled post {post_id} failed (attempt {retry_count + 1}): {post_err}")
-            new_retry = retry_count + 1
-            if new_retry >= 3:
-                await database.mark_post_failed(post_id, str(post_err))
-            else:
-                await database.mark_post_retry(post_id, new_retry, str(post_err))
+        await callback_query.message.edit_text(
+            "🌍 **Scheduling — Select Timezone**\n\n"
+            "Please select the timezone you want to use for scheduling this post:",
+            reply_markup=kb
+        )
+        await callback_query.answer()
+    except Exception as e:
+        logger.error(f"Error in builder_schedule: {e}", exc_info=True)
+        await callback_query.answer("⚠️ Error loading timezone menu", show_alert=True)
 
+# Callback: Timezone Selected
+@app.on_callback_query(filters.regex(r"^schedule_tz_(.+)$"))
+async def schedule_tz_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    timezone_str = callback_query.matches[0].group(1)
+    
+    draft = await database.get_post_draft(user_id)
+    if not draft:
+        await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
+        return
+        
+    if callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Not your session", show_alert=True)
+        return
 
-# ─── BACKGROUND WORKER: AUTO REPOST ─────────────────────────────────
+    await callback_query.answer()
 
-async def _process_repost_jobs(client: Client):
-    """Process auto-repost jobs with persistent state."""
-    from handlers.post_builder import build_post_keyboard, get_comments_url
+    if timezone_str == "custom":
+        draft["state"] = "awaiting_custom_timezone"
+        await database.save_post_draft(user_id, draft)
+        await callback_query.message.edit_text(
+            "✏️ **Custom Timezone**\n\n"
+            "Please enter your custom timezone name (IANA format):\n"
+            "Example: `Europe/London` or `America/New_York`"
+        )
+        return
 
-    reposts = await database.get_active_repost_jobs()
-    for job in reposts:
-        job_id = str(job["_id"])
-        retry_count = job.get("retry_count", 0)
+    # Standard timezone selected
+    draft["schedule_timezone"] = timezone_str
+    # Move to Date Picker
+    now_tz = datetime.datetime.now(pytz.timezone(timezone_str))
+    
+    await callback_query.message.edit_text(
+        "📅 **Scheduling — Select Date**\n\n"
+        f"Timezone: `{timezone_str}`\n"
+        "Choose a date from the calendar below (max 30 days ahead):",
+        reply_markup=get_calendar_keyboard(now_tz.year, now_tz.month, timezone_str)
+    )
+    draft["state"] = "awaiting_schedule_date"
+    await database.save_post_draft(user_id, draft)
 
-        try:
-            channel_id = job["channel_id"]
-            caption = job.get("caption", "")
-            poster_media = job.get("poster_media") or {}
-            layout_type = job.get("layout_type", "layout_a")
-            download_files = job.get("download_files", [])
-            custom_buttons = job.get("custom_buttons", [])
+# Callback: Date Selected (YYYYMMDD)
+@app.on_callback_query(filters.regex(r"^schedule_date_(\d{8})$"))
+async def schedule_date_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    date_str = callback_query.matches[0].group(1)
+    
+    draft = await database.get_post_draft(user_id)
+    if not draft:
+        await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
+        return
+        
+    if callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Not your session", show_alert=True)
+        return
 
-            comments_url = None
-            if job.get("comments"):
-                comments_url = await get_comments_url(client, channel_id)
+    draft["schedule_date"] = date_str
+    draft["state"] = "awaiting_schedule_time"
+    await database.save_post_draft(user_id, draft)
+    await callback_query.answer()
 
-            reply_markup = build_post_keyboard(
-                layout_type=layout_type,
-                download_configs=download_files,
-                custom_buttons=custom_buttons,
-                reactions=job.get("reactions", []),
-                comments_url=comments_url,
-            )
+    # Reformat date for display
+    formatted_date = f"{date_str[6:8]}/{date_str[4:6]}/{date_str[0:4]}"
+    tz_str = draft.get("schedule_timezone", "Asia/Kolkata")
 
-            # Delete old message if exists
-            old_msg_id = job.get("last_post_id")
-            if old_msg_id:
-                try:
-                    await client.delete_messages(chat_id=channel_id, message_ids=old_msg_id)
-                except Exception as del_err:
-                    logger.warning(f"Failed to delete old repost message in {channel_id}: {del_err}")
+    await callback_query.message.edit_text(
+        "⏰ **Scheduling — Enter Time**\n\n"
+        f"**Selected Date:** {formatted_date}\n"
+        f"**Timezone:** {tz_str}\n\n"
+        "Please enter the time in **HH:MM** format (24-hour):\n"
+        "Example: `08:00` or `20:30`"
+    )
 
-            # Wait custom delete gap
-            delete_gap = job.get("delete_gap", 5)
-            if delete_gap > 0:
-                await asyncio.sleep(delete_gap)
+# Callback: Navigation Month Change
+@app.on_callback_query(filters.regex(r"^schedule_month_(prev|next)_(\d{4})_(\d+)$"))
+async def schedule_month_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    direction = callback_query.matches[0].group(1)
+    year = int(callback_query.matches[0].group(2))
+    month = int(callback_query.matches[0].group(3))
+    
+    draft = await database.get_post_draft(user_id)
+    if not draft:
+        await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
+        return
+        
+    if callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Not your session", show_alert=True)
+        return
 
-            # Send new message
-            poster_type = poster_media.get("type") if poster_media else None
-            poster_fid = poster_media.get("file_id") if poster_media else None
-            parsed_caption = build_telegram_caption_html(caption) if caption else ""
+    if direction == "prev":
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    else:
+        month += 1
+        if month == 13:
+            month = 1
+            year += 1
 
-            if poster_type == "photo":
-                msg = await client.send_photo(
-                    chat_id=channel_id, photo=poster_fid,
-                    caption=parsed_caption, reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML if parsed_caption else None,
-                )
-            elif poster_type == "video":
-                msg = await client.send_video(
-                    chat_id=channel_id, video=poster_fid,
-                    caption=parsed_caption, reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML if parsed_caption else None,
-                )
-            elif job.get("media_type") == "text":
-                msg = await client.send_message(
-                    chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
-                    parse_mode=ParseMode.HTML if parsed_caption else None,
-                )
-            else:
-                if job.get("caption_above") and job.get("file_id"):
-                    msg = await client.send_message(
-                        chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
-                        parse_mode=ParseMode.HTML if parsed_caption else None,
-                    )
-                    await client.send_cached_media(chat_id=channel_id, file_id=job["file_id"])
-                elif job.get("file_id"):
-                    msg = await client.send_cached_media(
-                        chat_id=channel_id, file_id=job["file_id"],
-                        caption=parsed_caption, reply_markup=reply_markup,
-                        parse_mode=ParseMode.HTML if parsed_caption else None,
-                    )
-                else:
-                    msg = await client.send_message(
-                        chat_id=channel_id, text=parsed_caption, reply_markup=reply_markup,
-                        parse_mode=ParseMode.HTML if parsed_caption else None,
-                    )
+    tz_str = draft.get("schedule_timezone", "Asia/Kolkata")
+    
+    try:
+        await callback_query.message.edit_reply_markup(
+            reply_markup=get_calendar_keyboard(year, month, tz_str)
+        )
+    except MessageNotModified:
+        pass
+    await callback_query.answer()
 
-            if job.get("pin") and msg:
-                try:
-                    await client.pin_chat_message(chat_id=channel_id, message_id=msg.id)
-                except Exception:
-                    pass
+# Callback: Confirm Schedule
+@app.on_callback_query(filters.regex(r"^schedule_confirm$"))
+async def schedule_confirm_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    draft = await database.get_post_draft(user_id)
+    if not draft:
+        await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
+        return
+        
+    if callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Not your session", show_alert=True)
+        return
 
-            # Update job state (persistent — survives restart)
-            next_repost_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=job["repost_interval"])
-            await database.update_repost_job_run(job_id, msg.id, next_repost_at)
-            await database.increment_channel_stat(channel_id, "reposts", 1)
+    scheduled_time_str = draft.get("pending_schedule_time_utc")
+    if not scheduled_time_str:
+        await callback_query.answer("❌ No scheduled time set", show_alert=True)
+        return
 
-        except Exception as post_err:
-            logger.error(f"Repost job {job_id} failed (attempt {retry_count + 1}): {post_err}")
-            new_retry = retry_count + 1
-            if new_retry >= 3:
-                await database.mark_repost_job_failed(job_id, str(post_err))
-            else:
-                await database.mark_repost_job_retry(job_id, new_retry, str(post_err))
+    scheduled_utc = datetime.datetime.fromisoformat(scheduled_time_str)
 
+    # Save to scheduled_posts collection
+    from database.mongo import db
+    post_doc = {
+        "user_id": user_id,
+        "channel_id": draft["channel_id"],
+        "channel_name": draft["channel_name"],
+        "poster_file_id": draft["poster_file_id"],
+        "poster_bg_style": draft["poster_bg_style"],
+        "caption_html": draft["caption_html"],
+        "url_buttons": draft["url_buttons"],
+        "reactions_enabled": draft["reactions_enabled"],
+        "reactions": draft["reactions"],
+        "comments_enabled": draft["comments_enabled"],
+        "pin_message": draft["pin_message"],
+        "schedule_enabled": True,
+        "scheduled_time": scheduled_utc,
+        "schedule_timezone": draft["schedule_timezone"],
+        "repost_enabled": False,
+        "status": "pending",
+        "created_at": datetime.datetime.now(datetime.timezone.utc)
+    }
 
-# ─── STATE HANDLERS FOR POST BUILDER INTEGRATION ──────────────────────
+    result = await db.scheduled_posts.insert_one(post_doc)
+    post_id = str(result.inserted_id)
 
+    # Save APScheduler job
+    scheduler.add_job(
+        publish_scheduled_post,
+        "date",
+        run_date=scheduled_utc,
+        args=[post_id],
+        id=f"sched_{post_id}"
+    )
+
+    # Increment stats
+    await database.increment_channel_stat(draft["channel_id"], "scheduled_posts", 1)
+
+    # Delete draft
+    await database.delete_post_draft(user_id)
+    await callback_query.answer("Post scheduled successfully!")
+    
+    tz_str = draft["schedule_timezone"]
+    try:
+        tz = pytz.timezone(tz_str)
+    except:
+        tz = pytz.timezone("Asia/Kolkata")
+    local_time = scheduled_utc.astimezone(tz)
+    
+    await callback_query.message.edit_text(
+        f"✅ **Post scheduled successfully!**\n\n"
+        f"🕐 **Time:** {local_time.strftime('%d %b %Y, %I:%M %p')} ({tz_str})\n"
+        f"🌐 **UTC:** {scheduled_utc.strftime('%d %b %Y, %H:%M UTC')}"
+    )
+
+# Callback: Change schedule time (re-enter time)
+@app.on_callback_query(filters.regex(r"^schedule_change_time$"))
+async def schedule_change_time_callback(client: Client, callback_query: CallbackQuery):
+    user_id = callback_query.from_user.id
+    draft = await database.get_post_draft(user_id)
+    if not draft:
+        await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
+        return
+        
+    if callback_query.from_user.id != draft.get("user_id"):
+        await callback_query.answer("❌ Not your session", show_alert=True)
+        return
+
+    draft["state"] = "awaiting_schedule_time"
+    await database.save_post_draft(user_id, draft)
+    await callback_query.answer()
+
+    date_str = draft.get("schedule_date")
+    formatted_date = f"{date_str[6:8]}/{date_str[4:6]}/{date_str[0:4]}"
+    tz_str = draft.get("schedule_timezone", "Asia/Kolkata")
+
+    await callback_query.message.edit_text(
+        "⏰ **Scheduling — Enter Time**\n\n"
+        f"**Selected Date:** {formatted_date}\n"
+        f"**Timezone:** {tz_str}\n\n"
+        "Please enter the time in **HH:MM** format (24-hour):\n"
+        "Example: `08:00` or `20:30`"
+    )
+
+# Message input handler for scheduling states (custom timezone & time input)
 @app.on_message(filters.private & ~banned_filter, group=4)
 async def scheduler_input_handler(client: Client, message: Message):
-    """Handle schedule time, repost interval, and delete gap inputs.
-    
-    Registered in group 4 to run BEFORE builder_input_handler (group 5)
-    so schedule-specific states are processed first.
-    """
     user_id = message.from_user.id
-    draft = await database.get_post_draft(user_id)
-    
-    # STATE GUARD: Only process if user is in one of our states
-    if not draft or draft.get("state") not in ["awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"]:
-        return  # Not our message, let other handlers process
-
     text = message.text.strip() if message.text else ""
-    
-    # Allow commands (excluding /cancel) to pass through to command handlers
-    if text.startswith("/") and text.lower() != "/cancel":
-        return
-
-    state = draft.get("state")
-    logger.info(f"[scheduler_input_handler] user={user_id} state={state} text={text[:30]}")
 
     if text.lower() == "/cancel":
-        await database.delete_post_draft(user_id)
-        await message.reply_text("Post builder session cancelled.")
-        logger.info(f"[scheduler_input_handler] Cancelled session for user {user_id}")
-        message.stop_propagation()  # Stop here - we handled it
+        return  # Handled by main cancel handler in post_builder.py
+        
+    draft = await database.get_post_draft(user_id)
+    if not draft:
+        return
+        
+    state = draft.get("state")
+    if not state or state not in ["awaiting_custom_timezone", "awaiting_schedule_time"]:
         return
 
-    # 1. Parse Schedule Time (timezone-aware)
-    if state == "awaiting_schedule_time":
-        user_tz_str = draft.get("timezone") or (await database.get_user(user_id) or {}).get("timezone", "Asia/Kolkata")
-
+    # Handle Custom Timezone input
+    if state == "awaiting_custom_timezone":
         try:
-            # Parse user input as naive datetime
-            text_clean = text.strip()
-            if not text_clean:
-                await message.reply_text(
-                    "❌ **Empty input!**\n\n"
-                    "Send time in format: `YYYY-MM-DD HH:MM`\n"
-                    "Example: `2026-06-15 14:30`"
-                )
-                message.stop_propagation()
-                return
-
-            try:
-                scheduled_naive = datetime.datetime.strptime(text_clean, "%Y-%m-%d %H:%M")
-            except ValueError as parse_err:
-                logger.error(f"strptime failed for user {user_id}, input '{text_clean}': {parse_err}")
-                await message.reply_text(
-                    "❌ **Invalid format!**\n\n"
-                    "Send time in format: `YYYY-MM-DD HH:MM`\n"
-                    "Example: `2026-06-15 14:30`\n\n"
-                    f"Your timezone: {user_tz_str}"
-                )
-                message.stop_propagation()
-                return
-
-            # Localize to user's timezone (naive → aware)
-            try:
-                user_tz = pytz.timezone(user_tz_str)
-            except pytz.UnknownTimeZoneError:
-                user_tz = pytz.timezone("Asia/Kolkata")
+            pytz.timezone(text)
+            draft["schedule_timezone"] = text
             
-            scheduled_aware = user_tz.localize(scheduled_naive)
-            
-            # Convert to UTC for storage and comparison
-            scheduled_utc = scheduled_aware.astimezone(pytz.utc)
-            now_utc = datetime.datetime.now(pytz.utc)
-
-            # Validate: must be in future
-            if scheduled_utc <= now_utc:
-                now_in_tz = now_utc.astimezone(user_tz)
-                await message.reply_text(
-                    f"❌ **Time is in the past!**\n\n"
-                    f"Current time: `{now_in_tz.strftime('%Y-%m-%d %H:%M')} {user_tz_str}`\n"
-                    f"Please enter a future time."
-                )
-                message.stop_propagation()
-                return
-
-            # Validate: premium users only can schedule > 24 hours ahead
-            is_premium = await database.is_user_premium(user_id)
-            max_future_utc = now_utc + datetime.timedelta(days=1)
-            if not is_premium and scheduled_utc > max_future_utc:
-                max_future_tz = max_future_utc.astimezone(user_tz)
-                await message.reply_text(
-                    "⏰ **Advanced Scheduling is a Premium Feature!**\n\n"
-                    "Free creators can only schedule posts up to **24 hours in advance**.\n\n"
-                    f"Max allowed: `{max_future_tz.strftime('%Y-%m-%d %H:%M')} {user_tz_str}`\n"
-                    "Upgrade to Premium with `/premium` for unlimited scheduling."
-                )
-                message.stop_propagation()
-                return
-
-            # Format display time in user's timezone
-            try:
-                tz_abbrev = user_tz.tzname(scheduled_aware) or user_tz_str.split("/")[-1]
-            except Exception:
-                tz_abbrev = user_tz_str.split("/")[-1]
-
-            display_time = scheduled_aware.strftime("%Y-%m-%d %I:%M %p")
-
-            # Create scheduled post (store UTC time)
-            await database.create_scheduled_post(
-                user_id=user_id,
-                channel_id=draft["channel_id"],
-                media_type=draft["media_type"],
-                file_id=draft["file_id"],
-                caption=draft["caption"],
-                buttons=draft.get("custom_buttons", []),
-                scheduled_time=scheduled_utc,
-                reactions=draft.get("reactions", []),
-                comments=draft.get("comments_enabled", False),
-                pin=draft.get("pin_message", False),
-                caption_above=draft.get("caption_above", False),
-                poster_media=draft.get("poster_media"),
-                layout_type=draft.get("layout_type", "layout_a"),
-                download_files=draft.get("download_files", []),
-                custom_buttons=draft.get("custom_buttons", []),
-            )
-            await database.increment_channel_stat(draft["channel_id"], "scheduled_posts", 1)
-            await database.delete_post_draft(user_id)
+            now_tz = datetime.datetime.now(pytz.timezone(text))
+            draft["state"] = "awaiting_schedule_date"
+            await database.save_post_draft(user_id, draft)
             
             await message.reply_text(
-                f"✅ **Post scheduled successfully!**\n\n"
-                f"**Time:** {display_time} {tz_abbrev}\n"
-                f"**UTC:** {scheduled_utc.strftime('%Y-%m-%d %H:%M')} UTC"
+                "📅 **Scheduling — Select Date**\n\n"
+                f"Timezone: `{text}`\n"
+                "Choose a date from the calendar below (max 30 days ahead):",
+                reply_markup=get_calendar_keyboard(now_tz.year, now_tz.month, text)
+            )
+        except pytz.UnknownTimeZoneError:
+            await message.reply_text(
+                "❌ **Invalid timezone name.**\n\n"
+                "Please enter a valid IANA timezone name (e.g. `Europe/London`, `Asia/Kolkata`):"
+            )
+        message.stop_propagation()
+        return
+
+    # Handle Time input (HH:MM)
+    elif state == "awaiting_schedule_time":
+        import re
+        if not re.match(r"^\d{2}:\d{2}$", text):
+            await message.reply_text("❌ **Invalid format.** Use HH:MM (e.g. 14:30):")
+            message.stop_propagation()
+            return
+            
+        parts = text.split(":")
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        if hours < 0 or hours > 23 or minutes < 0 or minutes > 59:
+            await message.reply_text("❌ **Invalid time values.** Hours: 0-23, Minutes: 0-59. Enter again:")
+            message.stop_propagation()
+            return
+
+        date_str = draft.get("schedule_date")
+        tz_str = draft.get("schedule_timezone", "Asia/Kolkata")
+        
+        try:
+            tz = pytz.timezone(tz_str)
+        except:
+            tz = pytz.timezone("Asia/Kolkata")
+
+        # Parse date and combine
+        try:
+            year = int(date_str[0:4])
+            month = int(date_str[4:6])
+            day = int(date_str[6:8])
+            
+            local_naive = datetime.datetime(year, month, day, hours, minutes)
+            local_aware = tz.localize(local_naive)
+            scheduled_utc = local_aware.astimezone(pytz.utc)
+            
+            now_utc = datetime.datetime.now(pytz.utc)
+            if scheduled_utc <= now_utc:
+                await message.reply_text("❌ **Time is in the past.** Please enter a future time:")
+                message.stop_propagation()
+                return
+
+            # Save pending time to draft in ISO format
+            draft["pending_schedule_time_utc"] = scheduled_utc.isoformat()
+            draft["state"] = "active"
+            await database.save_post_draft(user_id, draft)
+
+            # Step 4: Show confirmation
+            confirm_text = (
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                "📅 **SCHEDULE CONFIRMATION**\n\n"
+                f"📢 **Channel:** {draft['channel_name']}\n"
+                f"🎬 **Movie:** {draft['movie_title']} [{draft['movie_year']}]\n\n"
+                f"🕐 **Scheduled:**\n"
+                f"{local_aware.strftime('%d %b %Y, %I:%M %p')} ({tz_str})\n"
+                f"(UTC: {scheduled_utc.strftime('%d %b %Y, %H:%M UTC')})\n"
+                "━━━━━━━━━━━━━━━━━━━━━━"
+            )
+            
+            await message.reply_text(
+                confirm_text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Confirm Schedule", callback_data="schedule_confirm")],
+                    [
+                        InlineKeyboardButton("✏️ Change Time", callback_data="schedule_change_time"),
+                        InlineKeyboardButton("❌ Cancel", callback_data="builder_cancel")
+                    ]
+                ])
             )
         except Exception as e:
-            logger.error(f"Unexpected error scheduling post for user {user_id}: {e}", exc_info=True)
-            await message.reply_text(
-                "❌ **Error scheduling post**\n\n"
-                "An unexpected error occurred. Please try again or contact support."
-            )
+            logger.error(f"Error calculating scheduled time: {e}", exc_info=True)
+            await message.reply_text("⚠️ Something went wrong. Let's try again. Enter time:")
+            
         message.stop_propagation()
         return
-
-    # 2. Parse Repost Settings (Interval)
-    elif state == "awaiting_repost_interval":
-        try:
-            interval = int(text)
-            if interval < 5:
-                await message.reply_text("Minimum interval is 5 minutes. Please enter again:")
-                message.stop_propagation()
-                return
-            draft["repost_interval"] = interval
-            draft["state"] = "awaiting_delete_gap"
-            await database.save_post_draft(user_id, draft)
-            await message.reply_text(
-                "Auto Reposting Setup\n\n"
-                "Please enter the **Delete Gap** (delay in seconds between deleting the old post and sending the new one):\n"
-                "Example: `10`"
-            )
-        except ValueError:
-            await message.reply_text("Please enter a valid integer representing minutes:")
-        message.stop_propagation()
-        return
-
-    # 3. Parse Repost Settings (Delete Gap)
-    elif state == "awaiting_delete_gap":
-        try:
-            gap = int(text)
-            if gap < 0:
-                await message.reply_text("Delete gap cannot be negative. Please enter again:")
-                message.stop_propagation()
-                return
-
-            await database.create_repost_job(
-                user_id=user_id,
-                channel_id=draft["channel_id"],
-                media_type=draft["media_type"],
-                file_id=draft["file_id"],
-                caption=draft["caption"],
-                buttons=draft.get("custom_buttons", []),
-                repost_interval=draft["repost_interval"],
-                delete_gap=gap,
-                reactions=draft.get("reactions", []),
-                comments=draft.get("comments_enabled", False),
-                pin=draft.get("pin_message", False),
-                caption_above=draft.get("caption_above", False),
-                poster_media=draft.get("poster_media"),
-                layout_type=draft.get("layout_type", "layout_a"),
-                download_files=draft.get("download_files", []),
-                custom_buttons=draft.get("custom_buttons", []),
-            )
-            await database.delete_post_draft(user_id)
-            await message.reply_text("Auto Reposting Job created and started successfully!")
-        except ValueError:
-            await message.reply_text("Please enter a valid integer representing seconds:")
-        message.stop_propagation()
-        return
-
-
-# ─── LISTING & CANCELING SCHEDULED POSTS ──────────────────────────────
-
-@app.on_message(filters.command("schedule") & filters.private & ~banned_filter)
-async def list_schedule_command_handler(client: Client, message: Message):
-    user_id = message.from_user.id
-    posts = await database.get_scheduled_posts_by_user(user_id)
-    if not posts:
-        await message.reply_text("No scheduled posts pending.")
-        return
-
-    text = "Pending Scheduled Posts:\n\n"
-    buttons = []
-    for index, post in enumerate(posts, start=1):
-        time_str = post["scheduled_time"].strftime("%Y-%m-%d %H:%M UTC")
-        channel = await database.get_channel_by_id(post["channel_id"])
-        ch_title = channel.get("channel_title") if channel else str(post["channel_id"])
-        status = post.get("status", "pending")
-
-        text += f"{index}. **Channel:** {ch_title}\n   **Time:** `{time_str}`\n   **Status:** `{status}`\n"
-        buttons.append([InlineKeyboardButton(f"Delete #{index}", callback_data=f"del_sch_{post['_id']}")])
-
-    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-
-
-@app.on_callback_query(filters.regex(r"^del_sch_(.+)"))
-async def delete_schedule_callback_handler(client: Client, callback_query: CallbackQuery):
-    post_id = callback_query.matches[0].group(1)
-    deleted = await database.delete_scheduled_post(post_id)
-    if deleted:
-        await callback_query.answer("Scheduled post deleted.", show_alert=True)
-        try:
-            await callback_query.message.delete()
-        except Exception:
-            pass
-    else:
-        await callback_query.answer("Failed to delete scheduled post.", show_alert=True)
-
-
-# ─── LISTING & CANCELING REPOST JOBS ──────────────────────────────────
-
-@app.on_message(filters.command("reposts") & filters.private & ~banned_filter)
-async def list_reposts_command_handler(client: Client, message: Message):
-    user_id = message.from_user.id
-    jobs = await database.get_repost_jobs_by_user(user_id)
-    if not jobs:
-        await message.reply_text("No active auto-reposting jobs.")
-        return
-
-    text = "Active Auto-Reposting Jobs:\n\n"
-    buttons = []
-    for index, job in enumerate(jobs, start=1):
-        channel = await database.get_channel_by_id(job["channel_id"])
-        ch_title = channel.get("channel_title") if channel else str(job["channel_id"])
-        status = job.get("status", "active")
-        text += f"{index}. **Channel:** {ch_title}\n   **Interval:** `{job['repost_interval']}m` | **Status:** `{status}`\n"
-        buttons.append([InlineKeyboardButton(f"Stop Job #{index}", callback_data=f"del_rep_{job['_id']}")])
-
-    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-
-
-@app.on_callback_query(filters.regex(r"^del_rep_(.+)"))
-async def delete_repost_callback_handler(client: Client, callback_query: CallbackQuery):
-    job_id = callback_query.matches[0].group(1)
-    deleted = await database.delete_repost_job(job_id)
-    if deleted:
-        await callback_query.answer("Auto-reposting job stopped.", show_alert=True)
-        try:
-            await callback_query.message.delete()
-        except Exception:
-            pass
-    else:
-        await callback_query.answer("Failed to stop job.", show_alert=True)
-
-
-

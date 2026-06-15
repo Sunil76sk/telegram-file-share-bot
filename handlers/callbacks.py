@@ -47,27 +47,6 @@ async def check_sub_callback(client: Client, callback_query: CallbackQuery):
         )
         return
 
-    # User has joined all channels, proceed to deliver files or download button config
-    if token.startswith("dl_"):
-        config_id = token.replace("dl_", "", 1)
-        from utils.movie_download_buttons import get_download_button_config
-        btn_config = await get_download_button_config(config_id)
-        if not btn_config:
-            await callback_query.answer("❌ Download configuration not found.", show_alert=True)
-            await callback_query.message.edit_text("❌ Download configuration not found.")
-            return
-
-        # Acknowledge the callback
-        await callback_query.answer("✅ Subscription verified! Delivering files...")
-        
-        # Delete the sub join message
-        await callback_query.message.delete()
-        
-        # Deliver via deliver_button_config helper
-        from handlers.start import deliver_button_config
-        await deliver_button_config(client, callback_query.message, btn_config)
-        return
-
     file_doc = await database.get_file_link(token)
     if not file_doc:
         await callback_query.answer(

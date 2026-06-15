@@ -192,7 +192,11 @@ REQUIRED_COLLECTIONS = {
     "repost_jobs": [
         ("next_post_at", None),
     ],
-    "post_drafts": [
+    "drafts": [
+        ("user_id", None),
+        ("state", None),
+    ],
+    "settings": [
         ("_id", None),
     ],
     "channel_stats": [
@@ -434,9 +438,12 @@ INDEX_SPECS: dict[str, list[tuple[str | list, int | str | dict]]] = {
     "repost_jobs": [
         (("next_post_at", 1), False),
     ],
-    "post_drafts": [
-        (("_id", 1), False),
+    "drafts": [
+        ((("user_id", 1), ("state", 1)), False),
+        (("user_id", 1), True),
+        (("created_at", 1), {"expireAfterSeconds": 86400}),
     ],
+    "settings": [],
     "channel_stats": [
         (("channel_id", 1), False),
     ],
@@ -596,7 +603,7 @@ async def _migration_004_add_creator_fields():
         {"service_enabled": {"$exists": False}},
         {"$set": {"service_enabled": True, "permissions_verified": True}}
     )
-    await db.post_drafts.update_many(
+    await db.drafts.update_many(
         {"updated_at": {"$exists": False}},
         {"$set": {"updated_at": datetime.datetime.now(datetime.timezone.utc)}}
     )
