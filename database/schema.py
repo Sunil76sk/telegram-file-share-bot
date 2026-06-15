@@ -260,7 +260,9 @@ REQUIRED_COLLECTIONS = {
     ],
 }
 
-INDEX_SPECS: dict[str, list[tuple[str | list, int | str | dict]]] = {
+from typing import Any
+
+INDEX_SPECS: dict[str, list[tuple[Any, Any]]] = {
     "users": [
         (("user_id", 1), False),
         (("username", 1), False),

@@ -56,7 +56,7 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                     payload = payload.decode("utf-8")
 
                 amount = action.total_amount
-                charge_id = action.charge_id
+                charge_id = action.charge.id if getattr(action, "charge", None) else f"charge_{int(datetime.datetime.now().timestamp())}"
 
                 logger.info(
                     f"Successful payment from user {user_id}: payload={payload}, amount={amount} Stars, charge={charge_id}"
@@ -140,8 +140,9 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                                 )
                             except Exception:
                                 pass
-                            from handlers.marketplace import deliver_product_files
-                            await deliver_product_files(client, user_id, purchase, product)
+                            if purchase:
+                                from handlers.marketplace import deliver_product_files
+                                await deliver_product_files(client, user_id, purchase, product)
                         else:
                             purchase = await database.record_purchase(
                                 user_id=user_id,

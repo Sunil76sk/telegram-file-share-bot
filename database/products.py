@@ -581,3 +581,33 @@ async def seed_marketplace_categories() -> None:
                 icon=cat["icon"],
                 order=cat["order"],
             )
+
+
+# =============================================================================
+# BACKWARD COMPATIBILITY CATALOG HELPERS
+# =============================================================================
+
+async def get_catalog_item(item_id: str | ObjectId) -> Optional[Dict[str, Any]]:
+    """Helper for backward compatibility with catalog items, mapping to products."""
+    if isinstance(item_id, str):
+        try:
+            item_id = ObjectId(item_id)
+        except Exception:
+            return None
+    return await get_product_by_id(item_id)
+
+
+async def get_catalog_item_by_token(token: str) -> Optional[Dict[str, Any]]:
+    """Helper for backward compatibility with catalog items, mapping to products."""
+    return await get_product_by_token(token)
+
+
+async def increment_catalog_purchases(item_id: str | ObjectId, amount: int = 0) -> None:
+    """Helper for backward compatibility with catalog items, mapping to product sales."""
+    if isinstance(item_id, str):
+        try:
+            item_id = ObjectId(item_id)
+        except Exception:
+            return
+    await increment_product_sales(item_id)
+

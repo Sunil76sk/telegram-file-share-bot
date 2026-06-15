@@ -63,11 +63,11 @@ class ImageConverter:
 
         return await asyncio.to_thread(_process)
 
-    def _create_black_bg(self, size: tuple) -> Image:
+    def _create_black_bg(self, size: tuple) -> Image.Image:
         """Pure black background RGB(0,0,0)"""
         return Image.new("RGB", size, (0, 0, 0))
 
-    def _create_blur_bg(self, original: Image, size: tuple) -> Image:
+    def _create_blur_bg(self, original: Image.Image, size: tuple) -> Image.Image:
         """
         Steps:
         1. Resize original to fill 1080x1080 (cover, not contain)
@@ -103,6 +103,6 @@ class ImageConverter:
         bg = enhancer.enhance(0.6)
         return bg
 
-    def _create_white_bg(self, size: tuple) -> Image:
+    def _create_white_bg(self, size: tuple) -> Image.Image:
         """Pure white background RGB(255,255,255)"""
         return Image.new("RGB", size, (255, 255, 255))

@@ -210,6 +210,9 @@ from database.products import (
     get_products,
     get_products_by_owner,
     get_user_purchases,
+    get_catalog_item,
+    get_catalog_item_by_token,
+    increment_catalog_purchases,
 )
 
 __all__ = [
@@ -403,4 +406,7 @@ __all__ = [
     "get_products",
     "get_products_by_owner",
     "get_user_purchases",
+    "get_catalog_item",
+    "get_catalog_item_by_token",
+    "increment_catalog_purchases",
 ]

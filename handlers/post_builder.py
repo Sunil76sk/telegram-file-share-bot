@@ -488,6 +488,10 @@ async def poster_style_callback(client: Client, callback_query: CallbackQuery):
 
     # Download original image
     temp_file = await client.download_media(original_fid)
+    if not temp_file or not isinstance(temp_file, str):
+        await callback_query.message.reply_text("❌ Failed to download original poster.")
+        return
+
     try:
         with open(temp_file, "rb") as f:
             img_bytes = f.read()
@@ -500,8 +504,11 @@ async def poster_style_callback(client: Client, callback_query: CallbackQuery):
             chat_id=user_id,
             photo=io.BytesIO(processed_bytes)
         )
-        processed_fid = sent_photo.photo.file_id
-        await sent_photo.delete()
+        if sent_photo and sent_photo.photo:
+            processed_fid = sent_photo.photo.file_id
+            await sent_photo.delete()
+        else:
+            raise Exception("Failed to send processed poster photo")
 
         # Update draft
         draft["poster_file_id"] = processed_fid
@@ -782,20 +789,23 @@ async def builder_preview_callback(client: Client, callback_query: CallbackQuery
 
     await client.send_message(user_id, "👁 **LIVE PREVIEW**")
     try:
+        kwargs = {}
+        if buttons:
+            kwargs["reply_markup"] = keyboard
         if poster_fid:
             await client.send_photo(
                 chat_id=user_id,
                 photo=poster_fid,
                 caption=caption,
                 parse_mode=ParseMode.HTML,
-                reply_markup=keyboard if buttons else None
+                **kwargs
             )
         else:
             await client.send_message(
                 chat_id=user_id,
                 text=caption,
                 parse_mode=ParseMode.HTML,
-                reply_markup=keyboard if buttons else None
+                **kwargs
             )
     except Exception as e:
         logger.error(f"Failed to render preview: {e}", exc_info=True)
@@ -1011,6 +1021,9 @@ async def builder_input_handler(client: Client, message: Message):
         try:
             # Download photo bytes
             temp_file = await message.download()
+            if not temp_file or not isinstance(temp_file, str):
+                raise Exception("Failed to download poster photo file")
+
             with open(temp_file, "rb") as f:
                 img_bytes = f.read()
 
@@ -1022,8 +1035,11 @@ async def builder_input_handler(client: Client, message: Message):
                 chat_id=user_id,
                 photo=io.BytesIO(processed_bytes)
             )
-            processed_fid = sent_photo.photo.file_id
-            await sent_photo.delete()
+            if sent_photo and sent_photo.photo:
+                processed_fid = sent_photo.photo.file_id
+                await sent_photo.delete()
+            else:
+                raise Exception("Failed to send processed poster photo")
 
             # Save to draft
             draft["original_photo_file_id"] = message.photo.file_id

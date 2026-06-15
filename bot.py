@@ -22,10 +22,12 @@ import socket
 import datetime
 import contextvars
 
+from typing import Any
+
 # Create a unique instance identifier
 startup_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
 INSTANCE_ID = f"{socket.gethostname()}-{os.getpid()}-{startup_time}"
-current_update_info = contextvars.ContextVar("current_update_info", default=None)
+current_update_info: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("current_update_info", default=None)
 
 # Log immediately on startup
 logger.info(f"[INSTANCE_START]\ninstance={INSTANCE_ID}")

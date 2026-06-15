@@ -86,7 +86,7 @@ async def show_settings_menu(client: Client, msg: Message, user_id: int):
 
     await msg.reply_text(text, reply_markup=InlineKeyboardMarkup(kb_rows))
 
-async def show_admin_settings_menu(client: Client, msg: Message, user_id: int):
+async def show_admin_settings_menu(client: Client, msg: Message | CallbackQuery, user_id: int):
     settings = await database.get_settings()
     
     masked_key = "Set" if settings.get("tmdb_api_key") else "Not Set"

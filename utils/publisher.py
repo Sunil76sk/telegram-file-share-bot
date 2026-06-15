@@ -51,13 +51,19 @@ async def publish_post(draft: dict, client: Client, delete_draft: bool = True) -
     if not photo_file_id:
         raise ValueError("No poster file_id found to publish.")
 
+    kwargs = {}
+    if buttons:
+        kwargs["reply_markup"] = keyboard
+
     msg = await client.send_photo(
         chat_id=channel_id,
         photo=photo_file_id,
         caption=caption,
         parse_mode=ParseMode.HTML,
-        reply_markup=keyboard if buttons else None
+        **kwargs
     )
+    if not msg:
+        raise ValueError("Failed to publish post: send_photo returned None.")
     
     # 4. Pin if enabled
     # Support both 'pin_message' and 'pin'
