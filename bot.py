@@ -68,6 +68,8 @@ import handlers.movie_search  # noqa: E402
 import handlers.marketplace  # noqa: E402
 import handlers.help  # noqa: E402
 import handlers.repost  # noqa: E402
+import handlers.url_buttons  # noqa: E402
+
 
 from utils.worker_framework import register_worker, start_workers, recover_workers, stop_workers  # noqa: E402
 from utils.queue_system import register_handler, recover_interrupted_tasks, process_queue  # noqa: E402

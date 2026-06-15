@@ -151,15 +151,18 @@ async def url_buttons_input_handler(client: Client, message: Message):
         pending = draft.get("pending_button", {})
         pending["url"] = text
         
-        # Shorten URL
+        # Shorten URL (unless it's a Telegram link)
         short_url = None
-        try:
-            # Get best shortener
-            shortener = await database.get_best_shortener()
-            if shortener:
-                short_url = await generate_short_link(shortener, text)
-        except Exception as e:
-            logger.error(f"Shortener failed: {e}")
+        is_telegram_link = any(domain in text.lower() for domain in ["t.me", "telegram.me", "telegram.dog"])
+        
+        if not is_telegram_link:
+            try:
+                # Get best shortener
+                shortener = await database.get_best_shortener()
+                if shortener:
+                    short_url = await generate_short_link(shortener, text)
+            except Exception as e:
+                logger.error(f"Shortener failed: {e}")
             
         pending["shortened_url"] = short_url or text
         draft["pending_button"] = pending
@@ -231,14 +234,17 @@ async def url_buttons_input_handler(client: Client, message: Message):
             
         buttons_list[idx]["url"] = text
         
-        # Re-shorten
+        # Re-shorten (unless it's a Telegram link)
         short_url = None
-        try:
-            shortener = await database.get_best_shortener()
-            if shortener:
-                short_url = await generate_short_link(shortener, text)
-        except Exception as e:
-            logger.error(f"Shortener failed: {e}")
+        is_telegram_link = any(domain in text.lower() for domain in ["t.me", "telegram.me", "telegram.dog"])
+        
+        if not is_telegram_link:
+            try:
+                shortener = await database.get_best_shortener()
+                if shortener:
+                    short_url = await generate_short_link(shortener, text)
+            except Exception as e:
+                logger.error(f"Shortener failed: {e}")
             
         buttons_list[idx]["shortened_url"] = short_url or text
         draft["url_buttons"] = buttons_list
