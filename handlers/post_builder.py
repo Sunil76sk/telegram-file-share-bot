@@ -996,7 +996,10 @@ async def builder_input_handler(client: Client, message: Message):
         for line in lines:
             if ":" in line:
                 key, val = line.split(":", 1)
-                data[key.strip().lower()] = val.strip()
+                # Remove zero-width spaces, joiners, variation selectors, and direction marks
+                clean_key = re.sub(r'[\u200b-\u200d\uFE0F\uFE0E\u200E\u200F\u202A-\u202E]', '', key).strip().lower()
+                clean_val = re.sub(r'[\u200b-\u200d\uFE0F\uFE0E\u200E\u200F\u202A-\u202E]', '', val).strip()
+                data[clean_key] = clean_val
 
         title = data.get("title") or data.get("movie title") or data.get("movie")
         if not title:
