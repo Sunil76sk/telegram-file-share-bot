@@ -354,6 +354,8 @@ INDEX_SPECS: dict[str, list[tuple[Any, Any]]] = {
     "purchases": [
         (("user_id", 1), False),
         (("created_at", -1), False),
+        ("payment_id", {"unique": True, "sparse": True}),
+        ((("user_id", 1), ("product_id", 1), ("status", 1)), False),
     ],
     "downloads": [
         (("user_id", 1), False),
@@ -433,17 +435,20 @@ INDEX_SPECS: dict[str, list[tuple[Any, Any]]] = {
     ],
     "scheduled_posts": [
         (("scheduled_time", 1), False),
+        (("status", 1), False),
+        ((("scheduled_time", 1), ("status", 1)), False),
     ],
     "templates": [
         (("user_id", 1), False),
     ],
     "repost_jobs": [
         (("next_post_at", 1), False),
+        (("status", 1), False),
     ],
     "drafts": [
         ((("user_id", 1), ("state", 1)), False),
         (("user_id", 1), True),
-        (("created_at", 1), {"expireAfterSeconds": 86400}),
+        (("updated_at", 1), {"expireAfterSeconds": 86400}),
     ],
     "settings": [],
     "channel_stats": [
@@ -563,6 +568,7 @@ async def run_migrations():
         _migration_005_add_analytics_indexes,
         _migration_006_add_worker_status,
         _migration_007_clean_stale_states,
+        _migration_008_fix_drafts_ttl,
     ]
 
     for migration in migrations:
@@ -642,3 +648,20 @@ async def _migration_006_add_worker_status():
 async def _migration_007_clean_stale_states():
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)
     await db.user_states.delete_many({"updated_at": {"$lt": cutoff}})
+
+
+async def _migration_008_fix_drafts_ttl():
+    """Move the drafts TTL from created_at to updated_at.
+
+    The old TTL on created_at deleted post drafts 24h after first creation,
+    silently destroying in-progress wizard sessions. The new TTL (on updated_at,
+    refreshed on every save) only reaps drafts after 24h of inactivity. Drop the
+    legacy index so it stops competing with the new one.
+    """
+    for index_name in ("created_at_1",):
+        try:
+            await db.drafts.drop_index(index_name)
+            logger.info(f"Dropped legacy drafts index: {index_name}")
+        except Exception:
+            # Index may not exist (fresh deploy) — nothing to drop.
+            pass

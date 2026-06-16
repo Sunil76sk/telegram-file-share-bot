@@ -276,14 +276,11 @@ async def repost_input_handler(client: Client, message: Message):
     
     if text.lower() == "/cancel":
         return
-        
-    draft = await database.get_post_draft(user_id)
-    if not draft:
+
+    ctx = await database.get_active_builder_context(user_id)
+    if not ctx["is_repost_state"]:
         return
-        
-    state = draft.get("state")
-    if state != "awaiting_repost_interval":
-        return
+    draft = ctx["draft"]
         
     try:
         interval = int(text)

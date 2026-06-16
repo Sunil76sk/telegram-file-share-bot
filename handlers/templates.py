@@ -124,7 +124,7 @@ async def temp_select_callback_handler(client: Client, callback_query: CallbackQ
         
     temp_id = state.replace("temp_apply_", "", 1)
     template = await database.get_template(temp_id)
-    if not template:
+    if not template or template.get("user_id") != user_id:
         await callback_query.answer("❌ Template not found.", show_alert=True)
         return
         
@@ -174,8 +174,14 @@ async def temp_select_callback_handler(client: Client, callback_query: CallbackQ
 async def delete_template_callback_handler(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     temp_id = callback_query.matches[0].group(1)
-    
-    deleted = await database.delete_template(temp_id)
+
+    # Ownership check: a template may only be deleted by the user who owns it.
+    template = await database.get_template(temp_id)
+    if not template or template.get("user_id") != user_id:
+        await callback_query.answer("❌ Template not found.", show_alert=True)
+        return
+
+    deleted = await database.delete_template(temp_id, user_id=user_id)
     if deleted:
         await callback_query.answer("🗑 Template deleted.", show_alert=True)
         try:

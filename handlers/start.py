@@ -13,6 +13,7 @@ from utils.helpers import (
     send_stars_invoice,
     banned_filter,
 )
+from utils.text_safety import escape_markdown
 from utils.locks import user_locks
 from utils.security import verify_password, hash_password
 from utils.delivery import deliver_files
@@ -406,34 +407,10 @@ async def text_message_handler(client: Client, message: Message):
         return
 
     # Bypass if user is in an active post builder or scheduling session
-    draft = await database.get_post_draft(user_id)
-    draft_exists = draft is not None
-    draft_state = draft.get("state") if draft_exists else None
-    
-    # Requirements:
-    # 1. user_id
-    # 2. draft exists?
-    # 3. full draft state
-    # 4. draft document
-    # 5. branch taken
-    logger.info(f"[text_message_handler] user_id={user_id}")
-    logger.info(f"[text_message_handler] draft exists={draft_exists}")
-    logger.info(f"[text_message_handler] state={draft_state}")
-    logger.info(f"[text_message_handler] draft doc={draft}")
-    
-    if draft:
-        state = draft.get("state", "")
-        is_builder_state = any(state.startswith(s) for s in [
-            "awaiting_tmdb_search", "awaiting_manual_caption", "awaiting_manual_movie_details", "awaiting_poster_upload",
-            "awaiting_edited_caption", "awaiting_btn_text", "awaiting_btn_url",
-            "awaiting_btn_edit_text", "awaiting_btn_edit_url", "awaiting_custom_timezone",
-            "awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"
-        ])
-        if is_builder_state:
-            message.continue_propagation()
-            return
-    else:
-        logger.info(f"[text_message_handler]\ndraft exists={draft_exists}\nstate={draft_state}\nACTION=send_welcome")
+    builder_ctx = await database.get_active_builder_context(user_id)
+    if builder_ctx["is_builder_state"]:
+        message.continue_propagation()
+        return
 
     # Intercept shortener registration states
     if user_doc and user_doc.get("state", "").startswith("sh_"):
@@ -557,7 +534,7 @@ async def text_message_handler(client: Client, message: Message):
                 ]
             )
             await message.reply_text(
-                f"🔒 **Password Set Successfully!**\n🔑 Password: `{text}`\n\n"
+                f"🔒 **Password Set Successfully!**\n🔑 Password: `{escape_markdown(text)}`\n\n"
                 "Please choose how long this share link should remain valid:",
                 reply_markup=buttons,
             )

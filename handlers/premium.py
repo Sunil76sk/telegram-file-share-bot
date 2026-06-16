@@ -380,16 +380,20 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
                 if product:
                     # Issue 7: Prevent duplicate purchases
                     if not await database.verify_purchase(user_id, product["_id"]):
-                        await database.record_purchase(
-                            user_id=user_id,
-                            product_id=product["_id"],
-                            product_token=product.get("token", ""),
-                            amount_paid=int(amount),
-                            payment_id=payment_id,
-                            status="completed",
-                            files_delivered=product.get("files", [])
-                        )
-                        await database.increment_product_sales(product["_id"])
+                        async def _record_upi_purchase(session):
+                            await database.record_purchase(
+                                user_id=user_id,
+                                product_id=product["_id"],
+                                product_token=product.get("token", ""),
+                                amount_paid=int(amount),
+                                payment_id=payment_id,
+                                status="completed",
+                                files_delivered=product.get("files", []),
+                                session=session,
+                            )
+                            await database.increment_product_sales(product["_id"], session=session)
+
+                        await database.with_transaction(_record_upi_purchase)
 
                     from handlers.marketplace import deliver_product_files
                     await deliver_product_files(client, user_id, payment, product)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import datetime
 from pyrogram import Client
+from pymongo.errors import DuplicateKeyError
 from pyrogram.raw.types import (
     UpdateNewMessage,
     MessageService,
@@ -17,6 +18,53 @@ from utils.helpers import answer_pre_checkout
 logger = logging.getLogger(__name__)
 
 
+async def _validate_payment_payload(payload: str) -> tuple[bool, str | None]:
+    """Validate that a Stars payment payload still resolves to a live, purchasable
+    item before approving checkout.
+
+    Returns (ok, error_message). Fails closed: on any unknown payload or lookup
+    error we reject, so the user is not charged for something undeliverable
+    (they can simply retry).
+    """
+    try:
+        if payload.startswith("premium_"):
+            parts = payload.split("_")
+            duration = parts[2] if len(parts) == 3 else (parts[1] if len(parts) == 2 else "")
+            if duration not in ("weekly", "monthly", "lifetime"):
+                return False, "This subscription plan is no longer available."
+            return True, None
+
+        if payload.startswith("prod_buy_"):
+            prod_id = payload.split("prod_buy_")[1]
+            from bson import ObjectId
+            try:
+                product = await database.get_product_by_id(ObjectId(prod_id))
+            except Exception:
+                product = None
+            if not product:
+                return False, "This product is no longer available."
+            if not product.get("is_active", True):
+                return False, "This product is currently unavailable."
+            return True, None
+
+        if payload.startswith("unlock_"):
+            token = payload.split("_", 1)[1]
+            if not await database.get_file_link(token):
+                return False, "This file link no longer exists."
+            return True, None
+
+        if payload.startswith("catalog_"):
+            item_id = payload.split("_")[1]
+            if not await database.get_catalog_item(item_id):
+                return False, "This item is no longer available."
+            return True, None
+
+        return False, "Invalid payment session. Please restart your purchase."
+    except Exception as e:
+        logger.error(f"Error validating payment payload '{payload}': {e}")
+        return False, "Could not verify this purchase. Please try again."
+
+
 @app.on_raw_update(group=10)
 async def payment_raw_update_handler(client: Client, update, users, chats):
     """Handle raw pre-checkout and successful payment updates directly from Telegram."""
@@ -24,12 +72,23 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
     # 1. Handle Pre-Checkout Query
     if isinstance(update, UpdateBotPrecheckoutQuery):
         query_id = str(update.query_id)
+        payload = getattr(update, "payload", b"") or b""
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8", errors="replace")
         logger.info(
-            f"Received raw pre-checkout query {query_id} from user {update.user_id}"
+            f"Received raw pre-checkout query {query_id} from user {update.user_id} (payload={payload})"
         )
+        ok, error_message = await _validate_payment_payload(payload)
+        if not ok:
+            logger.warning(
+                f"Rejecting pre-checkout {query_id} for user {update.user_id}: {error_message}"
+            )
         try:
             await answer_pre_checkout(
-                client=client, pre_checkout_query_id=query_id, ok=True
+                client=client,
+                pre_checkout_query_id=query_id,
+                ok=ok,
+                error_message=error_message,
             )
         except Exception as e:
             logger.error(f"Error answering pre-checkout query {query_id}: {e}")
@@ -67,20 +126,30 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                     f"Successful payment from user {user_id}: payload={payload}, amount={amount} Stars, charge={charge_id}"
                 )
 
-                # Log payment transaction in database
-                await database.payments_col.update_one(
-                    {"_id": charge_id},
-                    {
-                        "$set": {
+                # Idempotency guard: atomically claim this charge_id. If the same
+                # payment update is delivered more than once (Telegram redelivery
+                # or two bot instances polling the same token), only the first
+                # insert succeeds; every duplicate raises and is dropped BEFORE
+                # any entitlement/delivery side-effect runs. This prevents premium
+                # duration stacking and duplicate file delivery.
+                try:
+                    await database.payments_col.insert_one(
+                        {
+                            "_id": charge_id,
                             "user_id": user_id,
                             "amount": amount,
                             "payload": payload,
                             "status": "completed",
+                            "processed": True,
                             "created_at": datetime.datetime.now(datetime.timezone.utc),
                         }
-                    },
-                    upsert=True,
-                )
+                    )
+                except DuplicateKeyError:
+                    logger.warning(
+                        f"Duplicate successful-payment update for charge {charge_id} "
+                        f"(user {user_id}, payload={payload}). Skipping side-effects."
+                    )
+                    return
 
                 if payload.startswith("premium_"):
                     # Handle subscription purchase
@@ -149,16 +218,26 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                                 from handlers.marketplace import deliver_product_files
                                 await deliver_product_files(client, user_id, purchase, product)
                         else:
-                            purchase = await database.record_purchase(
-                                user_id=user_id,
-                                product_id=product["_id"],
-                                product_token=product["token"],
-                                amount_paid=amount,
-                                payment_id=charge_id,
-                                status="completed",
-                                files_delivered=product["files"],
-                            )
-                            await database.increment_product_sales(product["_id"])
+                            # Record the purchase and bump the sales counter
+                            # atomically so we never mark a user as paid without
+                            # also counting the sale (or vice versa).
+                            _purchase_holder: dict = {}
+
+                            async def _record_product_purchase(session):
+                                _purchase_holder["purchase"] = await database.record_purchase(
+                                    user_id=user_id,
+                                    product_id=product["_id"],
+                                    product_token=product["token"],
+                                    amount_paid=amount,
+                                    payment_id=charge_id,
+                                    status="completed",
+                                    files_delivered=product["files"],
+                                    session=session,
+                                )
+                                await database.increment_product_sales(product["_id"], session=session)
+
+                            await database.with_transaction(_record_product_purchase)
+                            purchase = _purchase_holder["purchase"]
                             try:
                                 await client.send_message(
                                     chat_id=user_id,

@@ -252,9 +252,9 @@ async def increment_product_views(product_id: ObjectId) -> None:
     await products_col.update_one({"_id": product_id}, {"$inc": {"views": 1}})
 
 
-async def increment_product_sales(product_id: ObjectId) -> None:
+async def increment_product_sales(product_id: ObjectId, session=None) -> None:
     """Increment product sales count."""
-    await products_col.update_one({"_id": product_id}, {"$inc": {"sales_count": 1}})
+    await products_col.update_one({"_id": product_id}, {"$inc": {"sales_count": 1}}, session=session)
 
 
 async def delete_product(product_id: ObjectId) -> bool:
@@ -302,6 +302,7 @@ async def record_purchase(
     payment_id: str,
     status: str = "completed",
     files_delivered: Optional[List[Dict[str, Any]]] = None,
+    session=None,
 ) -> Dict[str, Any]:
     """Record a new purchase."""
     if files_delivered is None:
@@ -318,8 +319,8 @@ async def record_purchase(
         "created_at": datetime.datetime.now(datetime.timezone.utc),
         "updated_at": datetime.datetime.now(datetime.timezone.utc),
     }
-    result = await purchases_col.insert_one(purchase_doc)
-    res = await purchases_col.find_one({"_id": result.inserted_id})
+    result = await purchases_col.insert_one(purchase_doc, session=session)
+    res = await purchases_col.find_one({"_id": result.inserted_id}, session=session)
     return res if res is not None else {}
 
 

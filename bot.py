@@ -17,20 +17,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import os
-import socket
-import datetime
-import contextvars
-from typing import Any
+import os  # noqa: E402
+import socket  # noqa: E402
+import datetime  # noqa: E402
+import contextvars  # noqa: E402
+from typing import Any  # noqa: E402
 
 # Create a unique instance identifier
 startup_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
 INSTANCE_ID = f"{socket.gethostname()}-{os.getpid()}-{startup_time}"
-current_update_info: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("current_update_info", default=None)
+# Per-update context. Retained for handlers that annotate the active update.
+current_update_info: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "current_update_info", default=None
+)
 
-# Log immediately on startup
-logger.info(f"[INSTANCE_START]\ninstance={INSTANCE_ID}")
-print(f"[INSTANCE_START]\ninstance={INSTANCE_ID}", flush=True)
+logger.info(f"[INSTANCE_START] instance={INSTANCE_ID}")
 
 # Reduce Pyrogram log verbosity
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
@@ -68,7 +69,7 @@ import handlers.movie_search  # noqa: E402
 import handlers.marketplace  # noqa: E402
 import handlers.help  # noqa: E402
 import handlers.repost  # noqa: E402
-import handlers.url_buttons  # noqa: E402
+import handlers.url_buttons  # noqa: E402, F401
 
 
 from utils.worker_framework import register_worker, start_workers, recover_workers, stop_workers  # noqa: E402
@@ -84,9 +85,13 @@ original_start = app.start
 
 
 async def custom_start():
-    logger.info(f"[INSTANCE_START]\ninstance={INSTANCE_ID}")
-    print(f"[INSTANCE_START]\ninstance={INSTANCE_ID}", flush=True)
     await original_start()
+
+    # Single-instance protection: refuse to run if another instance is live,
+    # then keep the lock fresh via a heartbeat. Prevents duplicate update
+    # processing (double deliveries / double payment side-effects).
+    await acquire_runtime_lock()
+    asyncio.create_task(instance_heartbeat_worker())
 
     # Cache bot username for global fallback
     bot_me = app.me or await app.get_me()
@@ -186,22 +191,17 @@ async def custom_start():
     from utils.botfather_menu import sync_bot_commands
     await sync_bot_commands(app)
 
-    # Debug print all registered handlers
-    logger.info("--- REGISTERED HANDLERS ON STARTUP ---")
-    for group, handlers in sorted(app.dispatcher.groups.items()):
-        logger.info(f"Group {group}:")
-        for h in handlers:
-            logger.info(f"  - {h.__class__.__name__}: callback={h.callback.__name__ if hasattr(h, 'callback') else 'None'}")
-
 
 app.start = custom_start  # type: ignore[assignment]
 
 
-from pyrogram.types import Message
+from pyrogram.types import Message, CallbackQuery  # noqa: E402
+from pyrogram.enums import ChatType  # noqa: E402
+
 
 @app.on_message(group=-100)
-async def debug_message_logger(client: Client, message: Message):
-    logger.info(f"DEBUG RECEIVE: text='{message.text}', user='{message.from_user.id if message.from_user else None}', chat='{message.chat.id}', outgoing={message.outgoing}")
+async def ignore_self_and_outgoing(client: Client, message: Message):
+    """Drop the bot's own / outgoing messages before any handler runs."""
     is_self = message.from_user and client.me and message.from_user.id == client.me.id
     if message.outgoing or is_self:
         message.stop_propagation()
@@ -222,15 +222,14 @@ async def custom_stop():
 app.stop = custom_stop  # type: ignore[assignment]
 
 
-# --- TEMPORARY RUNTIME LOGGING & GUARDS FOR INVESTIGATION ---
-import time
-import sys
-from pyrogram.types import Message, CallbackQuery
-from database.mongo import processed_updates_col, runtime_lock_col
+# --- RUNTIME GUARDS: single-instance lock + update de-duplication ---
+import sys  # noqa: E402
+from database.mongo import processed_updates_col, runtime_lock_col  # noqa: E402
 
-# Reconfigure stdout for UTF-8 to ensure emojis don't crash the prints
+# Reconfigure stdout for UTF-8 so emoji in logs don't crash Windows consoles.
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+
 
 # Single Instance Protection
 async def acquire_runtime_lock():
@@ -238,7 +237,7 @@ async def acquire_runtime_lock():
     now = datetime.datetime.now(datetime.timezone.utc)
     hostname = socket.gethostname()
     pid = os.getpid()
-    
+
     lock = await runtime_lock_col.find_one({"lock_name": lock_name})
     if lock:
         last_heartbeat = lock.get("heartbeat")
@@ -246,10 +245,17 @@ async def acquire_runtime_lock():
             if last_heartbeat.tzinfo is None:
                 last_heartbeat = last_heartbeat.replace(tzinfo=datetime.timezone.utc)
             if (now - last_heartbeat).total_seconds() < 60:
-                logger.error(f"Active bot instance detected! Hostname: {lock.get('hostname')}, PID: {lock.get('pid')}, Last Heartbeat: {last_heartbeat}")
-                print(f"FATAL: Active instance already running on {lock.get('hostname')} (PID {lock.get('pid')}). Exiting.", flush=True)
+                logger.error(
+                    f"Active bot instance detected! Hostname: {lock.get('hostname')}, "
+                    f"PID: {lock.get('pid')}, Last Heartbeat: {last_heartbeat}"
+                )
+                print(
+                    f"FATAL: Active instance already running on {lock.get('hostname')} "
+                    f"(PID {lock.get('pid')}). Exiting.",
+                    flush=True,
+                )
                 sys.exit(1)
-        
+
         await runtime_lock_col.update_one(
             {"lock_name": lock_name},
             {"$set": {
@@ -271,6 +277,7 @@ async def acquire_runtime_lock():
         })
     logger.info("Successfully acquired runtime lock.")
 
+
 async def instance_heartbeat_worker():
     lock_name = "bot_runtime_lock"
     while True:
@@ -290,59 +297,62 @@ async def instance_heartbeat_worker():
         except Exception as e:
             logger.error(f"Error in instance heartbeat worker: {e}")
 
-# 1. Incoming Update Loggers (Group -200 to run first)
+
+# Update de-duplication guard (group -200, runs before all handlers).
+# A unique index on processed_updates.update_id makes the insert fail on a
+# duplicate delivery, so we drop the update instead of processing it twice.
 @app.on_message(group=-200)
-async def log_incoming_message(client: Client, message: Message):
-    # Update Processing Guard (Module 19)
+async def dedup_message_guard(client: Client, message: Message):
+    # Fresh update: clear the per-update builder-context cache so the input
+    # routers below share a single draft read instead of querying repeatedly.
+    database.reset_builder_context_cache()
     update_key = f"msg_{message.chat.id}_{message.id}"
     user_id = message.from_user.id if message.from_user else None
     try:
         await processed_updates_col.insert_one({
             "update_id": update_key,
             "user_id": user_id,
-            "processed_at": datetime.datetime.now(datetime.timezone.utc)
+            "processed_at": datetime.datetime.now(datetime.timezone.utc),
         })
     except Exception:
-        # Already processed or write conflict, drop update
         logger.warning(f"Duplicate update key {update_key} detected. Dropping message.")
         message.stop_propagation()
         return
 
-    current_update_info.set({
-        "handler": "unknown",
-        "update_id": message.id,
-        "message_id": message.id
-    })
-    log_msg = (
-        f"[INCOMING_UPDATE]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"update_id={message.id}\n"
-        f"message_id={message.id}\n"
-        f"user_id={message.from_user.id if message.from_user else None}\n"
-        f"chat_id={message.chat.id}\n"
-        f"text={message.text}\n"
-        f"callback_data=None"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
+    # Message rate limiting: 20 text messages / minute per user (private chats).
+    # Curbs command/input spam (caption, password, store, search). Media uploads
+    # are not text so batch uploads are unaffected.
+    if user_id and message.text and message.chat and message.chat.type == ChatType.PRIVATE:
+        from utils.rate_limiter import check_rate_limit
+        allowed = await check_rate_limit(user_id, "message", limit=20, window_seconds=60)
+        if not allowed:
+            # Send the "slow down" notice at most once per window to avoid spam.
+            notice_ok = await check_rate_limit(user_id, "message_limit_notice", limit=1, window_seconds=60)
+            if notice_ok:
+                try:
+                    await message.reply_text(
+                        "⏳ You're sending messages too quickly. Please slow down and try again in a minute."
+                    )
+                except Exception:
+                    pass
+            message.stop_propagation()
+
 
 @app.on_callback_query(group=-200)
-async def log_incoming_callback(client: Client, callback_query: CallbackQuery):
-    # Update Processing Guard (Module 19)
+async def dedup_and_ratelimit_callback_guard(client: Client, callback_query: CallbackQuery):
     update_key = f"cb_{callback_query.id}"
     try:
         await processed_updates_col.insert_one({
             "update_id": update_key,
             "user_id": callback_query.from_user.id,
-            "processed_at": datetime.datetime.now(datetime.timezone.utc)
+            "processed_at": datetime.datetime.now(datetime.timezone.utc),
         })
     except Exception:
-        # Already processed or write conflict, drop callback
         logger.warning(f"Duplicate update key {update_key} detected. Dropping callback.")
         callback_query.stop_propagation()
         return
 
-    # Rate Limit: Callback queries (50/min) (Module 26)
+    # Rate limit: callback queries (50/min)
     user_id = callback_query.from_user.id
     from utils.rate_limiter import check_rate_limit
     allowed = await check_rate_limit(user_id, "callback_query", limit=50, window_seconds=60)
@@ -350,178 +360,3 @@ async def log_incoming_callback(client: Client, callback_query: CallbackQuery):
         logger.warning(f"Callback query rate limit exceeded for user {user_id}")
         await callback_query.answer("❌ Rate limit exceeded (50/min). Please slow down.", show_alert=True)
         callback_query.stop_propagation()
-        return
-
-    msg_id = callback_query.message.id if callback_query.message else None
-    chat_id = callback_query.message.chat.id if callback_query.message else None
-    current_update_info.set({
-        "handler": "unknown",
-        "update_id": callback_query.id,
-        "message_id": msg_id
-    })
-    log_msg = (
-        f"[INCOMING_UPDATE]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"update_id={callback_query.id}\n"
-        f"message_id={msg_id}\n"
-        f"user_id={callback_query.from_user.id}\n"
-        f"chat_id={chat_id}\n"
-        f"text=None\n"
-        f"callback_data={callback_query.data}"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-
-# 2. Outgoing Reply/Send Method Wrappers
-original_send_message = Client.send_message
-async def patched_send_message(self, chat_id, text, *args, **kwargs):
-    info = current_update_info.get()
-    h_name = info["handler"] if info else "unknown"
-    u_id = info["update_id"] if info else "unknown"
-    m_id = info["message_id"] if info else "unknown"
-    log_msg = (
-        f"[OUTGOING_REPLY]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"handler={h_name}\n"
-        f"update_id={u_id}\n"
-        f"message_id={m_id}\n"
-        f"reply_type=send_message"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-    return await original_send_message(self, chat_id, text, *args, **kwargs)
-Client.send_message = patched_send_message
-
-original_reply_text = Message.reply_text
-async def patched_reply_text(self, text, *args, **kwargs):
-    info = current_update_info.get()
-    h_name = info["handler"] if info else "unknown"
-    u_id = info["update_id"] if info else "unknown"
-    m_id = info["message_id"] if info else "unknown"
-    log_msg = (
-        f"[OUTGOING_REPLY]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"handler={h_name}\n"
-        f"update_id={u_id}\n"
-        f"message_id={m_id}\n"
-        f"reply_type=reply_text"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-    return await original_reply_text(self, text, *args, **kwargs)
-Message.reply_text = patched_reply_text
-
-original_edit_message_text = Client.edit_message_text
-async def patched_edit_message_text(self, chat_id, message_id, text, *args, **kwargs):
-    info = current_update_info.get()
-    h_name = info["handler"] if info else "unknown"
-    u_id = info["update_id"] if info else "unknown"
-    m_id = info["message_id"] if info else "unknown"
-    log_msg = (
-        f"[OUTGOING_REPLY]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"handler={h_name}\n"
-        f"update_id={u_id}\n"
-        f"message_id={m_id}\n"
-        f"reply_type=edit_message_text"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-    return await original_edit_message_text(self, chat_id, message_id, text, *args, **kwargs)
-Client.edit_message_text = patched_edit_message_text
-
-original_msg_edit_text = Message.edit_text
-async def patched_msg_edit_text(self, text, *args, **kwargs):
-    info = current_update_info.get()
-    h_name = info["handler"] if info else "unknown"
-    u_id = info["update_id"] if info else "unknown"
-    m_id = info["message_id"] if info else "unknown"
-    log_msg = (
-        f"[OUTGOING_REPLY]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"handler={h_name}\n"
-        f"update_id={u_id}\n"
-        f"message_id={m_id}\n"
-        f"reply_type=edit_message_text"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-    return await original_msg_edit_text(self, text, *args, **kwargs)
-Message.edit_text = patched_msg_edit_text
-
-original_reply_photo = Message.reply_photo
-async def patched_reply_photo(self, photo, *args, **kwargs):
-    info = current_update_info.get()
-    h_name = info["handler"] if info else "unknown"
-    u_id = info["update_id"] if info else "unknown"
-    m_id = info["message_id"] if info else "unknown"
-    log_msg = (
-        f"[OUTGOING_REPLY]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"handler={h_name}\n"
-        f"update_id={u_id}\n"
-        f"message_id={m_id}\n"
-        f"reply_type=reply_photo"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-    return await original_reply_photo(self, photo, *args, **kwargs)
-Message.reply_photo = patched_reply_photo
-
-original_send_photo = Client.send_photo
-async def patched_send_photo(self, chat_id, photo, *args, **kwargs):
-    info = current_update_info.get()
-    h_name = info["handler"] if info else "unknown"
-    u_id = info["update_id"] if info else "unknown"
-    m_id = info["message_id"] if info else "unknown"
-    log_msg = (
-        f"[OUTGOING_REPLY]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"handler={h_name}\n"
-        f"update_id={u_id}\n"
-        f"message_id={m_id}\n"
-        f"reply_type=reply_photo"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-    return await original_send_photo(self, chat_id, photo, *args, **kwargs)
-Client.send_photo = patched_send_photo
-
-original_reply_document = Message.reply_document
-async def patched_reply_document(self, document, *args, **kwargs):
-    info = current_update_info.get()
-    h_name = info["handler"] if info else "unknown"
-    u_id = info["update_id"] if info else "unknown"
-    m_id = info["message_id"] if info else "unknown"
-    log_msg = (
-        f"[OUTGOING_REPLY]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"handler={h_name}\n"
-        f"update_id={u_id}\n"
-        f"message_id={m_id}\n"
-        f"reply_type=reply_document"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-    return await original_reply_document(self, document, *args, **kwargs)
-Message.reply_document = patched_reply_document
-
-original_send_document = Client.send_document
-async def patched_send_document(self, chat_id, document, *args, **kwargs):
-    info = current_update_info.get()
-    h_name = info["handler"] if info else "unknown"
-    u_id = info["update_id"] if info else "unknown"
-    m_id = info["message_id"] if info else "unknown"
-    log_msg = (
-        f"[OUTGOING_REPLY]\n"
-        f"instance={INSTANCE_ID}\n"
-        f"handler={h_name}\n"
-        f"update_id={u_id}\n"
-        f"message_id={m_id}\n"
-        f"reply_type=reply_document"
-    )
-    logger.info(log_msg)
-    print(log_msg, flush=True)
-    return await original_send_document(self, chat_id, document, *args, **kwargs)
-Client.send_document = patched_send_document
-# ----------------------------------------------------

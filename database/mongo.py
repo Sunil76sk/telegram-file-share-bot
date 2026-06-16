@@ -1,5 +1,6 @@
 import logging
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import OperationFailure, ConfigurationError
 import config
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,51 @@ notification_queue_col = db["notification_queue"]
 notification_preferences_col = db["notification_preferences"]
 user_language_col = db["user_language"]
 translations_col = db["translations"]
+
+
+# Whether the connected MongoDB deployment supports multi-document
+# transactions (replica set / mongos). Determined lazily on first use; a
+# standalone mongod will set this to False and we degrade to sequential writes.
+_transactions_supported: bool | None = None
+
+
+async def with_transaction(operation):
+    """Run ``await operation(session)`` inside a MongoDB transaction when the
+    deployment supports it, otherwise run it sequentially without a session.
+
+    ``operation`` must be an async callable taking a single ``session`` argument
+    (which may be ``None`` in the fallback path). On a standalone mongod the
+    first transactional write fails before committing anything, so re-running the
+    operation without a session is safe.
+    """
+    global _transactions_supported
+
+    if _transactions_supported is False:
+        await operation(None)
+        return
+
+    try:
+        async with await client.start_session() as session:
+            async with session.start_transaction():
+                await operation(session)
+        _transactions_supported = True
+    except (OperationFailure, ConfigurationError) as e:
+        msg = str(e)
+        unsupported = (
+            "replica set" in msg
+            or "Transaction numbers" in msg
+            or "transactions are not supported" in msg.lower()
+            or getattr(e, "code", None) in (20, 263)
+        )
+        if _transactions_supported is None and unsupported:
+            logger.warning(
+                "MongoDB transactions are not supported by this deployment; "
+                "falling back to sequential writes."
+            )
+            _transactions_supported = False
+            await operation(None)
+        else:
+            raise
 
 
 async def init_db():

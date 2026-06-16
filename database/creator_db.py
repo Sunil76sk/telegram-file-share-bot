@@ -53,6 +53,33 @@ async def get_channel_by_id(channel_id: int | str):
 
 # ─── POST DRAFT HELPERS ──────────────────────────────────────────────
 
+# Builder state classification (shared by the per-message input routers).
+_BUILDER_STATE_PREFIXES = (
+    "awaiting_tmdb_search", "awaiting_manual_caption", "awaiting_manual_movie_details",
+    "awaiting_poster_upload", "awaiting_edited_caption", "awaiting_btn_text",
+    "awaiting_btn_url", "awaiting_btn_edit_text", "awaiting_btn_edit_url",
+    "awaiting_custom_timezone", "awaiting_schedule_time", "awaiting_repost_interval",
+    "awaiting_delete_gap",
+)
+_SCHEDULER_INPUT_STATES = ("awaiting_custom_timezone", "awaiting_schedule_time")
+_REPOST_INPUT_STATES = ("awaiting_repost_interval",)
+
+# Per-update cache so the multiple message handlers that all need the draft
+# (start.py text router, scheduler input, repost input) share a single read
+# instead of each hitting Mongo. Reset at the start of every update by the
+# dispatcher guards, and invalidated on any draft write.
+_builder_ctx_cache: dict[int, dict] = {}
+
+
+def reset_builder_context_cache() -> None:
+    """Clear the per-update builder-context cache. Called once per incoming update."""
+    _builder_ctx_cache.clear()
+
+
+def _invalidate_builder_context(user_id: int) -> None:
+    _builder_ctx_cache.pop(user_id, None)
+
+
 async def save_post_draft(user_id: int, draft: dict):
     """Save or update a creator's current post draft builder session."""
     draft["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
@@ -61,14 +88,41 @@ async def save_post_draft(user_id: int, draft: dict):
         {"$set": draft},
         upsert=True,
     )
+    _invalidate_builder_context(user_id)
 
 async def get_post_draft(user_id: int):
     """Get the active post draft for a user."""
     return await drafts_col.find_one({"user_id": user_id})
 
+async def get_active_builder_context(user_id: int) -> dict:
+    """Single-fetch builder context shared across the per-message input routers.
+
+    Returns a dict with the draft plus precomputed state classification. Cached
+    for the duration of one update so the three input handlers don't each query
+    Mongo. The cache is reset per update and invalidated on draft writes, so it
+    can never return stale data.
+    """
+    cached = _builder_ctx_cache.get(user_id)
+    if cached is not None:
+        return cached
+
+    draft = await drafts_col.find_one({"user_id": user_id})
+    state = (draft.get("state", "") if draft else "") or ""
+    ctx = {
+        "draft": draft,
+        "exists": draft is not None,
+        "state": state,
+        "is_builder_state": any(state.startswith(s) for s in _BUILDER_STATE_PREFIXES),
+        "is_scheduler_state": state in _SCHEDULER_INPUT_STATES,
+        "is_repost_state": state in _REPOST_INPUT_STATES,
+    }
+    _builder_ctx_cache[user_id] = ctx
+    return ctx
+
 async def delete_post_draft(user_id: int):
     """Delete a user's post draft session."""
     await drafts_col.delete_one({"user_id": user_id})
+    _invalidate_builder_context(user_id)
 
 # ─── GLOBAL SETTINGS HELPERS ─────────────────────────────────────────
 
@@ -304,10 +358,14 @@ async def get_template(template_id: str):
     except Exception:
         return None
 
-async def delete_template(template_id: str) -> bool:
-    """Delete a saved template."""
+async def delete_template(template_id: str, user_id: int | None = None) -> bool:
+    """Delete a saved template. If ``user_id`` is given, deletion is scoped to
+    that owner so a user cannot delete another user's template."""
     try:
-        result = await templates_col.delete_one({"_id": ObjectId(template_id)})
+        query: dict = {"_id": ObjectId(template_id)}
+        if user_id is not None:
+            query["user_id"] = user_id
+        result = await templates_col.delete_one(query)
         return result.deleted_count > 0
     except Exception:
         return False

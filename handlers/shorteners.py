@@ -146,6 +146,9 @@ async def sh_add_callback(client: Client, callback_query: CallbackQuery):
 @app.on_callback_query(filters.regex(r"^sh_select_(.+)$"))
 async def sh_select_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
+    if not await database.is_admin(user_id, client):
+        await callback_query.answer("⛔️ Access denied.", show_alert=True)
+        return
     name = callback_query.matches[0].group(1)
 
     # Initialize draft in user settings
@@ -199,6 +202,9 @@ async def sh_cancel_callback(client: Client, callback_query: CallbackQuery):
 @app.on_callback_query(filters.regex(r"^sh_toggle_(.+)$"))
 async def sh_toggle_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
+    if not await database.is_admin(user_id, client):
+        await callback_query.answer("⛔️ Access denied.", show_alert=True)
+        return
     sh_id = callback_query.matches[0].group(1)
 
     sh = await database.get_shortener_by_id(sh_id)
@@ -224,6 +230,9 @@ async def sh_toggle_callback(client: Client, callback_query: CallbackQuery):
 @app.on_callback_query(filters.regex(r"^sh_delete_(.+)$"))
 async def sh_delete_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
+    if not await database.is_admin(user_id, client):
+        await callback_query.answer("⛔️ Access denied.", show_alert=True)
+        return
     sh_id = callback_query.matches[0].group(1)
 
     deleted = await database.delete_shortener(sh_id)
@@ -245,6 +254,9 @@ async def sh_delete_callback(client: Client, callback_query: CallbackQuery):
 
 @app.on_callback_query(filters.regex(r"^sh_info_(.+)$"))
 async def sh_info_callback(client: Client, callback_query: CallbackQuery):
+    if not await database.is_admin(callback_query.from_user.id, client):
+        await callback_query.answer("⛔️ Access denied.", show_alert=True)
+        return
     sh_id = callback_query.matches[0].group(1)
     sh = await database.get_shortener_by_id(sh_id)
     if not sh:

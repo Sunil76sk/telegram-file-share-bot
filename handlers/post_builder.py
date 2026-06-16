@@ -829,13 +829,10 @@ async def builder_preview_callback(client: Client, callback_query: CallbackQuery
     await client.send_message(user_id, "👁 **LIVE PREVIEW**")
     try:
         if poster_fid:
-            await client.send_photo(
-                chat_id=user_id,
-                photo=poster_fid,
-                caption=caption,
-                parse_mode=ParseMode.HTML,
-                **kwargs
-            )
+            # Reuse the publisher's resilient sender so preview degrades the same
+            # way publishing does on an oversized/malformed caption.
+            from utils.publisher import _send_post_photo
+            await _send_post_photo(client, user_id, poster_fid, caption, kwargs)
         else:
             await client.send_message(
                 chat_id=user_id,

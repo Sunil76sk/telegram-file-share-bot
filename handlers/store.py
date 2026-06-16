@@ -17,6 +17,7 @@ from database.products import (
     PRODUCT_TYPE_ICONS,
 )
 from utils.helpers import banned_filter
+from utils.text_safety import escape_markdown
 import database
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,7 @@ async def show_featured_products(client: Client, msg: Message, user_id: int, edi
     if products:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
-            text += f"{i}. {icon} **{p['name']}** — {p['price']} ⭐️\n"
+            text += f"{i}. {icon} **{escape_markdown(p['name'])}** — {p['price']} ⭐️\n"
             buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
@@ -107,7 +108,7 @@ async def show_newest_products(client: Client, msg: Message, user_id: int, edit:
     if products:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
-            text += f"{i}. {icon} **{p['name']}** — {p['price']} ⭐️\n"
+            text += f"{i}. {icon} **{escape_markdown(p['name'])}** — {p['price']} ⭐️\n"
             buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
@@ -128,7 +129,7 @@ async def show_top_products(client: Client, msg: Message, user_id: int, edit: bo
     if products:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
-            text += f"{i}. {icon} **{p['name']}** — {p['price']} ⭐️ ({p.get('sales_count', 0)} sold)\n"
+            text += f"{i}. {icon} **{escape_markdown(p['name'])}** — {p['price']} ⭐️ ({p.get('sales_count', 0)} sold)\n"
             buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
@@ -174,7 +175,7 @@ async def store_category_callback_handler(client: Client, callback_query: Callba
     if products:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
-            text += f"{i}. {icon} **{p['name']}** — {p['price']} ⭐️\n"
+            text += f"{i}. {icon} **{escape_markdown(p['name'])}** — {p['price']} ⭐️\n"
             buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
         buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="store_categories")])
     else:

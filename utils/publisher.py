@@ -10,6 +10,43 @@ from database.creator_db import delete_post_draft, get_settings, increment_chann
 
 logger = logging.getLogger(__name__)
 
+# Telegram hard limit for media captions (visible text length).
+CAPTION_LIMIT = 1024
+
+
+async def _send_post_photo(client: Client, channel_id, photo_file_id, caption: str, kwargs: dict):
+    """Send the post photo, falling back to a plain truncated caption if Telegram
+    rejects the HTML caption (e.g. oversized > 1024 chars or a malformed entity).
+
+    This turns an otherwise permanent publish failure into a delivered-but-degraded
+    post, which matters most for scheduled/repost jobs that would otherwise be
+    marked 'failed' forever.
+    """
+    import re
+
+    try:
+        return await client.send_photo(
+            chat_id=channel_id,
+            photo=photo_file_id,
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            **kwargs,
+        )
+    except Exception as e:
+        logger.warning(
+            f"HTML caption send failed for channel {channel_id}: {e}. "
+            f"Retrying with plain, truncated caption."
+        )
+        plain = re.sub(r"<[^>]+>", "", caption or "")
+        plain = plain[: CAPTION_LIMIT - 1] + "…" if len(plain) > CAPTION_LIMIT else plain
+        return await client.send_photo(
+            chat_id=channel_id,
+            photo=photo_file_id,
+            caption=plain,
+            parse_mode=None,
+            **kwargs,
+        )
+
 async def publish_post(draft: dict, client: Client, delete_draft: bool = True) -> int:
     """
     Single publish function used by:
@@ -59,13 +96,7 @@ async def publish_post(draft: dict, client: Client, delete_draft: bool = True) -
         kwargs["show_caption_above_media"] = True
 
 
-    msg = await client.send_photo(
-        chat_id=channel_id,
-        photo=photo_file_id,
-        caption=caption,
-        parse_mode=ParseMode.HTML,
-        **kwargs
-    )
+    msg = await _send_post_photo(client, channel_id, photo_file_id, caption, kwargs)
     if not msg:
         raise ValueError("Failed to publish post: send_photo returned None.")
     

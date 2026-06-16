@@ -8,6 +8,7 @@ from bot import app
 import database
 import config
 from utils.helpers import send_stars_invoice
+from utils.text_safety import escape_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +58,8 @@ async def buy_product_callback_handler(client: Client, callback_query: CallbackQ
 
     text = (
         f"🛒 **Checkout Product**\n\n"
-        f"📦 **Name:** {product['name']}\n"
-        f"📝 **Description:** {product.get('description', '')}\n\n"
+        f"📦 **Name:** {escape_markdown(product['name'])}\n"
+        f"📝 **Description:** {escape_markdown(product.get('description', ''))}\n\n"
         f"💵 **Stars Price:** {product['price']} ⭐️\n"
         f"💰 **UPI Price:** ₹{product.get('price_upi', 0.0)} INR\n\n"
         f"Choose your payment method below:"
@@ -132,7 +133,7 @@ async def pay_upi_product_callback_handler(client: Client, callback_query: Callb
 
     text = (
         f"📲 **UPI Payment Checkout**\n\n"
-        f"📦 **Product:** {product['name']}\n"
+        f"📦 **Product:** {escape_markdown(product['name'])}\n"
         f"💰 **Amount:** ₹{amount_inr} INR\n"
         f"🔑 **UPI ID:** `{config.UPI_ID}`\n\n"
         f"⚠️ **Step 2:** After transferring the amount, take a screenshot of the transaction receipt "

@@ -33,7 +33,7 @@ scheduler = AsyncIOScheduler(
     job_defaults={
         "coalesce": True,
         "max_instances": 1,
-        "misfire_grace_time": 300
+        "misfire_grace_time": 3600
     },
     timezone=pytz.utc
 )
@@ -46,6 +46,9 @@ async def init_scheduler(client: Client):
         scheduler.start()
         _scheduler_started = True
         logger.info("APScheduler started with MongoDB jobstore.")
+    # Reconcile the DB (source of truth) with the scheduler so no pending post
+    # is lost across restarts / downtime longer than the misfire grace window.
+    await recover_scheduled_posts(client)
 
 async def stop_scheduler():
     global _scheduler_started
@@ -57,36 +60,139 @@ async def stop_scheduler():
 # Job wrapper function that gets executed by APScheduler
 async def publish_scheduled_post(post_id: str):
     """APScheduler task to publish a scheduled post."""
+    from database.mongo import db
     try:
-        from database.mongo import db
-        post = await db.scheduled_posts.find_one({"_id": ObjectId(post_id)})
-        if not post:
-            logger.error(f"Scheduled post {post_id} not found in database.")
-            return
+        oid = ObjectId(post_id)
+    except Exception:
+        logger.error(f"Scheduled post id {post_id} is not a valid ObjectId.")
+        return
 
-        if post.get("status") != "pending":
-            logger.info(f"Scheduled post {post_id} already has status {post.get('status')}. Skipping.")
-            return
+    # Atomically claim the post. Only the runner that flips pending -> publishing
+    # proceeds, so a recovered job and a leftover jobstore job (or a duplicate
+    # bot instance) can never publish the same post twice.
+    claim = await db.scheduled_posts.update_one(
+        {"_id": oid, "status": "pending"},
+        {"$set": {"status": "publishing", "claimed_at": datetime.datetime.now(datetime.timezone.utc)}},
+    )
+    if claim.modified_count == 0:
+        existing = await db.scheduled_posts.find_one({"_id": oid})
+        status = existing.get("status") if existing else "missing"
+        logger.info(f"Scheduled post {post_id} not claimable (status={status}). Skipping.")
+        return
 
+    try:
+        post = await db.scheduled_posts.find_one({"_id": oid})
         # Publish the post
         await publish_post(post, app, delete_draft=False)
 
         # Mark as completed
         await db.scheduled_posts.update_one(
-            {"_id": ObjectId(post_id)},
+            {"_id": oid},
             {"$set": {"status": "completed", "sent_at": datetime.datetime.now(datetime.timezone.utc)}}
         )
         logger.info(f"Scheduled post {post_id} published successfully.")
     except Exception as e:
         logger.error(f"Failed to publish scheduled post {post_id}: {e}", exc_info=True)
+        # Retry with backoff (max 3 attempts) before giving up. Reset to pending
+        # so the next attempt can re-claim it; the startup recovery sweep also
+        # re-picks it if the retry job is lost on restart.
         try:
-            from database.mongo import db
-            await db.scheduled_posts.update_one(
-                {"_id": ObjectId(post_id)},
-                {"$set": {"status": "failed", "failure_reason": str(e), "failed_at": datetime.datetime.now(datetime.timezone.utc)}}
-            )
-        except:
+            doc = await db.scheduled_posts.find_one({"_id": oid})
+            retry_count = (doc.get("retry_count", 0) if doc else 0) + 1
+            now = datetime.datetime.now(datetime.timezone.utc)
+            if retry_count < 3:
+                await db.scheduled_posts.update_one(
+                    {"_id": oid},
+                    {
+                        "$set": {"status": "pending", "retry_count": retry_count, "last_error": str(e)},
+                        "$unset": {"claimed_at": ""},
+                    },
+                )
+                retry_at = now + datetime.timedelta(minutes=5)
+                scheduler.add_job(
+                    publish_scheduled_post,
+                    "date",
+                    run_date=retry_at,
+                    args=[post_id],
+                    id=f"sched_{post_id}",
+                    replace_existing=True,
+                )
+                logger.info(f"Scheduled post {post_id} will retry ({retry_count}/3) at {retry_at.isoformat()}.")
+            else:
+                await db.scheduled_posts.update_one(
+                    {"_id": oid},
+                    {"$set": {
+                        "status": "failed",
+                        "failure_reason": str(e),
+                        "retry_count": retry_count,
+                        "failed_at": now,
+                    }}
+                )
+                logger.error(f"Scheduled post {post_id} failed permanently after {retry_count} attempts.")
+        except Exception:
             pass
+
+
+async def recover_scheduled_posts(client: Client):
+    """Re-register or replay scheduled posts so none are lost across restarts.
+
+    APScheduler's MongoDB jobstore persists jobs, but one-shot 'date' jobs whose
+    run time elapsed during downtime are treated as misfires and dropped. The
+    scheduled_posts collection is the source of truth, so on startup we:
+      - reclaim posts stuck in 'publishing' from a crashed run,
+      - immediately (staggered) re-publish any pending post whose time has passed,
+      - (re)register a job for any pending future post.
+    """
+    from database.mongo import db
+    now = datetime.datetime.now(datetime.timezone.utc)
+    stale_cutoff = now - datetime.timedelta(minutes=15)
+    query = {
+        "$or": [
+            {"status": "pending"},
+            {"status": "publishing", "claimed_at": {"$lt": stale_cutoff}},
+        ]
+    }
+
+    overdue_offset = 5
+    recovered = 0
+    async for post in db.scheduled_posts.find(query):
+        post_id = str(post["_id"])
+        job_key = f"sched_{post_id}"
+
+        scheduled_time = post.get("scheduled_time")
+        if scheduled_time is None:
+            continue
+        if scheduled_time.tzinfo is None:
+            scheduled_time = scheduled_time.replace(tzinfo=datetime.timezone.utc)
+
+        # Reset a stale 'publishing' claim so publish_scheduled_post can claim it again.
+        if post.get("status") == "publishing":
+            await db.scheduled_posts.update_one(
+                {"_id": post["_id"]},
+                {"$set": {"status": "pending"}, "$unset": {"claimed_at": ""}},
+            )
+
+        if scheduled_time <= now:
+            # Overdue: stagger to avoid a thundering herd when many are due at once.
+            run_date = now + datetime.timedelta(seconds=overdue_offset)
+            overdue_offset += 3
+        else:
+            run_date = scheduled_time
+
+        try:
+            scheduler.add_job(
+                publish_scheduled_post,
+                "date",
+                run_date=run_date,
+                args=[post_id],
+                id=job_key,
+                replace_existing=True,
+            )
+            recovered += 1
+        except Exception as e:
+            logger.error(f"Failed to recover scheduled post {post_id}: {e}", exc_info=True)
+
+    logger.info(f"Recovered and scheduled {recovered} pending scheduled post(s).")
 
 # Helper: Build Calendar Inline Keyboard
 def get_calendar_keyboard(year: int, month: int, timezone_str: str) -> InlineKeyboardMarkup:
@@ -326,25 +432,30 @@ async def schedule_confirm_callback(client: Client, callback_query: CallbackQuer
 
     scheduled_utc = datetime.datetime.fromisoformat(scheduled_time_str)
 
+    # Validate the essentials up front so we never persist an unpublishable post.
+    if not draft.get("channel_id") or not draft.get("poster_file_id"):
+        await callback_query.answer("❌ Missing channel or poster. Use /newpost", show_alert=True)
+        return
+
     # Save to scheduled_posts collection
     from database.mongo import db
     post_doc = {
         "user_id": user_id,
         "channel_id": draft["channel_id"],
-        "channel_name": draft["channel_name"],
+        "channel_name": draft.get("channel_name", ""),
         "poster_file_id": draft["poster_file_id"],
-        "poster_bg_style": draft["poster_bg_style"],
-        "caption_html": draft["caption_html"],
-        "url_buttons": draft["url_buttons"],
-        "reactions_enabled": draft["reactions_enabled"],
-        "reactions": draft["reactions"],
-        "comments_enabled": draft["comments_enabled"],
-        "pin_message": draft["pin_message"],
+        "poster_bg_style": draft.get("poster_bg_style"),
+        "caption_html": draft.get("caption_html", ""),
+        "url_buttons": draft.get("url_buttons", []),
+        "reactions_enabled": draft.get("reactions_enabled", False),
+        "reactions": draft.get("reactions", []),
+        "comments_enabled": draft.get("comments_enabled", False),
+        "pin_message": draft.get("pin_message", False),
         "caption_above": draft.get("caption_above", False),
         "schedule_enabled": True,
 
         "scheduled_time": scheduled_utc,
-        "schedule_timezone": draft["schedule_timezone"],
+        "schedule_timezone": draft.get("schedule_timezone", "UTC"),
         "repost_enabled": False,
         "status": "pending",
         "created_at": datetime.datetime.now(datetime.timezone.utc)
@@ -353,14 +464,20 @@ async def schedule_confirm_callback(client: Client, callback_query: CallbackQuer
     result = await db.scheduled_posts.insert_one(post_doc)
     post_id = str(result.inserted_id)
 
-    # Save APScheduler job
-    scheduler.add_job(
-        publish_scheduled_post,
-        "date",
-        run_date=scheduled_utc,
-        args=[post_id],
-        id=f"sched_{post_id}"
-    )
+    # Save APScheduler job. The DB row is the source of truth: if registration
+    # fails here, recover_scheduled_posts() will pick it up on the next startup,
+    # so we log and continue rather than stranding the user.
+    try:
+        scheduler.add_job(
+            publish_scheduled_post,
+            "date",
+            run_date=scheduled_utc,
+            args=[post_id],
+            id=f"sched_{post_id}",
+            replace_existing=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to register scheduler job for post {post_id}: {e}", exc_info=True)
 
     # Increment stats
     await database.increment_channel_stat(draft["channel_id"], "scheduled_posts", 1)
@@ -369,7 +486,7 @@ async def schedule_confirm_callback(client: Client, callback_query: CallbackQuer
     await database.delete_post_draft(user_id)
     await callback_query.answer("Post scheduled successfully!")
     
-    tz_str = draft["schedule_timezone"]
+    tz_str = draft.get("schedule_timezone", "UTC")
     try:
         tz = pytz.timezone(tz_str)
     except:
@@ -419,14 +536,12 @@ async def scheduler_input_handler(client: Client, message: Message):
 
     if text.lower() == "/cancel":
         return  # Handled by main cancel handler in post_builder.py
-        
-    draft = await database.get_post_draft(user_id)
-    if not draft:
+
+    ctx = await database.get_active_builder_context(user_id)
+    if not ctx["is_scheduler_state"]:
         return
-        
-    state = draft.get("state")
-    if not state or state not in ["awaiting_custom_timezone", "awaiting_schedule_time"]:
-        return
+    draft = ctx["draft"]
+    state = ctx["state"]
 
     # Handle Custom Timezone input
     if state == "awaiting_custom_timezone":
