@@ -19,12 +19,11 @@ from pyrogram.errors import MessageNotModified, FloodWait
 from bot import app
 import database
 from utils.helpers import banned_filter
-from utils.tmdb_client import TMDBClient
 from utils.image_converter import ImageConverter
 from utils.publisher import publish_post
+from utils.caption_builder import build_movie_caption, format_language
 
 logger = logging.getLogger(__name__)
-tmdb_client = TMDBClient()
 image_converter = ImageConverter()
 
 # List of default emojis for reactions toggle
@@ -52,7 +51,7 @@ def generate_language_keyboard(selected_lang: str) -> InlineKeyboardMarkup:
     rows = []
     current_row = []
     for l in MANUAL_LANGUAGES:
-        formatted = tmdb_client.format_language(l)
+        formatted = format_language(l)
         status = "✅" if l == selected_lang else "❌"
         current_row.append(InlineKeyboardButton(f"{formatted} {status}", callback_data=f"manual_lang_select_{l}"))
         if len(current_row) == 2:
@@ -108,43 +107,18 @@ async def manual_genre_confirm_callback(client: Client, callback_query: Callback
     )
 
 async def build_and_save_manual_caption(user_id: int, draft: dict):
-    # Format manual details to the EXACT caption format
-    caption_lines = []
-    
-    title = draft.get("movie_title")
-    year = draft.get("movie_year")
-    if title:
-        year_str = f" [{year}]" if year and year != "N/A" else ""
-        caption_lines.append(f"<b>Movie:</b> {title}{year_str}")
-        
-    aka = draft.get("also_known_as")
-    if aka and aka != "N/A":
-        caption_lines.append(f"<i>Also Known As:</i> {aka}")
-        
-    rating = draft.get("rating", 0.0)
-    rating_count = draft.get("rating_count", 0)
-    if rating > 0.0:
-        caption_lines.append(f"<b>Rating</b> ⭐: {rating} / 10 ({rating_count} user ratings)")
-        
-    runtime = draft.get("runtime")
-    if runtime and runtime != "N/A":
-        caption_lines.append(f"<b>Runtime:</b> {runtime}")
-        
-    rel_info = draft.get("release_info")
-    if rel_info and rel_info != "N/A":
-        caption_lines.append(f"<b>Release Info:</b> {rel_info}")
-        
-    genres = draft.get("genres")
-    if genres:
-        genre_emojis = tmdb_client.format_genres(genres)
-        if genre_emojis:
-            caption_lines.append(f"<b>Genre:</b> {genre_emojis}")
-            
-    lang = draft.get("language")
-    if lang and lang != "N/A":
-        caption_lines.append(f"<b>Language:</b> {lang}")
-
-    draft["caption_html"] = "\n".join(caption_lines)
+    # Assemble the fixed movie caption with every admin-typed field HTML-escaped.
+    draft["caption_html"] = build_movie_caption({
+        "title": draft.get("movie_title"),
+        "year": draft.get("movie_year"),
+        "aka": draft.get("also_known_as"),
+        "rating": draft.get("rating", 0.0),
+        "rating_count": draft.get("rating_count", 0),
+        "runtime": draft.get("runtime"),
+        "release_info": draft.get("release_info"),
+        "genres": draft.get("genres") or [],
+        "language": draft.get("language"),
+    })
     draft["state"] = "awaiting_poster_upload"
     await database.save_post_draft(user_id, draft)
 
@@ -158,7 +132,7 @@ async def manual_lang_select_callback(client: Client, callback_query: CallbackQu
         await callback_query.answer("❌ Invalid session", show_alert=True)
         return
         
-    draft["language"] = tmdb_client.format_language(lang_code)
+    draft["language"] = format_language(lang_code)
     await build_and_save_manual_caption(user_id, draft)
     await callback_query.answer()
     
@@ -303,7 +277,6 @@ async def build_select_callback(client: Client, callback_query: CallbackQuery):
         "user_id": user_id,
         "channel_id": channel_id,
         "channel_name": channel_name,
-        "tmdb_id": None,
         "movie_title": "N/A",
         "movie_year": "N/A",
         "also_known_as": "N/A",
@@ -313,7 +286,6 @@ async def build_select_callback(client: Client, callback_query: CallbackQuery):
         "release_info": "N/A",
         "genres": [],
         "language": "N/A",
-        "tmdb_poster_url": "",
         "poster_file_id": None,
         "poster_processed": False,
         "poster_bg_style": None,
@@ -330,41 +302,14 @@ async def build_select_callback(client: Client, callback_query: CallbackQuery):
         "repost_enabled": False,
         "repost_interval_minutes": None,
         "repost_delete_old": True,
-        "state": "awaiting_tmdb_search",
+        "state": "awaiting_manual_movie_details",
         "created_at": datetime.datetime.now(datetime.timezone.utc),
         "updated_at": datetime.datetime.now(datetime.timezone.utc),
     }
 
     await database.save_post_draft(user_id, draft)
     await callback_query.answer()
-    
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Skip TMDB - Manual Caption", callback_data="tmdb_skip")]
-    ])
-    await callback_query.message.edit_text(
-        "🎬 **Post Builder — Movie Search**\n\n"
-        "Enter the movie name to search TMDB:\n"
-        "Example: `Bhooth Bangla 2026`",
-        reply_markup=keyboard
-    )
 
-# Callback: Skip TMDB (Manual caption)
-@app.on_callback_query(filters.regex(r"^tmdb_skip$"))
-async def tmdb_skip_callback(client: Client, callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    draft = await database.get_post_draft(user_id)
-    if not draft:
-        await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
-        return
-        
-    if callback_query.from_user.id != draft.get("user_id"):
-        await callback_query.answer("❌ Not your session", show_alert=True)
-        return
-
-    draft["state"] = "awaiting_manual_movie_details"
-    await database.save_post_draft(user_id, draft)
-    await callback_query.answer()
-    
     template_text = (
         "🎬 **Post Builder — Enter Movie Details**\n\n"
         "Copy the template below, fill it out, and send it back:\n\n"
@@ -381,98 +326,6 @@ async def tmdb_skip_callback(client: Client, callback_query: CallbackQuery):
     )
     await callback_query.message.edit_text(template_text)
 
-
-# Callback: Movie selected
-@app.on_callback_query(filters.regex(r"^tmdb_select_(\d+)$"))
-async def tmdb_select_callback(client: Client, callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    tmdb_id = int(callback_query.matches[0].group(1))
-    
-    draft = await database.get_post_draft(user_id)
-    if not draft:
-        await callback_query.answer("❌ Session expired. Use /newpost", show_alert=True)
-        return
-        
-    if callback_query.from_user.id != draft.get("user_id"):
-        await callback_query.answer("❌ Not your session", show_alert=True)
-        return
-
-    await callback_query.message.edit_text("⏳ Fetching movie details from TMDB...")
-    await callback_query.answer()
-
-    try:
-        details = await tmdb_client.get_movie_details(tmdb_id)
-        if not details:
-            await callback_query.message.edit_text("❌ Failed to retrieve details. Try again or skip TMDB.")
-            return
-
-        # Update draft fields
-        draft["tmdb_id"] = details["tmdb_id"]
-        draft["movie_title"] = details["title"]
-        draft["movie_year"] = details["year"]
-        draft["also_known_as"] = details["also_known_as"]
-        draft["rating"] = details["rating"]
-        draft["rating_count"] = details["rating_count"]
-        draft["runtime"] = details["runtime"]
-        draft["release_info"] = details["release_info"]
-        draft["genres"] = details["genres"]
-        draft["language"] = tmdb_client.format_language(details["original_language"])
-        draft["tmdb_poster_url"] = details["poster_url"]
-
-        # Generate HTML Caption
-        caption_lines = []
-        
-        imdb_id = details.get("imdb_id")
-        title = details.get("title")
-        year = details.get("year")
-        if title:
-            if imdb_id:
-                title_link = f'<a href="https://www.imdb.com/title/{imdb_id}">{title}</a>'
-            else:
-                title_link = title
-            year_str = f" [{year}]" if year else ""
-            caption_lines.append(f"<b>Movie:</b> {title_link}{year_str}")
-            
-        aka = details.get("also_known_as")
-        if aka and aka != "N/A":
-            caption_lines.append(f"<i>Also Known As:</i> {aka}")
-            
-        rating = details.get("rating")
-        rating_count = details.get("rating_count")
-        if rating:
-            caption_lines.append(f"<b>Rating</b> ⭐: {rating} / 10 ({rating_count} user ratings)")
-            
-        runtime = details.get("runtime")
-        if runtime:
-            caption_lines.append(f"<b>Runtime:</b> {runtime}")
-            
-        rel_info = details.get("release_info")
-        if rel_info and "N/A" not in rel_info:
-            caption_lines.append(f"<b>Release Info:</b> {rel_info}")
-            
-        genres = details.get("genres")
-        if genres:
-            genre_emojis = tmdb_client.format_genres(genres)
-            if genre_emojis:
-                caption_lines.append(f"<b>Genre:</b> {genre_emojis}")
-                
-        lang = details.get("original_language")
-        if lang:
-            lang_tag = tmdb_client.format_language(lang)
-            caption_lines.append(f"<b>Language:</b> {lang_tag}")
-
-        draft["caption_html"] = "\n".join(caption_lines)
-        draft["state"] = "awaiting_poster_upload"
-        await database.save_post_draft(user_id, draft)
-
-        await callback_query.message.reply_text(
-            "🖼 **Post Builder — Upload Poster**\n\n"
-            "Please upload the poster image for this post (JPG/PNG).\n"
-            "It will be automatically converted to a 1:1 square background."
-        )
-    except Exception as e:
-        logger.error(f"Error handling tmdb selection: {e}", exc_info=True)
-        await callback_query.message.reply_text("⚠️ Something went wrong while fetching details.")
 
 # Callback: Background Poster Style Selection
 @app.on_callback_query(filters.regex(r"^poster_style_(black|blur|white)$"))
@@ -937,52 +790,8 @@ async def builder_input_handler(client: Client, message: Message):
         message.continue_propagation()
         return
 
-    # STATE 2: awaiting_tmdb_search
-    if state == "awaiting_tmdb_search":
-        if not text:
-            await message.reply_text("❌ Please send a valid movie name:")
-            return
-
-        typing_msg = await message.reply_text("🔍 Searching TMDB...")
-        try:
-            results = await tmdb_client.search_movies(text)
-            if not results:
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("❌ Skip TMDB - Manual Caption", callback_data="tmdb_skip")]
-                ])
-                await typing_msg.edit_text(
-                    "❌ No results found. Try a different name or use manual details:",
-                    reply_markup=keyboard
-                )
-                return
-
-            # Render movie options
-            kb_rows = []
-            for item in results:
-                kb_rows.append([
-                    InlineKeyboardButton(
-                        f"🎬 {item['title']} ({item['year']}) - {item['language']}",
-                        callback_data=f"tmdb_select_{item['tmdb_id']}"
-                    )
-                ])
-            kb_rows.append([
-                InlineKeyboardButton("❌ Skip TMDB - Manual Caption", callback_data="tmdb_skip")
-            ])
-            
-            await typing_msg.edit_text(
-                "🎬 **Search Results:**\nSelect the correct movie:",
-                reply_markup=InlineKeyboardMarkup(kb_rows)
-            )
-        except Exception as e:
-            logger.error(f"TMDB search failed: {e}", exc_info=True)
-            await typing_msg.edit_text("⚠️ TMDB unavailable. Skip or try again:", reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("❌ Skip TMDB - Manual Caption", callback_data="tmdb_skip")]
-            ]))
-        message.stop_propagation()
-        return
-
-    # STATE 2 Alternative: awaiting_manual_movie_details
-    elif state == "awaiting_manual_movie_details":
+    # STATE 2: awaiting_manual_movie_details
+    if state == "awaiting_manual_movie_details":
         if not text:
             await message.reply_text("❌ Input cannot be empty.")
             return
