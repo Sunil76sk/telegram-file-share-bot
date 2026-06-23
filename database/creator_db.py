@@ -59,6 +59,10 @@ async def get_channel_by_id(channel_id: int | str):
 
 # Builder state classification (shared by the per-message input routers).
 _BUILDER_STATE_PREFIXES = (
+    "awaiting_media",
+    "awaiting_caption",
+    "awaiting_buttons",
+    "awaiting_reactions",
     "awaiting_tmdb_search",
     "awaiting_manual_caption",
     "awaiting_manual_movie_details",
