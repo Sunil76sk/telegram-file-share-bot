@@ -261,16 +261,17 @@ async def acquire_runtime_lock():
             if last_heartbeat.tzinfo is None:
                 last_heartbeat = last_heartbeat.replace(tzinfo=datetime.timezone.utc)
             if (now - last_heartbeat).total_seconds() < 60:
-                logger.error(
-                    f"Active bot instance detected! Hostname: {lock.get('hostname')}, "
-                    f"PID: {lock.get('pid')}, Last Heartbeat: {last_heartbeat}"
-                )
-                print(
-                    f"FATAL: Active instance already running on {lock.get('hostname')} "
-                    f"(PID {lock.get('pid')}). Exiting.",
-                    flush=True,
-                )
-                sys.exit(1)
+                if lock.get("hostname") != hostname:
+                    logger.error(
+                        f"Active bot instance detected! Hostname: {lock.get('hostname')}, "
+                        f"PID: {lock.get('pid')}, Last Heartbeat: {last_heartbeat}"
+                    )
+                    print(
+                        f"FATAL: Active instance already running on {lock.get('hostname')} "
+                        f"(PID {lock.get('pid')}). Exiting.",
+                        flush=True,
+                    )
+                    sys.exit(1)
 
         await runtime_lock_col.update_one(
             {"lock_name": lock_name},
