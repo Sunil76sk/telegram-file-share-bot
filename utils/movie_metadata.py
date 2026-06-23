@@ -15,12 +15,29 @@ MEDIA_LIBRARY_COL = db["media_library"]
 
 
 GENRE_KEYWORDS: dict[str, list[str]] = {
-    "action": ["action", "thriller", "war", "mission", "combat", "fight", "explosive", "fast"],
+    "action": [
+        "action",
+        "thriller",
+        "war",
+        "mission",
+        "combat",
+        "fight",
+        "explosive",
+        "fast",
+    ],
     "comedy": ["comedy", "funny", "humor", "laugh", "comic", "sitcom"],
     "drama": ["drama", "emotional", "heartfelt", "intense", "powerful"],
     "horror": ["horror", "scary", "thriller", "creepy", "haunted", "paranormal"],
     "romance": ["romance", "love", "romantic", "rom-com", "romantic comedy"],
-    "sci-fi": ["sci-fi", "science fiction", "space", "future", "futuristic", "alien", "cyberpunk"],
+    "sci-fi": [
+        "sci-fi",
+        "science fiction",
+        "space",
+        "future",
+        "futuristic",
+        "alien",
+        "cyberpunk",
+    ],
     "fantasy": ["fantasy", "magic", "mythical", "supernatural", "wizard"],
     "thriller": ["thriller", "suspense", "psychological", "mystery", "crime"],
     "animation": ["animation", "animated", "cartoon", "anime", "pixar", "disney"],
@@ -70,6 +87,7 @@ async def save_movie_metadata(metadata: dict[str, Any]) -> str:
 
 async def get_movie_metadata(movie_id: str) -> dict | None:
     from bson import ObjectId
+
     try:
         return await MOVIE_META_COL.find_one({"_id": ObjectId(movie_id)})
     except Exception:
@@ -99,12 +117,18 @@ async def search_movies(
     if language:
         search_filter["language"] = language
 
-    cursor = MOVIE_META_COL.find(search_filter).sort("created_at", -1).skip(skip).limit(limit)
+    cursor = (
+        MOVIE_META_COL.find(search_filter)
+        .sort("created_at", -1)
+        .skip(skip)
+        .limit(limit)
+    )
     return [doc async for doc in cursor]
 
 
 async def update_movie_metadata(movie_id: str, updates: dict) -> bool:
     from bson import ObjectId
+
     updates["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
     try:
         result = await MOVIE_META_COL.update_one(
@@ -117,6 +141,7 @@ async def update_movie_metadata(movie_id: str, updates: dict) -> bool:
 
 async def delete_movie_metadata(movie_id: str) -> bool:
     from bson import ObjectId
+
     try:
         result = await MOVIE_META_COL.delete_one({"_id": ObjectId(movie_id)})
         return result.deleted_count > 0
@@ -157,12 +182,15 @@ async def get_media_library(
     query: dict = {"user_id": user_id}
     if media_type:
         query["media_type"] = media_type
-    cursor = MEDIA_LIBRARY_COL.find(query).sort("created_at", -1).skip(skip).limit(limit)
+    cursor = (
+        MEDIA_LIBRARY_COL.find(query).sort("created_at", -1).skip(skip).limit(limit)
+    )
     return [doc async for doc in cursor]
 
 
 async def remove_from_media_library(library_id: str, user_id: int) -> bool:
     from bson import ObjectId
+
     try:
         result = await MEDIA_LIBRARY_COL.delete_one(
             {"_id": ObjectId(library_id), "user_id": user_id}
@@ -174,10 +202,10 @@ async def remove_from_media_library(library_id: str, user_id: int) -> bool:
 
 async def increment_media_download(library_id: str) -> bool:
     from bson import ObjectId
+
     try:
         result = await MEDIA_LIBRARY_COL.update_one(
-            {"_id": ObjectId(library_id)},
-            {"$inc": {"download_count": 1}}
+            {"_id": ObjectId(library_id)}, {"$inc": {"download_count": 1}}
         )
         return result.modified_count > 0
     except Exception:
@@ -215,6 +243,7 @@ async def import_existing_post(
 ) -> dict | None:
     try:
         from pyrogram import Client
+
         if not isinstance(client, Client):
             logger.error("Invalid client for import_existing_post")
             return None
@@ -260,8 +289,11 @@ async def import_existing_post(
             draft["file_id"] = msg.animation.file_id
 
         from database.creator_db import save_post_draft
+
         await save_post_draft(user_id, draft)
-        logger.info(f"Imported post {message_id} from channel {channel_id} for user {user_id}")
+        logger.info(
+            f"Imported post {message_id} from channel {channel_id} for user {user_id}"
+        )
         return draft
     except Exception as e:
         logger.error(f"Failed to import post: {e}")
@@ -285,36 +317,55 @@ async def fetch_movie_from_api(title: str, year: int | None = None) -> dict | No
             url = f"https://api.themoviedb.org/3/search/movie?api_key={tmdb_key}&query={query}"
             if year:
                 url += f"&year={year}"
-            
+
             def _get():
-                req = urllib.request.Request(url, headers={"Accept": "application/json"})
+                req = urllib.request.Request(
+                    url, headers={"Accept": "application/json"}
+                )
                 with urllib.request.urlopen(req, timeout=5) as r:
                     return json.loads(r.read().decode("utf-8"))
+
             res = await asyncio.to_thread(_get)
             if res.get("results"):
                 movie = res["results"][0]
                 movie_id = movie["id"]
-                detail_url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={tmdb_key}"
+                detail_url = (
+                    f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={tmdb_key}"
+                )
+
                 def _get_details():
                     with urllib.request.urlopen(detail_url, timeout=5) as r:
                         return json.loads(r.read().decode("utf-8"))
+
                 details = await asyncio.to_thread(_get_details)
-                
+
                 poster_path = details.get("poster_path")
-                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None
-                
+                poster_url = (
+                    f"https://image.tmdb.org/t/p/w500{poster_path}"
+                    if poster_path
+                    else None
+                )
+
                 return {
                     "title": details.get("title", title),
                     "description": details.get("overview", ""),
-                    "year": int(details.get("release_date", "0000").split("-")[0]) if details.get("release_date") else year,
-                    "genre": ", ".join([g["name"] for g in details.get("genres", [])]) if details.get("genres") else "general",
+                    "year": (
+                        int(details.get("release_date", "0000").split("-")[0])
+                        if details.get("release_date")
+                        else year
+                    ),
+                    "genre": (
+                        ", ".join([g["name"] for g in details.get("genres", [])])
+                        if details.get("genres")
+                        else "general"
+                    ),
                     "language": details.get("original_language", "en"),
                     "imdb_id": details.get("imdb_id"),
                     "poster_url": poster_url,
                     "rating": details.get("vote_average", 0.0),
                     "duration_minutes": details.get("runtime", 0),
                     "director": "",
-                    "cast": []
+                    "cast": [],
                 }
         except Exception as e:
             logger.error(f"Error fetching from TMDB: {e}")
@@ -325,9 +376,11 @@ async def fetch_movie_from_api(title: str, year: int | None = None) -> dict | No
             url = f"http://www.omdbapi.com/?apikey={omdb_key}&t={query}"
             if year:
                 url += f"&y={year}"
+
             def _get():
                 with urllib.request.urlopen(url, timeout=5) as r:
                     return json.loads(r.read().decode("utf-8"))
+
             res = await asyncio.to_thread(_get)
             if res.get("Response") == "True":
                 runtime_str = res.get("Runtime", "0").split()[0]
@@ -338,15 +391,27 @@ async def fetch_movie_from_api(title: str, year: int | None = None) -> dict | No
                 return {
                     "title": res.get("Title", title),
                     "description": res.get("Plot", ""),
-                    "year": int(res.get("Year", "0")) if res.get("Year", "").isdigit() else year,
+                    "year": (
+                        int(res.get("Year", "0"))
+                        if res.get("Year", "").isdigit()
+                        else year
+                    ),
                     "genre": res.get("Genre", "general"),
                     "language": res.get("Language", "en"),
                     "imdb_id": res.get("imdbID"),
-                    "poster_url": res.get("Poster") if res.get("Poster") != "N/A" else None,
-                    "rating": float(res.get("imdbRating", 0.0)) if res.get("imdbRating") != "N/A" else 0.0,
+                    "poster_url": (
+                        res.get("Poster") if res.get("Poster") != "N/A" else None
+                    ),
+                    "rating": (
+                        float(res.get("imdbRating", 0.0))
+                        if res.get("imdbRating") != "N/A"
+                        else 0.0
+                    ),
                     "duration_minutes": duration,
                     "director": res.get("Director", ""),
-                    "cast": [c.strip() for c in res.get("Actors", "").split(",") if c.strip()]
+                    "cast": [
+                        c.strip() for c in res.get("Actors", "").split(",") if c.strip()
+                    ],
                 }
         except Exception as e:
             logger.error(f"Error fetching from OMDB: {e}")

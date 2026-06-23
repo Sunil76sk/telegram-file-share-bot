@@ -83,7 +83,14 @@ async def get_admin_sync_payload() -> str:
 async def save_menu_snapshot(menu_type: str, payload: str):
     await BOTFATHER_COL.update_one(
         {"type": menu_type},
-        {"$set": {"payload": payload, "updated_at": __import__('datetime').datetime.now(__import__('datetime').timezone.utc)}},
+        {
+            "$set": {
+                "payload": payload,
+                "updated_at": __import__("datetime").datetime.now(
+                    __import__("datetime").timezone.utc
+                ),
+            }
+        },
         upsert=True,
     )
 
@@ -112,16 +119,17 @@ async def get_formatted_command_list() -> str:
 async def sync_bot_commands(client: Any):
     """Register command lists on startup using client.set_bot_commands."""
     from pyrogram.types import BotCommand
+
     try:
         commands = []
         for cmd in DEFAULT_COMMANDS:
             commands.append(BotCommand(cmd["command"], cmd["description"]))
         for cmd in CREATOR_COMMANDS:
             commands.append(BotCommand(cmd["command"], cmd["description"]))
-        
+
         await client.set_bot_commands(commands)
         logger.info("Successfully synced default commands with BotFather.")
-        
+
         # Save snapshot to DB
         payload = await get_sync_payload()
         await save_menu_snapshot("default", payload)

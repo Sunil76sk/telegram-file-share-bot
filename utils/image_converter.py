@@ -4,17 +4,17 @@ import io
 import asyncio
 from PIL import Image, ImageFilter, ImageEnhance
 
+
 class ImageConverter:
     TARGET_SIZE = (1080, 1080)  # Square 1:1
 
     async def convert_to_square(
-        self, 
-        image_bytes: bytes, 
-        style: str  # "black" | "blur" | "white"
+        self, image_bytes: bytes, style: str  # "black" | "blur" | "white"
     ) -> bytes:
         """
         Convert any image to 1080x1080 square.
         """
+
         def _process():
             # Open the original image
             original = Image.open(io.BytesIO(image_bytes))
@@ -63,6 +63,7 @@ class ImageConverter:
         """
         Resize, crop, or blur-fit an image to a target aspect ratio.
         """
+
         def _process():
             original = Image.open(io.BytesIO(image_bytes))
             if original.mode != "RGB":
@@ -78,7 +79,7 @@ class ImageConverter:
                 "1:1": (1080, 1080),
                 "9:16": (1080, 1920),
                 "16:9": (1920, 1080),
-                "4:5": (1080, 1350)
+                "4:5": (1080, 1350),
             }
             target_w, target_h = dimensions.get(ratio, (1080, 1080))
             target_ratio = target_w / target_h
@@ -114,7 +115,7 @@ class ImageConverter:
                     resized = original.resize((new_w, new_h), Image.Resampling.BILINEAR)
                     top = (new_h - target_h) // 2
                     cropped = resized.crop((0, top, target_w, top + target_h))
-                
+
                 blurred = cropped.filter(ImageFilter.GaussianBlur(radius=25))
                 enhancer = ImageEnhance.Brightness(blurred)
                 bg = enhancer.enhance(0.5)
@@ -126,9 +127,9 @@ class ImageConverter:
                 else:
                     fit_h = target_h
                     fit_w = int(target_h * orig_ratio)
-                
+
                 resized_orig = original.resize((fit_w, fit_h), Image.Resampling.LANCZOS)
-                
+
                 # Paste centered
                 offset_x = (target_w - fit_w) // 2
                 offset_y = (target_h - fit_h) // 2

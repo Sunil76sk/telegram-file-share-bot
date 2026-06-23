@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 
 try:
     import pyrogram.utils
+
     pyrogram.utils.MIN_CHANNEL_ID = -100999999999999
 except (AttributeError, ImportError):
     pass

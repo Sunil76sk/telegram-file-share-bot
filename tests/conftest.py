@@ -5,15 +5,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 @pytest.fixture
 def mock_db():
     """Mock all database collections and functions."""
-    with patch("database.users_col") as users_col, \
-         patch("database.post_drafts_col") as drafts_col, \
-         patch("database.scheduled_posts_col") as scheduled_col, \
-         patch("database.repost_jobs_col") as repost_col, \
-         patch("database.templates_col") as templates_col, \
-         patch("database.channels_col") as channels_col, \
-         patch("database.purchases_col") as purchases_col, \
-         patch("database.products_col") as products_col, \
-         patch("database.channel_stats_col") as stats_col:
+    with patch("database.users_col") as users_col, patch(
+        "database.post_drafts_col"
+    ) as drafts_col, patch("database.scheduled_posts_col") as scheduled_col, patch(
+        "database.repost_jobs_col"
+    ) as repost_col, patch(
+        "database.templates_col"
+    ) as templates_col, patch(
+        "database.channels_col"
+    ) as channels_col, patch(
+        "database.purchases_col"
+    ) as purchases_col, patch(
+        "database.products_col"
+    ) as products_col, patch(
+        "database.channel_stats_col"
+    ) as stats_col:
 
         users_col.find_one = AsyncMock(return_value=None)
         users_col.update_one = AsyncMock()
@@ -22,7 +28,9 @@ def mock_db():
         drafts_col.update_one = AsyncMock()
         drafts_col.delete_one = AsyncMock()
         scheduled_col.find = AsyncMock(return_value=[])
-        scheduled_col.insert_one = AsyncMock(return_value=MagicMock(inserted_id="test_id"))
+        scheduled_col.insert_one = AsyncMock(
+            return_value=MagicMock(inserted_id="test_id")
+        )
         scheduled_col.update_one = AsyncMock()
         scheduled_col.delete_one = AsyncMock()
         repost_col.find = AsyncMock(return_value=[])
@@ -69,6 +77,8 @@ def mock_client():
     client.edit_message_reply_markup = AsyncMock()
     client.pin_chat_message = AsyncMock()
     client.delete_messages = AsyncMock()
-    client.get_chat = AsyncMock(return_value=MagicMock(linked_chat=None, linked_chat_id=None))
+    client.get_chat = AsyncMock(
+        return_value=MagicMock(linked_chat=None, linked_chat_id=None)
+    )
     client.get_chat_member = AsyncMock()
     return client

@@ -123,7 +123,11 @@ async def get_user_post_count(user_id: int) -> int:
 
 
 async def cleanup_old_history(days: int = 90):
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        days=days
+    )
     result = await CHANNEL_POST_HISTORY_COL.delete_many({"posted_at": {"$lt": cutoff}})
     if result.deleted_count:
-        logger.info(f"Cleaned {result.deleted_count} old post history entries (> {days}d)")
+        logger.info(
+            f"Cleaned {result.deleted_count} old post history entries (> {days}d)"
+        )

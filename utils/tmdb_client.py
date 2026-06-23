@@ -9,6 +9,7 @@ from database.creator_db import get_settings
 
 logger = logging.getLogger(__name__)
 
+
 class TMDBClient:
     BASE_URL = "https://api.themoviedb.org/3"
     IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
@@ -60,6 +61,7 @@ class TMDBClient:
         # Extract year if present in query, e.g. "Bhooth Bangla 2026"
         # We can pass the year parameter to TMDB for better results
         import re
+
         year_match = re.search(r"\b(19\d\d|20\d\d)\b", query)
         params = {"query": query}
         if year_match:
@@ -81,13 +83,15 @@ class TMDBClient:
             release_date = item.get("release_date", "")
             year = release_date.split("-")[0] if release_date else "N/A"
 
-            results.append({
-                "tmdb_id": item["id"],
-                "title": item["title"],
-                "year": year,
-                "language": self.format_language(item.get("original_language", "")),
-                "poster_url": f"{self.IMAGE_BASE}{poster_path}"
-            })
+            results.append(
+                {
+                    "tmdb_id": item["id"],
+                    "title": item["title"],
+                    "year": year,
+                    "language": self.format_language(item.get("original_language", "")),
+                    "poster_url": f"{self.IMAGE_BASE}{poster_path}",
+                }
+            )
 
             if len(results) >= 5:
                 break
@@ -120,9 +124,9 @@ class TMDBClient:
             # Reformat YYYY-MM-DD -> DD/MM/YYYY or keep as DD/MM/YYYY
             try:
                 dt = asyncio.run_coroutine_threadsafe(
-                    asyncio.to_thread(lambda: urllib.request.urlopen), # dummy
-                    asyncio.get_event_loop()
-                ) # no need, we can just split
+                    asyncio.to_thread(lambda: urllib.request.urlopen),  # dummy
+                    asyncio.get_event_loop(),
+                )  # no need, we can just split
                 parts = release_date_raw.split("-")
                 if len(parts) == 3:
                     release_date_str = f"{parts[2]}/{parts[1]}/{parts[0]}"
@@ -167,7 +171,7 @@ class TMDBClient:
             "original_language": data.get("original_language", ""),
             "poster_url": poster_url,
             "also_known_as": also_known_as,
-            "imdb_id": data.get("imdb_id")
+            "imdb_id": data.get("imdb_id"),
         }
 
     def format_runtime(self, minutes: int) -> str:
@@ -203,7 +207,7 @@ class TMDBClient:
             "Mystery": "🔍",
             "History": "📜",
             "War": "🪖",
-            "Documentary": "📹"
+            "Documentary": "📹",
         }
         formatted = []
         for g in genres:
@@ -228,6 +232,6 @@ class TMDBClient:
             "es": "#Spanish",
             "fr": "#French",
             "ko": "#Korean",
-            "ja": "#Japanese"
+            "ja": "#Japanese",
         }
         return lang_map.get(lang_code.lower(), f"#{lang_code.upper()}")

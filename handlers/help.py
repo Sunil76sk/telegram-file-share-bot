@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import logging
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 from bot import app
 import database
 from utils.helpers import banned_filter
@@ -124,11 +129,12 @@ async def help_command_handler(client: Client, message: Message):
 async def _show_help_menu(message: Message):
     buttons = []
     for key, section in HELP_SECTIONS.items():
-        buttons.append([InlineKeyboardButton(section["title"], callback_data=f"help_{key}")])
+        buttons.append(
+            [InlineKeyboardButton(section["title"], callback_data=f"help_{key}")]
+        )
 
     await message.reply_text(
-        "❓ **Help Menu**\n\n"
-        "Select a topic below to learn more:",
+        "❓ **Help Menu**\n\n" "Select a topic below to learn more:",
         reply_markup=InlineKeyboardMarkup(buttons),
     )
 
@@ -140,7 +146,9 @@ async def help_callback_handler(client: Client, callback_query: CallbackQuery):
     if section_key == "back":
         buttons = []
         for key, section in HELP_SECTIONS.items():
-            buttons.append([InlineKeyboardButton(section["title"], callback_data=f"help_{key}")])
+            buttons.append(
+                [InlineKeyboardButton(section["title"], callback_data=f"help_{key}")]
+            )
         await callback_query.answer()
         await callback_query.message.edit_text(
             "❓ **Help Menu**\n\nSelect a topic below to learn more:",
@@ -153,9 +161,9 @@ async def help_callback_handler(client: Client, callback_query: CallbackQuery):
         await callback_query.answer("Section not found.", show_alert=True)
         return
 
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Back to Help Menu", callback_data="help_back")]
-    ])
+    buttons = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🔙 Back to Help Menu", callback_data="help_back")]]
+    )
 
     await callback_query.answer()
     await callback_query.message.edit_text(

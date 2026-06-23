@@ -144,11 +144,14 @@ async def with_transaction(operation):
 async def init_db():
     try:
         from database.schema import ensure_collections, ensure_indexes, run_migrations
+
         await ensure_collections()
         await ensure_indexes()
         await run_migrations()
 
-        await processed_updates_col.create_index("processed_at", expireAfterSeconds=86400)
+        await processed_updates_col.create_index(
+            "processed_at", expireAfterSeconds=86400
+        )
 
         rate_limits_col = db["rate_limits"]
         await rate_limits_col.create_index([("user_id", 1), ("action", 1)])
@@ -156,9 +159,11 @@ async def init_db():
 
         await users_col.update_many(
             {"source": {"$exists": False}},
-            {"$set": {"source": "direct", "campaign": None}}
+            {"$set": {"source": "direct", "campaign": None}},
         )
 
-        logger.info("Database schema, indexes, and migrations initialized successfully.")
+        logger.info(
+            "Database schema, indexes, and migrations initialized successfully."
+        )
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")

@@ -298,31 +298,43 @@ async def delete_expired_drafts_and_states() -> None:
             logger.info(f"Deleted {res.deleted_count} expired edit sessions.")
 
         # 4. Clear expired password sessions
-        res = await password_settings_col.delete_many({"created_at": {"$lt": limit_24h}})
-        res2 = await password_entries_col.delete_many({"created_at": {"$lt": limit_24h}})
+        res = await password_settings_col.delete_many(
+            {"created_at": {"$lt": limit_24h}}
+        )
+        res2 = await password_entries_col.delete_many(
+            {"created_at": {"$lt": limit_24h}}
+        )
         if res.deleted_count > 0 or res2.deleted_count > 0:
-            logger.info(f"Deleted {res.deleted_count + res2.deleted_count} expired password sessions.")
+            logger.info(
+                f"Deleted {res.deleted_count + res2.deleted_count} expired password sessions."
+            )
 
         # 5. Clear expired post drafts
         from database.mongo import drafts_col
+
         res = await drafts_col.delete_many({"updated_at": {"$lt": limit_24h}})
         if res.deleted_count > 0:
             logger.info(f"Deleted {res.deleted_count} expired post drafts.")
 
         # 6. Clear stale user states/drafts (where last_seen < 24h ago)
         from database.mongo import users_col
+
         res = await users_col.update_many(
             {"last_seen": {"$lt": limit_24h}},
-            {"$unset": {
-                "state": "",
-                "catalog_draft": "",
-                "marketplace_draft": "",
-                "shortener_draft": "",
-                "saas_pending_plan": ""
-            }}
+            {
+                "$unset": {
+                    "state": "",
+                    "catalog_draft": "",
+                    "marketplace_draft": "",
+                    "shortener_draft": "",
+                    "saas_pending_plan": "",
+                }
+            },
         )
         if res.modified_count > 0:
-            logger.info(f"Cleared stale user states/drafts for {res.modified_count} users.")
+            logger.info(
+                f"Cleared stale user states/drafts for {res.modified_count} users."
+            )
     except Exception as e:
         logger.error(f"Error deleting expired drafts and states: {e}")
 

@@ -27,8 +27,8 @@ from typing import Any  # noqa: E402
 startup_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
 INSTANCE_ID = f"{socket.gethostname()}-{os.getpid()}-{startup_time}"
 # Per-update context. Retained for handlers that annotate the active update.
-current_update_info: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
-    "current_update_info", default=None
+current_update_info: contextvars.ContextVar[dict[str, Any] | None] = (
+    contextvars.ContextVar("current_update_info", default=None)
 )
 
 logger.info(f"[INSTANCE_START] instance={INSTANCE_ID}")
@@ -69,9 +69,17 @@ import handlers.help  # noqa: E402
 import handlers.post_builder  # noqa: E402
 
 
-
-from utils.worker_framework import register_worker, start_workers, recover_workers, stop_workers  # noqa: E402
-from utils.queue_system import register_handler, recover_interrupted_tasks, process_queue  # noqa: E402
+from utils.worker_framework import (
+    register_worker,
+    start_workers,
+    recover_workers,
+    stop_workers,
+)  # noqa: E402
+from utils.queue_system import (
+    register_handler,
+    recover_interrupted_tasks,
+    process_queue,
+)  # noqa: E402
 from utils.anti_crash import recover_from_crash  # noqa: E402
 
 
@@ -96,12 +104,15 @@ async def custom_start():
 
     await database.init_db()
     from utils.multi_lang import load_translations
+
     await load_translations()
     await database.clear_active_deliveries()
     await database.delete_expired_drafts_and_states()
     await database.batches_col.delete_many({})
     await database.edit_sessions_col.delete_many({})
-    logger.info("Cleared stale batch, edit sessions, and expired drafts/temporary states from the database.")
+    logger.info(
+        "Cleared stale batch, edit sessions, and expired drafts/temporary states from the database."
+    )
 
     # Auto-register shortener from .env config if not already in database
     if config.SHORTENER_API_URL and config.SHORTENER_API_KEY:
@@ -130,8 +141,10 @@ async def custom_start():
     asyncio.create_task(deletion_worker(app))
     asyncio.create_task(expiry_worker())
     from utils.ads_engine import ads_scheduler_worker
+
     asyncio.create_task(ads_scheduler_worker(app))
     from utils.post_workers import scheduler_worker, repost_worker
+
     asyncio.create_task(scheduler_worker(app))
     asyncio.create_task(repost_worker(app))
 
@@ -143,26 +156,48 @@ async def custom_start():
     # Register queue handlers
     async def _media_upload_handler(payload: dict):
         logger.info(f"Media upload task: {payload.get('file_id')}")
+
     register_handler("media_upload", _media_upload_handler)
 
     async def _broadcast_handler(payload: dict):
         logger.info(f"Broadcast task for {payload.get('user_id')}")
+
     register_handler("broadcast", _broadcast_handler)
 
     # Register and start background workers
     async def _queue_worker_fn():
         await process_queue(max_concurrent=5)
-    register_worker("queue_processor", _queue_worker_fn, interval=10, description="Process pending queue tasks")
+
+    register_worker(
+        "queue_processor",
+        _queue_worker_fn,
+        interval=10,
+        description="Process pending queue tasks",
+    )
 
     async def _queue_cleanup_fn():
         from utils.queue_system import cleanup_completed_tasks
+
         await cleanup_completed_tasks(hours=24)
-    register_worker("queue_cleanup", _queue_cleanup_fn, interval=3600, description="Clean up completed queue tasks")
+
+    register_worker(
+        "queue_cleanup",
+        _queue_cleanup_fn,
+        interval=3600,
+        description="Clean up completed queue tasks",
+    )
 
     async def _post_history_cleanup_fn():
         from database.channel_post_history import cleanup_old_history
+
         await cleanup_old_history(days=90)
-    register_worker("post_history_cleanup", _post_history_cleanup_fn, interval=86400, description="Clean up old post history")
+
+    register_worker(
+        "post_history_cleanup",
+        _post_history_cleanup_fn,
+        interval=86400,
+        description="Clean up old post history",
+    )
 
     await start_workers()
 
@@ -171,6 +206,7 @@ async def custom_start():
 
     # Sync commands with BotFather (Module 30)
     from utils.botfather_menu import sync_bot_commands
+
     await sync_bot_commands(app)
 
 
@@ -238,23 +274,27 @@ async def acquire_runtime_lock():
 
         await runtime_lock_col.update_one(
             {"lock_name": lock_name},
-            {"$set": {
+            {
+                "$set": {
+                    "instance_id": INSTANCE_ID,
+                    "hostname": hostname,
+                    "pid": pid,
+                    "started_at": now,
+                    "heartbeat": now,
+                }
+            },
+        )
+    else:
+        await runtime_lock_col.insert_one(
+            {
+                "lock_name": lock_name,
                 "instance_id": INSTANCE_ID,
                 "hostname": hostname,
                 "pid": pid,
                 "started_at": now,
-                "heartbeat": now
-            }}
+                "heartbeat": now,
+            }
         )
-    else:
-        await runtime_lock_col.insert_one({
-            "lock_name": lock_name,
-            "instance_id": INSTANCE_ID,
-            "hostname": hostname,
-            "pid": pid,
-            "started_at": now,
-            "heartbeat": now
-        })
     logger.info("Successfully acquired runtime lock.")
 
 
@@ -266,11 +306,15 @@ async def instance_heartbeat_worker():
             now = datetime.datetime.now(datetime.timezone.utc)
             res = await runtime_lock_col.update_one(
                 {"lock_name": lock_name, "instance_id": INSTANCE_ID},
-                {"$set": {"heartbeat": now}}
+                {"$set": {"heartbeat": now}},
             )
             if res.modified_count == 0:
-                logger.warning("Lost runtime lock ownership. Exiting process to prevent duplication.")
-                print("FATAL: Lost runtime lock ownership. Exiting process.", flush=True)
+                logger.warning(
+                    "Lost runtime lock ownership. Exiting process to prevent duplication."
+                )
+                print(
+                    "FATAL: Lost runtime lock ownership. Exiting process.", flush=True
+                )
                 os._exit(1)
         except asyncio.CancelledError:
             break
@@ -289,11 +333,13 @@ async def dedup_message_guard(client: Client, message: Message):
     update_key = f"msg_{message.chat.id}_{message.id}"
     user_id = message.from_user.id if message.from_user else None
     try:
-        await processed_updates_col.insert_one({
-            "update_id": update_key,
-            "user_id": user_id,
-            "processed_at": datetime.datetime.now(datetime.timezone.utc),
-        })
+        await processed_updates_col.insert_one(
+            {
+                "update_id": update_key,
+                "user_id": user_id,
+                "processed_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        )
     except Exception:
         logger.warning(f"Duplicate update key {update_key} detected. Dropping message.")
         message.stop_propagation()
@@ -302,12 +348,22 @@ async def dedup_message_guard(client: Client, message: Message):
     # Message rate limiting: 20 text messages / minute per user (private chats).
     # Curbs command/input spam (caption, password, store, search). Media uploads
     # are not text so batch uploads are unaffected.
-    if user_id and message.text and message.chat and message.chat.type == ChatType.PRIVATE:
+    if (
+        user_id
+        and message.text
+        and message.chat
+        and message.chat.type == ChatType.PRIVATE
+    ):
         from utils.rate_limiter import check_rate_limit
-        allowed = await check_rate_limit(user_id, "message", limit=20, window_seconds=60)
+
+        allowed = await check_rate_limit(
+            user_id, "message", limit=20, window_seconds=60
+        )
         if not allowed:
             # Send the "slow down" notice at most once per window to avoid spam.
-            notice_ok = await check_rate_limit(user_id, "message_limit_notice", limit=1, window_seconds=60)
+            notice_ok = await check_rate_limit(
+                user_id, "message_limit_notice", limit=1, window_seconds=60
+            )
             if notice_ok:
                 try:
                     await message.reply_text(
@@ -319,24 +375,35 @@ async def dedup_message_guard(client: Client, message: Message):
 
 
 @app.on_callback_query(group=-200)
-async def dedup_and_ratelimit_callback_guard(client: Client, callback_query: CallbackQuery):
+async def dedup_and_ratelimit_callback_guard(
+    client: Client, callback_query: CallbackQuery
+):
     update_key = f"cb_{callback_query.id}"
     try:
-        await processed_updates_col.insert_one({
-            "update_id": update_key,
-            "user_id": callback_query.from_user.id,
-            "processed_at": datetime.datetime.now(datetime.timezone.utc),
-        })
+        await processed_updates_col.insert_one(
+            {
+                "update_id": update_key,
+                "user_id": callback_query.from_user.id,
+                "processed_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        )
     except Exception:
-        logger.warning(f"Duplicate update key {update_key} detected. Dropping callback.")
+        logger.warning(
+            f"Duplicate update key {update_key} detected. Dropping callback."
+        )
         callback_query.stop_propagation()
         return
 
     # Rate limit: callback queries (50/min)
     user_id = callback_query.from_user.id
     from utils.rate_limiter import check_rate_limit
-    allowed = await check_rate_limit(user_id, "callback_query", limit=50, window_seconds=60)
+
+    allowed = await check_rate_limit(
+        user_id, "callback_query", limit=50, window_seconds=60
+    )
     if not allowed:
         logger.warning(f"Callback query rate limit exceeded for user {user_id}")
-        await callback_query.answer("❌ Rate limit exceeded (50/min). Please slow down.", show_alert=True)
+        await callback_query.answer(
+            "❌ Rate limit exceeded (50/min). Please slow down.", show_alert=True
+        )
         callback_query.stop_propagation()

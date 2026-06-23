@@ -271,17 +271,25 @@ async def ads_create_callback(client: Client, callback_query: CallbackQuery):
     )
 
 
-@app.on_message(filters.text & filters.private & admin_filter & ~filters.regex(r"^/"), group=2)
+@app.on_message(
+    filters.text & filters.private & admin_filter & ~filters.regex(r"^/"), group=2
+)
 async def ad_create_text_handler(client: Client, message: Message):
     user_id = message.from_user.id
-    
+
     # Bypass if user is in an active post builder session
     pb_draft = await database.get_post_draft(user_id)
     if pb_draft and pb_draft.get("state") in [
-        "awaiting_media", "awaiting_caption", "awaiting_buttons", "awaiting_reactions",
-        "awaiting_schedule_time", "awaiting_repost_interval", "awaiting_delete_gap"
+        "awaiting_media",
+        "awaiting_caption",
+        "awaiting_buttons",
+        "awaiting_reactions",
+        "awaiting_schedule_time",
+        "awaiting_repost_interval",
+        "awaiting_delete_gap",
     ]:
         from pyrogram import ContinuePropagation
+
         raise ContinuePropagation
 
     draft = await database.get_ad_draft(user_id)
@@ -292,13 +300,18 @@ async def ad_create_text_handler(client: Client, message: Message):
 
     # Expiry Check (24 hours)
     import datetime
+
     created_at = draft.get("created_at")
     if created_at:
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=datetime.timezone.utc)
-        if datetime.datetime.now(datetime.timezone.utc) - created_at > datetime.timedelta(hours=24):
+        if datetime.datetime.now(
+            datetime.timezone.utc
+        ) - created_at > datetime.timedelta(hours=24):
             await database.clear_ad_draft(user_id)
-            await message.reply_text("❌ Ad creation session expired. Please start over using /ads.")
+            await message.reply_text(
+                "❌ Ad creation session expired. Please start over using /ads."
+            )
             message.stop_propagation()
             return
 
@@ -366,6 +379,7 @@ async def ad_create_text_handler(client: Client, message: Message):
         sent_msg_id = None
         try:
             from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
             ad_text = f"📌 **{title}**\n\n{description}"
             reply_markup = InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Join Channel 📢", url=invite_link)]]
@@ -519,7 +533,7 @@ async def adstats_command_handler(client: Client, message: Message):
     impressions = report["total_impressions"]
     clicks = report["total_clicks"]
     ctr = (clicks / impressions * 100.0) if impressions > 0 else 0.0
-    
+
     text = (
         "📈 **Sponsored Ads Statistics**\n\n"
         f"👥 **Total Ads Created:** {report['total_ads']}\n"
@@ -535,25 +549,25 @@ async def adstats_command_handler(client: Client, message: Message):
 @app.on_message(filters.command("traffic") & filters.private & admin_filter)
 async def traffic_command_handler(client: Client, message: Message):
     analytics = await database.get_traffic_analytics()
-    
+
     text = "🚦 **Traffic Attribution & Funnel Analytics**\n\n"
-    
+
     text += "📊 **User Growth by Source:**\n"
     for source, count in analytics["by_source"].items():
         text += f"• **{source.capitalize()}:** {count} users\n"
-    
+
     text += "\n💸 **Conversion Rate by Source (Downloads):**\n"
     for source, data in analytics["conversion_by_source"].items():
         text += (
             f"• **{source.capitalize()}:** {data['total']} users, "
             f"{data['converted']} conversions ({data['rate']}%)\n"
         )
-        
+
     text += "\n🔥 **Top Campaigns:**\n"
     if analytics["top_campaigns"]:
         for campaign, count in analytics["top_campaigns"].items():
             text += f"• `{campaign}`: {count} users\n"
     else:
         text += "• No active campaign traffic recorded yet.\n"
-        
+
     await message.reply_text(text)

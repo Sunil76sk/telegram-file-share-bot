@@ -254,7 +254,9 @@ async def increment_product_views(product_id: ObjectId) -> None:
 
 async def increment_product_sales(product_id: ObjectId, session=None) -> None:
     """Increment product sales count."""
-    await products_col.update_one({"_id": product_id}, {"$inc": {"sales_count": 1}}, session=session)
+    await products_col.update_one(
+        {"_id": product_id}, {"$inc": {"sales_count": 1}}, session=session
+    )
 
 
 async def delete_product(product_id: ObjectId) -> bool:
@@ -592,6 +594,7 @@ async def seed_marketplace_categories() -> None:
 # BACKWARD COMPATIBILITY CATALOG HELPER FUNCTIONS
 # =============================================================================
 
+
 async def get_catalog_item(item_id: str | ObjectId) -> Optional[Dict[str, Any]]:
     """Helper for backward compatibility with catalog items."""
     if isinstance(item_id, str):
@@ -615,4 +618,3 @@ async def increment_catalog_purchases(item_id: str | ObjectId, amount: int = 0) 
         except Exception:
             return
     await increment_product_sales(item_id)
-

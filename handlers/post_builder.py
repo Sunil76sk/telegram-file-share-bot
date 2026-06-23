@@ -69,6 +69,7 @@ LAYOUTS = {
 #  /newpost COMMAND
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.on_message(filters.command("newpost") & filters.private & ~banned_filter)
 async def newpost_command(client: Client, message: Message):
     user_id = message.from_user.id
@@ -80,9 +81,15 @@ async def newpost_command(client: Client, message: Message):
                 "⚠️ **No Channels Found**\n\n"
                 "You need to add a channel first before creating posts.\n\n"
                 "Use `/addchannel` to add your Telegram channel.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("➕ Add Channel", callback_data="pb_add_channel")]
-                ]),
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "➕ Add Channel", callback_data="pb_add_channel"
+                            )
+                        ]
+                    ]
+                ),
             )
             return
 
@@ -90,7 +97,11 @@ async def newpost_command(client: Client, message: Message):
         draft = await database.get_post_draft(user_id)
         if draft and draft.get("state") not in ("idle", ""):
             buttons = [
-                [InlineKeyboardButton("📝 Continue Draft", callback_data="pb_continue_draft")],
+                [
+                    InlineKeyboardButton(
+                        "📝 Continue Draft", callback_data="pb_continue_draft"
+                    )
+                ],
                 [InlineKeyboardButton("🗑 Start Fresh", callback_data="pb_start_fresh")],
             ]
             await message.reply_text(
@@ -109,16 +120,13 @@ async def _show_channel_selection(target, channels: list):
     for ch in channels:
         ch_title = ch.get("channel_title") or ch.get("title") or "Unknown"
         ch_id = ch.get("channel_id", "")
-        buttons.append([
-            InlineKeyboardButton(
-                f"📢 {ch_title}",
-                callback_data=f"pb_ch_{ch_id}"
-            )
-        ])
+        buttons.append(
+            [InlineKeyboardButton(f"📢 {ch_title}", callback_data=f"pb_ch_{ch_id}")]
+        )
 
-    buttons.append([
-        InlineKeyboardButton("➕ Add Channel", callback_data="pb_add_channel")
-    ])
+    buttons.append(
+        [InlineKeyboardButton("➕ Add Channel", callback_data="pb_add_channel")]
+    )
 
     text = "📝 **New Post Builder**\n\nSelect the channel to publish to:"
     if hasattr(target, "reply_text"):
@@ -130,6 +138,7 @@ async def _show_channel_selection(target, channels: list):
 # ═══════════════════════════════════════════════════════════════════════
 #  DRAFT CONTINUATION / FRESH START
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.on_callback_query(filters.regex(r"^pb_continue_draft$"))
 async def continue_draft_callback(client: Client, callback_query: CallbackQuery):
@@ -163,6 +172,7 @@ async def start_fresh_callback(client: Client, callback_query: CallbackQuery):
 #  CHANNEL SELECTION
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.on_callback_query(filters.regex(r"^pb_ch_(.+)$"))
 async def select_channel_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
@@ -185,7 +195,8 @@ async def select_channel_callback(client: Client, callback_query: CallbackQuery)
     draft = {
         "user_id": user_id,
         "channel_id": channel_id_int,
-        "channel_title": channel.get("channel_title") or channel.get("title", "Unknown"),
+        "channel_title": channel.get("channel_title")
+        or channel.get("title", "Unknown"),
         "media_type": "text",
         "file_id": None,
         "media_files": [],
@@ -212,6 +223,7 @@ async def select_channel_callback(client: Client, callback_query: CallbackQuery)
 # ═══════════════════════════════════════════════════════════════════════
 #  POST TYPE SELECTION
 # ═══════════════════════════════════════════════════════════════════════
+
 
 async def _show_post_type_selection(target, draft: dict):
     buttons = [
@@ -240,7 +252,9 @@ async def select_type_callback(client: Client, callback_query: CallbackQuery):
 
     draft = await database.get_post_draft(user_id)
     if not draft:
-        await callback_query.answer("Session expired. Start again with /newpost.", show_alert=True)
+        await callback_query.answer(
+            "Session expired. Start again with /newpost.", show_alert=True
+        )
         return
 
     await callback_query.answer()
@@ -264,8 +278,11 @@ async def select_type_callback(client: Client, callback_query: CallbackQuery):
 #  MEDIA UPLOAD PROMPT + RATIO SELECTION
 # ═══════════════════════════════════════════════════════════════════════
 
+
 async def _prompt_media_upload(target, draft: dict, media_type: str):
-    type_label = {"photo": "🖼 Photo", "video": "🎬 Video", "document": "📄 Document"}[media_type]
+    type_label = {"photo": "🖼 Photo", "video": "🎬 Video", "document": "📄 Document"}[
+        media_type
+    ]
     buttons = [
         [InlineKeyboardButton("✅ Skip (no media)", callback_data="pb_skip_media")]
     ]
@@ -299,23 +316,16 @@ async def skip_media_callback(client: Client, callback_query: CallbackQuery):
 #  IMAGE RATIO SELECTION (after photo upload)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 async def _show_ratio_selection(target, draft: dict):
     buttons = []
     for ratio_key, ratio_label in RATIO_OPTIONS.items():
-        buttons.append([
-            InlineKeyboardButton(
-                ratio_label,
-                callback_data=f"pb_ratio_{ratio_key}"
-            )
-        ])
-    buttons.append([
-        InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")
-    ])
+        buttons.append(
+            [InlineKeyboardButton(ratio_label, callback_data=f"pb_ratio_{ratio_key}")]
+        )
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")])
 
-    text = (
-        "📐 **Image Ratio Selection**\n\n"
-        "Choose how to fit the image:"
-    )
+    text = "📐 **Image Ratio Selection**\n\n" "Choose how to fit the image:"
     if hasattr(target, "edit_text"):
         await target.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
     else:
@@ -350,8 +360,7 @@ async def select_ratio_callback(client: Client, callback_query: CallbackQuery):
             [InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")],
         ]
         await callback_query.message.edit_text(
-            f"📐 **Ratio:** {ratio}\n\n"
-            "**Step 3:** Choose fit style:",
+            f"📐 **Ratio:** {ratio}\n\n" "**Step 3:** Choose fit style:",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
 
@@ -374,31 +383,12 @@ async def select_style_callback(client: Client, callback_query: CallbackQuery):
         status_msg = await callback_query.message.edit_text("⏳ Processing image...")
 
         try:
-            # Download the photo
-            photo_messages = []
-            async for msg in client.get_chat_history(user_id):
-                if msg.photo and msg.id > callback_query.message.id - 5:
-                    photo_messages.append(msg)
-                    if len(photo_messages) >= 3:
-                        break
-
-            # We need to get the actual file_id from the draft
             file_id = poster["file_id"]
-
-            # Use Pyrogram to download to memory
-            temp_io = io.BytesIO()
-            await client.download_media(file_id, in_memory=True)
-            # Actually, let's use a different approach - get the file bytes
-            # from Telegram using download_media with in_memory
-            downloaded = io.BytesIO()
-            await client.download_media(file_id, file_name=downloaded)
-
-            image_bytes = downloaded.getvalue()
+            image_bytes = await client.download_media(file_id, in_memory=True)
             processed_bytes = await image_converter.fit_image(
                 image_bytes, draft["image_ratio"], style
             )
 
-            # Send the processed image back to user for preview
             processed_io = io.BytesIO(processed_bytes)
             processed_io.name = "processed.jpg"
 
@@ -429,6 +419,7 @@ async def select_style_callback(client: Client, callback_query: CallbackQuery):
 # ═══════════════════════════════════════════════════════════════════════
 #  CAPTION INPUT
 # ═══════════════════════════════════════════════════════════════════════
+
 
 async def _prompt_caption_input(target, draft: dict):
     buttons = [
@@ -470,19 +461,43 @@ async def skip_caption_callback(client: Client, callback_query: CallbackQuery):
 #  TEXT INPUT HANDLER (caption, button text, button URL, etc.)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.on_message(
-    filters.private & filters.text & ~filters.command(["start", "batch", "done", "cancel",
-                                                        "newpost", "help", "settings",
-                                                        "premium", "referral", "upload",
-                                                        "stats", "broadcast", "shorteners",
-                                                        "ads", "adstats", "traffic",
-                                                        "analytics", "advertise",
-                                                        "channel_stats", "searchmovie",
-                                                        "diag", "diagnose", "store",
-                                                        "mychannels", "channelsettings",
-                                                        "addchannel", "delchannel",
-                                                        "addchannel", "delchannel",
-                                                        "schedule", "reposts"])
+    filters.private
+    & filters.text
+    & ~filters.command(
+        [
+            "start",
+            "batch",
+            "done",
+            "cancel",
+            "newpost",
+            "help",
+            "settings",
+            "premium",
+            "referral",
+            "upload",
+            "stats",
+            "broadcast",
+            "shorteners",
+            "ads",
+            "adstats",
+            "traffic",
+            "analytics",
+            "advertise",
+            "channel_stats",
+            "searchmovie",
+            "diag",
+            "diagnose",
+            "store",
+            "mychannels",
+            "channelsettings",
+            "addchannel",
+            "delchannel",
+            "schedule",
+            "reposts",
+        ]
+    )
     & ~banned_filter,
     group=3,
 )
@@ -520,22 +535,24 @@ async def post_builder_text_handler(client: Client, message: Message):
     message.stop_propagation()
 
 
-async def _handle_caption_input(client: Client, message: Message, user_id: int, draft: dict, text: str):
+async def _handle_caption_input(
+    client: Client, message: Message, user_id: int, draft: dict, text: str
+):
     draft["caption"] = text
     draft["state"] = "awaiting_buttons"
     await database.save_post_draft(user_id, draft)
     await _show_button_builder_menu(message, draft)
 
 
-async def _handle_btn_text_input(client: Client, message: Message, user_id: int, draft: dict, text: str):
+async def _handle_btn_text_input(
+    client: Client, message: Message, user_id: int, draft: dict, text: str
+):
     # Store pending button text, move to awaiting URL
     draft["pending_btn_text"] = text
     draft["state"] = "awaiting_btn_url"
     await database.save_post_draft(user_id, draft)
 
-    buttons = [
-        [InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel_btn")]
-    ]
+    buttons = [[InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel_btn")]]
     await message.reply_text(
         f"📝 **Button Text:** `{text}`\n\n"
         "**Now enter the URL or deep link token:**\n\n"
@@ -548,7 +565,9 @@ async def _handle_btn_text_input(client: Client, message: Message, user_id: int,
     )
 
 
-async def _handle_btn_url_input(client: Client, message: Message, user_id: int, draft: dict, text: str):
+async def _handle_btn_url_input(
+    client: Client, message: Message, user_id: int, draft: dict, text: str
+):
     btn_text = draft.get("pending_btn_text", "Button")
     btn_type = draft.get("pending_btn_type", "url")
 
@@ -571,7 +590,9 @@ async def _handle_btn_url_input(client: Client, message: Message, user_id: int, 
     await _show_button_builder_menu(message, draft)
 
 
-async def _handle_btn_edit_text_input(client: Client, message: Message, user_id: int, draft: dict, text: str):
+async def _handle_btn_edit_text_input(
+    client: Client, message: Message, user_id: int, draft: dict, text: str
+):
     edit_idx = draft.get("editing_btn_index", -1)
     custom_buttons = draft.get("custom_buttons", [])
     if 0 <= edit_idx < len(custom_buttons):
@@ -583,7 +604,9 @@ async def _handle_btn_edit_text_input(client: Client, message: Message, user_id:
         await _show_button_builder_menu(message, draft)
 
 
-async def _handle_btn_edit_url_input(client: Client, message: Message, user_id: int, draft: dict, text: str):
+async def _handle_btn_edit_url_input(
+    client: Client, message: Message, user_id: int, draft: dict, text: str
+):
     edit_idx = draft.get("editing_btn_index", -1)
     custom_buttons = draft.get("custom_buttons", [])
     if 0 <= edit_idx < len(custom_buttons):
@@ -595,7 +618,9 @@ async def _handle_btn_edit_url_input(client: Client, message: Message, user_id: 
         await _show_button_builder_menu(message, draft)
 
 
-async def _handle_tmdb_search_input(client: Client, message: Message, user_id: int, draft: dict, query: str):
+async def _handle_tmdb_search_input(
+    client: Client, message: Message, user_id: int, draft: dict, query: str
+):
     status_msg = await message.reply_text(f"🔍 Searching TMDB for '**{query}**'...")
 
     results = await tmdb_client.search_movies(query)
@@ -611,8 +636,12 @@ async def _handle_tmdb_search_input(client: Client, message: Message, user_id: i
         title = movie.get("title", "Unknown")
         year = movie.get("year", "")
         label = f"🎬 {title} ({year})" if year else f"🎬 {title}"
-        buttons.append([InlineKeyboardButton(label, callback_data=f"pb_tmdb_{movie['tmdb_id']}")])
-    buttons.append([InlineKeyboardButton("🔍 Search Again", callback_data="pb_tmdb_again")])
+        buttons.append(
+            [InlineKeyboardButton(label, callback_data=f"pb_tmdb_{movie['tmdb_id']}")]
+        )
+    buttons.append(
+        [InlineKeyboardButton("🔍 Search Again", callback_data="pb_tmdb_again")]
+    )
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")])
 
     await status_msg.edit_text(
@@ -621,10 +650,17 @@ async def _handle_tmdb_search_input(client: Client, message: Message, user_id: i
     )
 
 
-async def _handle_schedule_time_input(client: Client, message: Message, user_id: int, draft: dict, text: str):
+async def _handle_schedule_time_input(
+    client: Client, message: Message, user_id: int, draft: dict, text: str
+):
     try:
         # Parse datetime - expected format: DD-MM-YYYY HH:MM or YYYY-MM-DD HH:MM
-        for fmt in ("%d-%m-%Y %H:%M", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M", "%m/%d/%Y %H:%M"):
+        for fmt in (
+            "%d-%m-%Y %H:%M",
+            "%Y-%m-%d %H:%M",
+            "%d/%m/%Y %H:%M",
+            "%m/%d/%Y %H:%M",
+        ):
             try:
                 scheduled_time = datetime.datetime.strptime(text, fmt)
                 break
@@ -638,7 +674,9 @@ async def _handle_schedule_time_input(client: Client, message: Message, user_id:
             scheduled_time = scheduled_time.replace(tzinfo=datetime.timezone.utc)
 
         if scheduled_time <= datetime.datetime.now(datetime.timezone.utc):
-            await message.reply_text("❌ **Invalid Time!**\n\nThe scheduled time must be in the future.")
+            await message.reply_text(
+                "❌ **Invalid Time!**\n\nThe scheduled time must be in the future."
+            )
             return
 
         await _publish_post(client, user_id, draft, scheduled_time=scheduled_time)
@@ -651,10 +689,13 @@ async def _handle_schedule_time_input(client: Client, message: Message, user_id:
         )
 
 
-async def _handle_timezone_input(client: Client, message: Message, user_id: int, draft: dict, text: str):
+async def _handle_timezone_input(
+    client: Client, message: Message, user_id: int, draft: dict, text: str
+):
     # Validate timezone
     try:
         import pytz
+
         tz = pytz.timezone(text)
         draft["timezone"] = text
         await database.save_post_draft(user_id, draft)
@@ -671,6 +712,7 @@ async def _handle_timezone_input(client: Client, message: Message, user_id: int,
 # ═══════════════════════════════════════════════════════════════════════
 #  BUTTON BUILDER MENU
 # ═══════════════════════════════════════════════════════════════════════
+
 
 async def _show_button_builder_menu(target, draft: dict):
     custom_buttons = draft.get("custom_buttons", [])
@@ -715,6 +757,7 @@ async def _show_button_builder_menu(target, draft: dict):
 #  ADD BUTTON FLOW
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.on_callback_query(filters.regex(r"^pb_add_btn$"))
 async def add_btn_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
@@ -722,11 +765,19 @@ async def add_btn_callback(client: Client, callback_query: CallbackQuery):
 
     buttons = [
         [InlineKeyboardButton("🌐 URL", callback_data="pb_bt_url")],
-        [InlineKeyboardButton("🔗 Deep Link (/start)", callback_data="pb_bt_deep_link")],
+        [
+            InlineKeyboardButton(
+                "🔗 Deep Link (/start)", callback_data="pb_bt_deep_link"
+            )
+        ],
         [InlineKeyboardButton("📢 Channel Link", callback_data="pb_bt_channel")],
         [InlineKeyboardButton("🛒 Product Link", callback_data="pb_bt_product")],
         [InlineKeyboardButton("💳 UPI Payment", callback_data="pb_bt_payment_upi")],
-        [InlineKeyboardButton("⭐ Telegram Stars", callback_data="pb_bt_payment_stars")],
+        [
+            InlineKeyboardButton(
+                "⭐ Telegram Stars", callback_data="pb_bt_payment_stars"
+            )
+        ],
         [InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel_btn")],
     ]
 
@@ -758,9 +809,9 @@ async def btn_type_callback(client: Client, callback_query: CallbackQuery):
         f"🔗 **Add Button:** {type_label}\n\n"
         "**Enter the button text:**\n"
         "Example: `📥 Download Now` or `🎬 Watch Trailer`",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel_btn")]
-        ]),
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel_btn")]]
+        ),
     )
 
 
@@ -785,6 +836,7 @@ async def cancel_btn_callback(client: Client, callback_query: CallbackQuery):
 #  ADD DOWNLOAD FILE (Deep Link)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.on_callback_query(filters.regex(r"^pb_add_dl$"))
 async def add_dl_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
@@ -799,16 +851,22 @@ async def add_dl_callback(client: Client, callback_query: CallbackQuery):
     token = f"dl_{uuid.uuid4().hex[:16]}"
 
     download_files = draft.get("download_files", [])
-    download_files.append({
-        "label": "Download",
-        "token": token,
-        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    })
+    download_files.append(
+        {
+            "label": "Download",
+            "token": token,
+            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    )
     draft["download_files"] = download_files
     await database.save_post_draft(user_id, draft)
 
     buttons = [
-        [InlineKeyboardButton("✏️ Edit Label", callback_data=f"pb_dl_edit_{len(download_files)-1}")],
+        [
+            InlineKeyboardButton(
+                "✏️ Edit Label", callback_data=f"pb_dl_edit_{len(download_files)-1}"
+            )
+        ],
         [InlineKeyboardButton("➕ Add Another", callback_data="pb_add_dl")],
         [InlineKeyboardButton("✅ Done", callback_data="pb_done_dl")],
     ]
@@ -841,6 +899,7 @@ async def done_dl_callback(client: Client, callback_query: CallbackQuery):
 #  LAYOUT SELECTION
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.on_callback_query(filters.regex(r"^pb_select_layout$"))
 async def select_layout_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
@@ -855,17 +914,17 @@ async def select_layout_callback(client: Client, callback_query: CallbackQuery):
     buttons = []
     for layout_key, layout_label in LAYOUTS.items():
         marker = "✅ " if layout_key == current_layout else ""
-        buttons.append([
-            InlineKeyboardButton(
-                f"{marker}{layout_label}",
-                callback_data=f"pb_layout_{layout_key}"
-            )
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"{marker}{layout_label}", callback_data=f"pb_layout_{layout_key}"
+                )
+            ]
+        )
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="pb_back_to_btns")])
 
     await callback_query.message.edit_text(
-        "📐 **Select Layout**\n\n"
-        "Choose how your post buttons appear:",
+        "📐 **Select Layout**\n\n" "Choose how your post buttons appear:",
         reply_markup=InlineKeyboardMarkup(buttons),
     )
 
@@ -901,6 +960,7 @@ async def back_to_btns_callback(client: Client, callback_query: CallbackQuery):
 # ═══════════════════════════════════════════════════════════════════════
 #  POST PREVIEW
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.on_callback_query(filters.regex(r"^pb_preview$"))
 async def preview_callback(client: Client, callback_query: CallbackQuery):
@@ -944,7 +1004,9 @@ async def _send_preview(client: Client, user_id: int, draft: dict):
     if download_files:
         preview_text += f"\n**Download Files ({len(download_files)}):**\n"
         for dl in download_files:
-            preview_text += f"  • {dl.get('label', 'Download')} — `{dl.get('token', '')}`\n"
+            preview_text += (
+                f"  • {dl.get('label', 'Download')} — `{dl.get('token', '')}`\n"
+            )
 
     preview_text += "\n━━━━━━━━━━━━━━━━━\n_Preview of how the post will appear_"
 
@@ -986,7 +1048,9 @@ async def _send_preview(client: Client, user_id: int, draft: dict):
     )
 
 
-def _build_post_keyboard(custom_buttons: list, download_files: list, layout_type: str) -> InlineKeyboardMarkup:
+def _build_post_keyboard(
+    custom_buttons: list, download_files: list, layout_type: str
+) -> InlineKeyboardMarkup:
     keyboard_rows = []
 
     # Add download files based on layout
@@ -994,45 +1058,51 @@ def _build_post_keyboard(custom_buttons: list, download_files: list, layout_type
         if layout_type == "layout_a":
             # Single download button
             dl = download_files[0]
-            keyboard_rows.append([
-                InlineKeyboardButton(
-                    f"📥 {dl.get('label', 'Download')}",
-                    url=f"https://t.me/{config.BOT_USERNAME}?start={dl['token']}"
-                )
-            ])
+            keyboard_rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"📥 {dl.get('label', 'Download')}",
+                        url=f"https://t.me/{config.BOT_USERNAME}?start={dl['token']}",
+                    )
+                ]
+            )
         elif layout_type == "layout_b":
             # Quality buttons
             row = []
             for dl in download_files[:3]:
-                row.append(InlineKeyboardButton(
-                    dl.get("label", "Download"),
-                    url=f"https://t.me/{config.BOT_USERNAME}?start={dl['token']}"
-                ))
+                row.append(
+                    InlineKeyboardButton(
+                        dl.get("label", "Download"),
+                        url=f"https://t.me/{config.BOT_USERNAME}?start={dl['token']}",
+                    )
+                )
             keyboard_rows.append(row)
         elif layout_type == "layout_c":
             # Download + Watch + Trailer
             for dl in download_files[:3]:
-                keyboard_rows.append([
-                    InlineKeyboardButton(
-                        dl.get("label", "Download"),
-                        url=f"https://t.me/{config.BOT_USERNAME}?start={dl['token']}"
-                    )
-                ])
+                keyboard_rows.append(
+                    [
+                        InlineKeyboardButton(
+                            dl.get("label", "Download"),
+                            url=f"https://t.me/{config.BOT_USERNAME}?start={dl['token']}",
+                        )
+                    ]
+                )
         elif layout_type == "layout_d":
             # Download + Comments + Reactions
             dl = download_files[0]
-            keyboard_rows.append([
-                InlineKeyboardButton(
-                    f"📥 {dl.get('label', 'Download')}",
-                    url=f"https://t.me/{config.BOT_USERNAME}?start={dl['token']}"
-                )
-            ])
+            keyboard_rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"📥 {dl.get('label', 'Download')}",
+                        url=f"https://t.me/{config.BOT_USERNAME}?start={dl['token']}",
+                    )
+                ]
+            )
 
     # Add custom buttons
     for btn in custom_buttons:
-        keyboard_rows.append([
-            InlineKeyboardButton(btn["text"], url=btn["url"])
-        ])
+        keyboard_rows.append([InlineKeyboardButton(btn["text"], url=btn["url"])])
 
     if not keyboard_rows:
         return InlineKeyboardMarkup([])
@@ -1043,6 +1113,7 @@ def _build_post_keyboard(custom_buttons: list, download_files: list, layout_type
 # ═══════════════════════════════════════════════════════════════════════
 #  PUBLISH POST
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.on_callback_query(filters.regex(r"^pb_publish$"))
 async def publish_callback(client: Client, callback_query: CallbackQuery):
@@ -1056,7 +1127,12 @@ async def publish_callback(client: Client, callback_query: CallbackQuery):
     await _publish_post(client, user_id, draft)
 
 
-async def _publish_post(client: Client, user_id: int, draft: dict, scheduled_time: datetime.datetime | None = None):
+async def _publish_post(
+    client: Client,
+    user_id: int,
+    draft: dict,
+    scheduled_time: datetime.datetime | None = None,
+):
     channel_id = draft.get("channel_id")
     caption = draft.get("caption", "")
     media_type = draft.get("media_type", "text")
@@ -1067,7 +1143,9 @@ async def _publish_post(client: Client, user_id: int, draft: dict, scheduled_tim
 
     keyboard = _build_post_keyboard(custom_buttons, download_files, layout_type)
 
-    status_msg_text = "📅 Scheduling post..." if scheduled_time else "🚀 Publishing post..."
+    status_msg_text = (
+        "📅 Scheduling post..." if scheduled_time else "🚀 Publishing post..."
+    )
 
     try:
         sent_message = None
@@ -1096,14 +1174,12 @@ async def _publish_post(client: Client, user_id: int, draft: dict, scheduled_tim
         if sent_message:
             # Record in post history
             await database.record_post(
-                user_id=user_id,
                 channel_id=channel_id,
+                user_id=user_id,
                 message_id=sent_message.id,
                 media_type=media_type,
                 caption=caption,
                 buttons=custom_buttons,
-                download_files=download_files,
-                layout_type=layout_type,
             )
 
             # Increment channel stats
@@ -1126,9 +1202,15 @@ async def _publish_post(client: Client, user_id: int, draft: dict, scheduled_tim
                 )
 
             buttons = [
-                [InlineKeyboardButton("📝 Create New Post", callback_data="pb_new_post")]
+                [
+                    InlineKeyboardButton(
+                        "📝 Create New Post", callback_data="pb_new_post"
+                    )
+                ]
             ]
-            await client.send_message(user_id, success_text, reply_markup=InlineKeyboardMarkup(buttons))
+            await client.send_message(
+                user_id, success_text, reply_markup=InlineKeyboardMarkup(buttons)
+            )
 
     except Exception as e:
         error_text = str(e).lower()
@@ -1137,24 +1219,23 @@ async def _publish_post(client: Client, user_id: int, draft: dict, scheduled_tim
                 user_id,
                 "❌ **Publish Failed!**\n\n"
                 "The bot is not an admin in the target channel. "
-                "Please add the bot as an admin with posting permissions."
+                "Please add the bot as an admin with posting permissions.",
             )
         elif "forbidden" in error_text:
             await client.send_message(
                 user_id,
                 "❌ **Publish Failed!**\n\n"
-                "The bot doesn't have permission to post in this channel."
+                "The bot doesn't have permission to post in this channel.",
             )
         elif "long" in error_text:
             await client.send_message(
                 user_id,
                 "❌ **Publish Failed!**\n\n"
-                "The message is too long. Please shorten your caption."
+                "The message is too long. Please shorten your caption.",
             )
         else:
             await client.send_message(
-                user_id,
-                f"❌ **Publish Failed!**\n\nError: `{str(e)[:200]}`"
+                user_id, f"❌ **Publish Failed!**\n\nError: `{str(e)[:200]}`"
             )
         logger.error(f"Post publish failed: {e}")
 
@@ -1179,6 +1260,7 @@ async def new_post_callback(client: Client, callback_query: CallbackQuery):
 #  SAVE DRAFT
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.on_callback_query(filters.regex(r"^pb_save_draft$"))
 async def save_draft_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
@@ -1202,6 +1284,7 @@ async def save_draft_callback(client: Client, callback_query: CallbackQuery):
 # ═══════════════════════════════════════════════════════════════════════
 #  SCHEDULE POST
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.on_callback_query(filters.regex(r"^pb_schedule$"))
 async def schedule_callback(client: Client, callback_query: CallbackQuery):
@@ -1248,7 +1331,9 @@ async def schedule_quick_callback(client: Client, callback_query: CallbackQuery)
         return
 
     await callback_query.answer()
-    scheduled_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=hours)
+    scheduled_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        hours=hours
+    )
     await _publish_post(client, user_id, draft, scheduled_time=scheduled_time)
 
 
@@ -1262,7 +1347,9 @@ async def schedule_tomorrow_callback(client: Client, callback_query: CallbackQue
         return
 
     await callback_query.answer()
-    scheduled_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+    scheduled_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        days=1
+    )
     await _publish_post(client, user_id, draft, scheduled_time=scheduled_time)
 
 
@@ -1285,15 +1372,16 @@ async def schedule_custom_callback(client: Client, callback_query: CallbackQuery
         "**Format:** `DD-MM-YYYY HH:MM`\n"
         "Example: `25-12-2026 18:00`\n\n"
         "Or use: `YYYY-MM-DD HH:MM`",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")]
-        ]),
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")]]
+        ),
     )
 
 
 # ═══════════════════════════════════════════════════════════════════════
 #  MOVIE TEMPLATE
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.on_callback_query(filters.regex(r"^pb_movie_tmpl$"))
 async def movie_template_callback(client: Client, callback_query: CallbackQuery):
@@ -1313,8 +1401,7 @@ async def movie_template_callback(client: Client, callback_query: CallbackQuery)
     ]
 
     await callback_query.message.edit_text(
-        "🎬 **Movie Post Template**\n\n"
-        "How would you like to add movie data?",
+        "🎬 **Movie Post Template**\n\n" "How would you like to add movie data?",
         reply_markup=InlineKeyboardMarkup(buttons),
     )
 
@@ -1333,11 +1420,10 @@ async def tmdb_search_callback(client: Client, callback_query: CallbackQuery):
 
     await callback_query.answer()
     await callback_query.message.edit_text(
-        "🔍 **TMDB Search**\n\n"
-        "Enter the movie name to search:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")]
-        ]),
+        "🔍 **TMDB Search**\n\n" "Enter the movie name to search:",
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")]]
+        ),
     )
 
 
@@ -1352,7 +1438,9 @@ async def tmdb_select_callback(client: Client, callback_query: CallbackQuery):
         return
 
     await callback_query.answer("Fetching movie details...")
-    status_msg = await callback_query.message.edit_text("⏳ Fetching movie details from TMDB...")
+    status_msg = await callback_query.message.edit_text(
+        "⏳ Fetching movie details from TMDB..."
+    )
 
     movie = await tmdb_client.get_movie_details(tmdb_id)
     if not movie:
@@ -1388,7 +1476,11 @@ async def tmdb_select_callback(client: Client, callback_query: CallbackQuery):
     # If poster URL exists, offer to use it
     buttons = [
         [InlineKeyboardButton("🖼 Use TMDB Poster", callback_data="pb_use_tmdb_poster")],
-        [InlineKeyboardButton("📤 Upload Custom Poster", callback_data="pb_upload_poster")],
+        [
+            InlineKeyboardButton(
+                "📤 Upload Custom Poster", callback_data="pb_upload_poster"
+            )
+        ],
         [InlineKeyboardButton("➡️ Skip Poster", callback_data="pb_skip_poster")],
     ]
 
@@ -1437,11 +1529,10 @@ async def upload_poster_callback(client: Client, callback_query: CallbackQuery):
 
     await callback_query.answer()
     await callback_query.message.edit_text(
-        "🖼 **Upload Poster**\n\n"
-        "Send me the movie poster image:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("➡️ Skip", callback_data="pb_skip_poster")]
-        ]),
+        "🖼 **Upload Poster**\n\n" "Send me the movie poster image:",
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("➡️ Skip", callback_data="pb_skip_poster")]]
+        ),
     )
 
 
@@ -1483,9 +1574,9 @@ async def movie_manual_callback(client: Client, callback_query: CallbackQuery):
         "📝 Description text here\n"
         "```\n\n"
         "Send your caption now:",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")]
-        ]),
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("❌ Cancel", callback_data="pb_cancel")]]
+        ),
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -1506,12 +1597,15 @@ async def back_to_type_callback(client: Client, callback_query: CallbackQuery):
 #  CANCEL / CLEANUP
 # ═══════════════════════════════════════════════════════════════════════
 
+
 @app.on_callback_query(filters.regex(r"^pb_cancel$"))
 async def cancel_callback(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     await database.delete_post_draft(user_id)
     await callback_query.answer("Post builder cancelled.")
-    await callback_query.message.edit_text("❌ **Post Builder Cancelled.**\n\nUse `/newpost` to start again.")
+    await callback_query.message.edit_text(
+        "❌ **Post Builder Cancelled.**\n\nUse `/newpost` to start again."
+    )
 
 
 @app.on_callback_query(filters.regex(r"^pb_add_channel$"))
@@ -1545,6 +1639,7 @@ async def no_channel_callback(client: Client, callback_query: CallbackQuery):
 # ═══════════════════════════════════════════════════════════════════════
 #  MEDIA HANDLER INTEGRATION
 # ═══════════════════════════════════════════════════════════════════════
+
 
 @app.on_message(
     filters.private

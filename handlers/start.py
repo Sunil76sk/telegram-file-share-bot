@@ -46,8 +46,15 @@ async def start_handler(client: Client, message: Message):
                 await message.reply_text(
                     f"✨ **Redirecting to Sponsor**\n\nClick the button below to visit the link:",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton(ad.get("button_text", "Visit Sponsor"), url=ad.get("button_url"))]]
-                    )
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    ad.get("button_text", "Visit Sponsor"),
+                                    url=ad.get("button_url"),
+                                )
+                            ]
+                        ]
+                    ),
                 )
                 message.stop_propagation()
                 return
@@ -60,19 +67,20 @@ async def start_handler(client: Client, message: Message):
 
     if payload:
         payload_lower = payload.lower()
-        
+
         # Check for referral payload
         ref_payload = None
         if payload.startswith("ref_"):
             ref_payload = payload
         elif "start=ref_" in payload:
             ref_payload = payload.split("start=")[1].split("&")[0]
-            
+
         if ref_payload:
             source = "referral"
         else:
             # Check for source keyword
             import re
+
             if "instagram" in payload_lower:
                 source = "instagram"
             elif "youtube" in payload_lower:
@@ -81,12 +89,18 @@ async def start_handler(client: Client, message: Message):
                 source = "telegram"
             elif "referral" in payload_lower:
                 source = "referral"
-            
+
             # Extract campaign token (first part or custom campaign param)
             camp_match = re.match(r"^([a-zA-Z0-9_-]+)", payload)
             if camp_match:
                 camp = camp_match.group(1)
-                if camp.lower() not in ["instagram", "youtube", "telegram", "referral", "direct"]:
+                if camp.lower() not in [
+                    "instagram",
+                    "youtube",
+                    "telegram",
+                    "referral",
+                    "direct",
+                ]:
                     campaign = camp
 
             # Check for explicit src= or campaign= params
@@ -95,7 +109,7 @@ async def start_handler(client: Client, message: Message):
                 val = src_param.group(1)
                 if val in ["instagram", "youtube", "telegram", "referral", "direct"]:
                     source = val
-            
+
             camp_param = re.search(r"campaign[=_]([a-zA-Z0-9_-]+)", payload_lower)
             if camp_param:
                 campaign = camp_param.group(1)
@@ -299,6 +313,7 @@ async def start_handler(client: Client, message: Message):
             active_fj_ads = await database.get_force_join_ads()
             if active_fj_ads:
                 import random
+
                 sponsored_ad = random.choice(active_fj_ads)
         except Exception as e:
             logger.error(f"Error fetching force-join ads: {e}")
@@ -311,6 +326,7 @@ async def start_handler(client: Client, message: Message):
             ad_id = str(sponsored_ad["_id"])
             await database.log_ad_impression(ad_id, user_id)
             from utils.ads_engine import get_ad_click_url
+
             click_url = get_ad_click_url(ad_id, user_id)
             buttons.append([InlineKeyboardButton("📢 Visit Sponsor", url=click_url)])
 
@@ -365,11 +381,13 @@ not_command_filter = filters.create(_not_command)
 
 @app.on_message(filters.private & filters.text & not_command_filter, group=1)
 async def text_message_handler(client: Client, message: Message):
-    current_update_info.set({
-        "handler": "text_message_handler",
-        "update_id": message.id,
-        "message_id": message.id
-    })
+    current_update_info.set(
+        {
+            "handler": "text_message_handler",
+            "update_id": message.id,
+            "message_id": message.id,
+        }
+    )
     log_msg = (
         f"[HANDLER_ENTER]\n"
         f"instance={INSTANCE_ID}\n"
@@ -396,7 +414,9 @@ async def text_message_handler(client: Client, message: Message):
         if created_at:
             if created_at.tzinfo is None:
                 created_at = created_at.replace(tzinfo=datetime.timezone.utc)
-            if datetime.datetime.now(datetime.timezone.utc) - created_at > datetime.timedelta(hours=24):
+            if datetime.datetime.now(
+                datetime.timezone.utc
+            ) - created_at > datetime.timedelta(hours=24):
                 await database.clear_ad_draft(user_id)
                 ad_draft = None
     if ad_draft and ad_draft.get("step") == "awaiting_details":

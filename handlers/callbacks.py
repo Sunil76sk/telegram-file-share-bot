@@ -162,6 +162,7 @@ async def batch_callback_handler(client: Client, callback_query: CallbackQuery):
                 pass
 
             from utils.helpers import get_share_link
+
             share_link = await get_share_link(client, token)
             await client.send_message(
                 chat_id=user_id,
@@ -261,6 +262,7 @@ async def exp_callback_handler(client: Client, callback_query: CallbackQuery):
     await database.set_link_expiry(token, expires_at)
     await callback_query.answer(f"Expiry set to {expiry_text}.")
     from utils.helpers import get_share_link
+
     share_link = await get_share_link(client, token)
     pw_protected = "Yes" if file_doc.get("password_hash") else "No"
     await callback_query.message.edit_text(
@@ -358,6 +360,7 @@ async def edit_callback_handler(client: Client, callback_query: CallbackQuery):
                 pass
 
             from utils.helpers import get_share_link
+
             share_link = await get_share_link(client, token)
             await client.send_message(
                 chat_id=user_id,

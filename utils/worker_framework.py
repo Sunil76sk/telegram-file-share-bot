@@ -39,18 +39,22 @@ async def _worker_loop(name: str, handler: Callable, interval: int):
         try:
             await WORKER_COL.update_one(
                 {"worker_name": name},
-                {"$set": {
-                    "status": "running",
-                    "last_heartbeat": datetime.datetime.now(datetime.timezone.utc),
-                    "last_run": datetime.datetime.now(datetime.timezone.utc),
-                }},
+                {
+                    "$set": {
+                        "status": "running",
+                        "last_heartbeat": datetime.datetime.now(datetime.timezone.utc),
+                        "last_run": datetime.datetime.now(datetime.timezone.utc),
+                    }
+                },
                 upsert=True,
             )
 
-            await WORKER_HEARTBEAT_COL.insert_one({
-                "worker_name": name,
-                "timestamp": datetime.datetime.now(datetime.timezone.utc),
-            })
+            await WORKER_HEARTBEAT_COL.insert_one(
+                {
+                    "worker_name": name,
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc),
+                }
+            )
 
             await handler()
 

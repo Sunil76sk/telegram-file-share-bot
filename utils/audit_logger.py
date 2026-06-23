@@ -35,7 +35,9 @@ async def log_admin_action(
         "timestamp": datetime.datetime.now(datetime.timezone.utc),
     }
     await ADMIN_LOG_COL.insert_one(doc)
-    logger.info(f"ADMIN_ACTION: admin={admin_id} action={action} target={target_type}:{target_id} success={success}")
+    logger.info(
+        f"ADMIN_ACTION: admin={admin_id} action={action} target={target_type}:{target_id} success={success}"
+    )
 
 
 async def log_error(
@@ -106,7 +108,9 @@ async def get_error_logs(
 
 
 async def cleanup_old_logs(days: int = 90):
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        days=days
+    )
     for col in [ADMIN_LOG_COL, ERROR_LOG_COL, EVENT_LOG_COL]:
         result = await col.delete_many({"timestamp": {"$lt": cutoff}})
         if result.deleted_count:

@@ -25,7 +25,7 @@ async def send_ad_message(client: Client, chat_id: int, ad: dict):
     title = ad.get("title", "")
     description = ad.get("description", "")
     text = f"📢 **{title}**\n\n{description}"
-    
+
     # Inline keyboard if button is configured
     reply_markup = None
     button_text = ad.get("button_text")
@@ -40,10 +40,7 @@ async def send_ad_message(client: Client, chat_id: int, ad: dict):
     if media:
         try:
             return await client.send_photo(
-                chat_id=chat_id,
-                photo=media,
-                caption=text,
-                reply_markup=reply_markup
+                chat_id=chat_id, photo=media, caption=text, reply_markup=reply_markup
             )
         except Exception:
             try:
@@ -51,19 +48,15 @@ async def send_ad_message(client: Client, chat_id: int, ad: dict):
                     chat_id=chat_id,
                     document=media,
                     caption=text,
-                    reply_markup=reply_markup
+                    reply_markup=reply_markup,
                 )
             except Exception:
                 return await client.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=reply_markup
+                    chat_id=chat_id, text=text, reply_markup=reply_markup
                 )
     else:
         return await client.send_message(
-            chat_id=chat_id,
-            text=text,
-            reply_markup=reply_markup
+            chat_id=chat_id, text=text, reply_markup=reply_markup
         )
 
 
@@ -82,10 +75,11 @@ async def ads_scheduler_worker(client: Client):
                 ad_id = str(ad["_id"])
                 # Mark running
                 await database.ads_col.update_one(
-                    {"_id": ad["_id"]},
-                    {"$set": {"broadcast_status": "running"}}
+                    {"_id": ad["_id"]}, {"$set": {"broadcast_status": "running"}}
                 )
-                logger.info(f"Starting broadcast for Ad ID: {ad_id} - {ad.get('title')}")
+                logger.info(
+                    f"Starting broadcast for Ad ID: {ad_id} - {ad.get('title')}"
+                )
 
                 users = await database.get_all_users()
                 sent = 0
@@ -99,9 +93,11 @@ async def ads_scheduler_worker(client: Client):
                         delivered += 1
                         # Log impression
                         await database.log_ad_impression(ad_id, user_id)
-                        await asyncio.sleep(0.05) # Small throttle
+                        await asyncio.sleep(0.05)  # Small throttle
                     except FloodWait as e:
-                        logger.warning(f"FloodWait encountered in broadcast: sleeping {e.value}s")
+                        logger.warning(
+                            f"FloodWait encountered in broadcast: sleeping {e.value}s"
+                        )
                         await asyncio.sleep(e.value)
                         # Retry once after sleep
                         try:
@@ -109,10 +105,14 @@ async def ads_scheduler_worker(client: Client):
                             delivered += 1
                             await database.log_ad_impression(ad_id, user_id)
                         except Exception as retry_err:
-                            logger.error(f"Failed to deliver ad to {user_id} on retry: {retry_err}")
+                            logger.error(
+                                f"Failed to deliver ad to {user_id} on retry: {retry_err}"
+                            )
                             failed += 1
                     except (UserIsBlocked, UserDeactivated, PeerIdInvalid) as block_err:
-                        logger.info(f"User {user_id} is inactive or blocked bot: {block_err}")
+                        logger.info(
+                            f"User {user_id} is inactive or blocked bot: {block_err}"
+                        )
                         failed += 1
                         await database.set_user_active_status(user_id, False)
                     except Exception as err:
@@ -128,11 +128,13 @@ async def ads_scheduler_worker(client: Client):
                             "status": "completed",
                             "stats_sent": sent,
                             "stats_delivered": delivered,
-                            "stats_failed": failed
+                            "stats_failed": failed,
                         }
-                    }
+                    },
                 )
-                logger.info(f"Finished broadcast for Ad ID: {ad_id}. Sent={sent}, Delivered={delivered}, Failed={failed}")
+                logger.info(
+                    f"Finished broadcast for Ad ID: {ad_id}. Sent={sent}, Delivered={delivered}, Failed={failed}"
+                )
 
         except Exception as e:
             logger.error(f"Error in ads_scheduler_worker loop: {e}")

@@ -338,29 +338,29 @@ class RedirectHandler(BaseHTTPRequestHandler):
         if clk_match:
             post_id_str = clk_match.group(1)
             btn_idx = int(clk_match.group(2))
-            
+
             post_doc = run_async(database.get_post_history_entry(post_id_str))
             if not post_doc:
                 self.send_error(404, "Post Not Found")
                 return
-            
+
             buttons = post_doc.get("buttons", [])
             if btn_idx < 0 or btn_idx >= len(buttons):
                 self.send_error(404, "Button Not Found")
                 return
-                
+
             btn = buttons[btn_idx]
             dest_url = btn.get("url")
             if not dest_url:
                 self.send_error(404, "Destination URL Missing")
                 return
-                
+
             run_async(database.increment_post_clicks(post_id_str))
             channel_id = post_doc.get("channel_id")
             message_id = post_doc.get("message_id")
             button_text = btn.get("text", "Button")
             run_async(database.log_button_click(0, channel_id, message_id, button_text))
-            
+
             self.send_response(302)
             self.send_header("Location", dest_url)
             self.end_headers()
@@ -372,10 +372,14 @@ class RedirectHandler(BaseHTTPRequestHandler):
             channels = run_async(database.get_creator_channels(user_id))
             response_data = []
             for ch in channels:
-                response_data.append({
-                    "channel_id": ch.get("channel_id") or ch.get("_id"),
-                    "channel_title": ch.get("channel_title") or ch.get("title") or "Unnamed Channel"
-                })
+                response_data.append(
+                    {
+                        "channel_id": ch.get("channel_id") or ch.get("_id"),
+                        "channel_title": ch.get("channel_title")
+                        or ch.get("title")
+                        or "Unnamed Channel",
+                    }
+                )
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -386,20 +390,28 @@ class RedirectHandler(BaseHTTPRequestHandler):
         # 8. Route: /api/builder/drafts
         if path == "/api/builder/drafts":
             user_id = int(query_params.get("user_id", [0])[0])
-            
+
             async def fetch_drafts():
-                cursor = database.drafts_col.find({"user_id": user_id}).sort("updated_at", -1)
+                cursor = database.drafts_col.find({"user_id": user_id}).sort(
+                    "updated_at", -1
+                )
                 return [d async for d in cursor]
-                
+
             drafts = run_async(fetch_drafts())
             response_data = []
             for d in drafts:
-                response_data.append({
-                    "_id": str(d["_id"]),
-                    "user_id": d.get("user_id"),
-                    "updated_at": d.get("updated_at").isoformat() if isinstance(d.get("updated_at"), datetime.datetime) else str(d.get("updated_at")),
-                    "post_data": d.get("post_data", {})
-                })
+                response_data.append(
+                    {
+                        "_id": str(d["_id"]),
+                        "user_id": d.get("user_id"),
+                        "updated_at": (
+                            d.get("updated_at").isoformat()
+                            if isinstance(d.get("updated_at"), datetime.datetime)
+                            else str(d.get("updated_at"))
+                        ),
+                        "post_data": d.get("post_data", {}),
+                    }
+                )
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -413,14 +425,14 @@ class RedirectHandler(BaseHTTPRequestHandler):
             if not filename:
                 self.send_error(400, "Missing filename")
                 return
-                
+
             filename = os.path.basename(filename)
             file_path = os.path.join("temp_uploads", filename)
-            
+
             if not os.path.exists(file_path):
                 self.send_error(404, "Image Not Found")
                 return
-                
+
             self.send_response(200)
             self.send_header("Content-Type", "image/jpeg")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -1002,30 +1014,35 @@ class RedirectHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
         query_params = urllib.parse.parse_qs(parsed_url.query)
-        
+
         if path == "/api/builder/draft":
             user_id = int(query_params.get("user_id", [0])[0])
             draft_id_str = query_params.get("draft_id", [None])[0]
-            
+
             if not draft_id_str:
                 self.send_error(400, "Missing draft_id")
                 return
-                
+
             try:
                 from bson import ObjectId
-                res = run_async(database.drafts_col.delete_one({"_id": ObjectId(draft_id_str), "user_id": user_id}))
+
+                res = run_async(
+                    database.drafts_col.delete_one(
+                        {"_id": ObjectId(draft_id_str), "user_id": user_id}
+                    )
+                )
                 success = res.deleted_count > 0
             except Exception as e:
                 logger.error(f"Error deleting draft: {e}")
                 success = False
-                
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({"success": success}).encode("utf-8"))
             return
-            
+
         self.send_response(404)
         self.end_headers()
         self.wfile.write(b"Not Found")
@@ -1034,72 +1051,94 @@ class RedirectHandler(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
         query_params = urllib.parse.parse_qs(parsed_url.query)
-        
-        content_length = int(self.headers.get('Content-Length', 0))
+
+        content_length = int(self.headers.get("Content-Length", 0))
         post_data_bytes = self.rfile.read(content_length)
-        
-        content_type = self.headers.get('Content-Type', '')
-        
+
+        content_type = self.headers.get("Content-Type", "")
+
         # 1. API: /api/builder/upload (multipart/form-data)
         if path == "/api/builder/upload":
             if "multipart/form-data" not in content_type:
                 self.send_response(400)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": "Content-Type must be multipart/form-data"}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps(
+                        {
+                            "success": False,
+                            "message": "Content-Type must be multipart/form-data",
+                        }
+                    ).encode("utf-8")
+                )
                 return
-                
+
             try:
                 boundary = content_type.split("boundary=")[1].encode()
-                parts = post_data_bytes.split(b'--' + boundary)
-                
+                parts = post_data_bytes.split(b"--" + boundary)
+
                 filename = None
                 file_bytes = None
-                
+
                 for part in parts:
-                    if not part or part == b'--\r\n' or part == b'\r\n' or part == b'--':
+                    if (
+                        not part
+                        or part == b"--\r\n"
+                        or part == b"\r\n"
+                        or part == b"--"
+                    ):
                         continue
-                    if b'\r\n\r\n' in part:
-                        header_part, body_part = part.split(b'\r\n\r\n', 1)
-                        if body_part.endswith(b'\r\n'):
+                    if b"\r\n\r\n" in part:
+                        header_part, body_part = part.split(b"\r\n\r\n", 1)
+                        if body_part.endswith(b"\r\n"):
                             body_part = body_part[:-2]
-                        
-                        header_str = header_part.decode('utf-8', errors='ignore')
+
+                        header_str = header_part.decode("utf-8", errors="ignore")
                         if 'name="file"' in header_str:
                             fn_match = re.search(r'filename="([^"]+)"', header_str)
                             if fn_match:
                                 filename = fn_match.group(1)
                             file_bytes = body_part
-                            
+
                 if not file_bytes:
                     self.send_response(400)
                     self.end_headers()
-                    self.wfile.write(json.dumps({"success": False, "message": "No file uploaded"}).encode("utf-8"))
+                    self.wfile.write(
+                        json.dumps(
+                            {"success": False, "message": "No file uploaded"}
+                        ).encode("utf-8")
+                    )
                     return
-                    
+
                 ext = os.path.splitext(filename)[1] or ".jpg"
                 unique_filename = f"{uuid.uuid4()}{ext}"
-                
+
                 os.makedirs("temp_uploads", exist_ok=True)
                 output_path = os.path.join("temp_uploads", unique_filename)
                 with open(output_path, "wb") as f:
                     f.write(file_bytes)
-                    
+
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": True, "filename": unique_filename}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps({"success": True, "filename": unique_filename}).encode(
+                        "utf-8"
+                    )
+                )
                 return
             except Exception as e:
                 logger.error(f"Upload error: {e}")
                 self.send_response(500)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": str(e)}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps({"success": False, "message": str(e)}).encode("utf-8")
+                )
                 return
 
         # Decode standard JSON body for other endpoints
         try:
-            data = json.loads(post_data_bytes.decode('utf-8'))
+            data = json.loads(post_data_bytes.decode("utf-8"))
         except Exception:
             data = {}
 
@@ -1108,24 +1147,33 @@ class RedirectHandler(BaseHTTPRequestHandler):
             filename = data.get("filename")
             ratio = data.get("ratio")
             style = data.get("style", "blur")
-            
+
             if not filename or not ratio:
                 self.send_response(400)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": "Missing required fields"}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps(
+                        {"success": False, "message": "Missing required fields"}
+                    ).encode("utf-8")
+                )
                 return
-                
+
             input_path = os.path.join("temp_uploads", os.path.basename(filename))
             if not os.path.exists(input_path):
                 self.send_response(400)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": "Original image not found"}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps(
+                        {"success": False, "message": "Original image not found"}
+                    ).encode("utf-8")
+                )
                 return
-                
+
             with open(input_path, "rb") as f:
                 image_bytes = f.read()
-                
+
             from utils.image_converter import ImageConverter
+
             converter = ImageConverter()
             try:
                 fitted_bytes = run_async(converter.fit_image(image_bytes, ratio, style))
@@ -1133,18 +1181,24 @@ class RedirectHandler(BaseHTTPRequestHandler):
                 output_path = os.path.join("temp_uploads", fitted_filename)
                 with open(output_path, "wb") as f:
                     f.write(fitted_bytes)
-                
+
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": True, "filename": fitted_filename}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps({"success": True, "filename": fitted_filename}).encode(
+                        "utf-8"
+                    )
+                )
                 return
             except Exception as e:
                 logger.error(f"Error fitting image: {e}")
                 self.send_response(500)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": str(e)}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps({"success": False, "message": str(e)}).encode("utf-8")
+                )
                 return
 
         # 3. API: /api/builder/draft
@@ -1152,25 +1206,32 @@ class RedirectHandler(BaseHTTPRequestHandler):
             user_id = data.get("user_id")
             draft_id_str = data.get("draft_id")
             post_data = data.get("post_data", {})
-            
+
             if not user_id:
                 self.send_response(400)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": "Missing user_id"}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps({"success": False, "message": "Missing user_id"}).encode(
+                        "utf-8"
+                    )
+                )
                 return
-                
+
             try:
                 from bson import ObjectId
+
                 doc = {
                     "user_id": user_id,
                     "post_data": post_data,
-                    "updated_at": datetime.datetime.now(datetime.timezone.utc)
+                    "updated_at": datetime.datetime.now(datetime.timezone.utc),
                 }
                 if draft_id_str:
-                    res = run_async(database.drafts_col.update_one(
-                        {"_id": ObjectId(draft_id_str), "user_id": user_id},
-                        {"$set": doc}
-                    ))
+                    res = run_async(
+                        database.drafts_col.update_one(
+                            {"_id": ObjectId(draft_id_str), "user_id": user_id},
+                            {"$set": doc},
+                        )
+                    )
                     success = res.modified_count > 0 or res.matched_count > 0
                 else:
                     res = run_async(database.drafts_col.insert_one(doc))
@@ -1178,7 +1239,7 @@ class RedirectHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Error saving draft: {e}")
                 success = False
-                
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
@@ -1193,37 +1254,49 @@ class RedirectHandler(BaseHTTPRequestHandler):
             caption = data.get("caption", "")
             image_path = data.get("image_path")
             buttons = data.get("buttons", [])
-            
+
             if not user_id or not channel_ids:
                 self.send_response(400)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": "Missing user_id or channel_ids"}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps(
+                        {"success": False, "message": "Missing user_id or channel_ids"}
+                    ).encode("utf-8")
+                )
                 return
-                
+
             from bot import app
-            
+
             async def perform_publish():
                 success_count = 0
                 for channel_id in channel_ids:
                     try:
                         from bson import ObjectId
+
                         post_id = ObjectId()
-                        
+
                         redirect_base = config.REDIRECT_BASE_URL.rstrip("/")
                         rewritten_buttons = []
                         for idx, btn in enumerate(buttons):
                             track_url = f"{redirect_base}/clk/{str(post_id)}/{idx}"
-                            rewritten_buttons.append({
-                                "text": btn["text"],
-                                "url": track_url
-                            })
-                            
-                        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                            rewritten_buttons.append(
+                                {"text": btn["text"], "url": track_url}
+                            )
+
+                        from pyrogram.types import (
+                            InlineKeyboardMarkup,
+                            InlineKeyboardButton,
+                        )
+
                         keyboard = []
                         for btn in rewritten_buttons:
-                            keyboard.append([InlineKeyboardButton(text=btn["text"], url=btn["url"])])
-                        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-                        
+                            keyboard.append(
+                                [InlineKeyboardButton(text=btn["text"], url=btn["url"])]
+                            )
+                        reply_markup = (
+                            InlineKeyboardMarkup(keyboard) if keyboard else None
+                        )
+
                         sent_msg = None
                         if image_path:
                             full_image_path = os.path.join("temp_uploads", image_path)
@@ -1231,15 +1304,15 @@ class RedirectHandler(BaseHTTPRequestHandler):
                                 chat_id=channel_id,
                                 photo=full_image_path,
                                 caption=caption,
-                                reply_markup=reply_markup
+                                reply_markup=reply_markup,
                             )
                         else:
                             sent_msg = await app.send_message(
                                 chat_id=channel_id,
                                 text=caption,
-                                reply_markup=reply_markup
+                                reply_markup=reply_markup,
                             )
-                            
+
                         if sent_msg:
                             doc = {
                                 "_id": post_id,
@@ -1255,17 +1328,21 @@ class RedirectHandler(BaseHTTPRequestHandler):
                                 "caption_above": False,
                                 "scheduled": False,
                                 "repost": False,
-                                "posted_at": datetime.datetime.now(datetime.timezone.utc),
+                                "posted_at": datetime.datetime.now(
+                                    datetime.timezone.utc
+                                ),
                                 "views": 0,
                                 "clicks": 0,
                             }
                             await database.CHANNEL_POST_HISTORY_COL.insert_one(doc)
-                            await database.increment_channel_stat(channel_id, "posts", 1)
+                            await database.increment_channel_stat(
+                                channel_id, "posts", 1
+                            )
                             success_count += 1
                     except Exception as ex:
                         logger.error(f"Error publishing to channel {channel_id}: {ex}")
                 return success_count > 0
-                
+
             success = run_async(perform_publish())
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1283,15 +1360,21 @@ class RedirectHandler(BaseHTTPRequestHandler):
             image_path = data.get("image_path")
             buttons = data.get("buttons", [])
             publish_time_str = data.get("publish_time")
-            
+
             if not user_id or not channel_ids or not publish_time_str:
                 self.send_response(400)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": "Missing required fields"}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps(
+                        {"success": False, "message": "Missing required fields"}
+                    ).encode("utf-8")
+                )
                 return
-                
-            scheduled_time = datetime.datetime.fromisoformat(publish_time_str.replace("Z", "+00:00"))
-            
+
+            scheduled_time = datetime.datetime.fromisoformat(
+                publish_time_str.replace("Z", "+00:00")
+            )
+
             async def perform_schedule():
                 for channel_id in channel_ids:
                     await database.create_scheduled_post(
@@ -1302,10 +1385,10 @@ class RedirectHandler(BaseHTTPRequestHandler):
                         caption=caption,
                         buttons=buttons,
                         scheduled_time=scheduled_time,
-                        poster_url=image_path
+                        poster_url=image_path,
                     )
                 return True
-                
+
             success = run_async(perform_schedule())
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -1324,13 +1407,17 @@ class RedirectHandler(BaseHTTPRequestHandler):
             buttons = data.get("buttons", [])
             interval_minutes = data.get("interval_minutes")
             delete_old = data.get("delete_old", True)
-            
+
             if not user_id or not channel_ids or not interval_minutes:
                 self.send_response(400)
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "message": "Missing required fields"}).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps(
+                        {"success": False, "message": "Missing required fields"}
+                    ).encode("utf-8")
+                )
                 return
-                
+
             async def perform_repost_schedule():
                 for channel_id in channel_ids:
                     await database.create_repost_job(
@@ -1343,10 +1430,10 @@ class RedirectHandler(BaseHTTPRequestHandler):
                         repost_interval=interval_minutes,
                         delete_gap=0,
                         poster_url=image_path,
-                        delete_old=delete_old
+                        delete_old=delete_old,
                     )
                 return True
-                
+
             success = run_async(perform_repost_schedule())
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

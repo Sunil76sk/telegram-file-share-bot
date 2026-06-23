@@ -28,7 +28,13 @@ from database.mongo import purchases_col  # noqa: E402
 async def find_duplicate_payment_ids() -> list[dict]:
     pipeline = [
         {"$match": {"payment_id": {"$nin": [None, ""]}}},
-        {"$group": {"_id": "$payment_id", "count": {"$sum": 1}, "ids": {"$push": "$_id"}}},
+        {
+            "$group": {
+                "_id": "$payment_id",
+                "count": {"$sum": 1},
+                "ids": {"$push": "$_id"},
+            }
+        },
         {"$match": {"count": {"$gt": 1}}},
     ]
     return [doc async for doc in purchases_col.aggregate(pipeline)]
@@ -40,14 +46,18 @@ async def run(apply: bool) -> None:
         print("No duplicate payment_ids found.")
     else:
         total_extra = sum(d["count"] - 1 for d in duplicates)
-        print(f"Found {len(duplicates)} payment_id(s) with duplicates "
-              f"({total_extra} redundant document(s)):")
+        print(
+            f"Found {len(duplicates)} payment_id(s) with duplicates "
+            f"({total_extra} redundant document(s)):"
+        )
         for d in duplicates:
             print(f"  payment_id={d['_id']!r} count={d['count']}")
 
         if not apply:
-            print("\nDry run. Re-run with --apply to remove duplicates "
-                  "(keeps the earliest purchase per payment_id).")
+            print(
+                "\nDry run. Re-run with --apply to remove duplicates "
+                "(keeps the earliest purchase per payment_id)."
+            )
             return
 
         removed = 0

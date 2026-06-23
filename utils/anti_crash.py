@@ -31,13 +31,23 @@ async def record_crash(error: str, trace: str, handler_name: str | None = None):
 
 async def check_stale_locks(max_age_minutes: int = 30) -> int:
     from utils.locks import user_locks
+
     freed = 0
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=max_age_minutes)
-    cursor = CRASH_RECOVERY_COL.find({"recovered": False, "crashed_at": {"$lt": cutoff}})
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=max_age_minutes
+    )
+    cursor = CRASH_RECOVERY_COL.find(
+        {"recovered": False, "crashed_at": {"$lt": cutoff}}
+    )
     async for doc in cursor:
         await CRASH_RECOVERY_COL.update_one(
             {"_id": doc["_id"]},
-            {"$set": {"recovered": True, "recovered_at": datetime.datetime.now(datetime.timezone.utc)}}
+            {
+                "$set": {
+                    "recovered": True,
+                    "recovered_at": datetime.datetime.now(datetime.timezone.utc),
+                }
+            },
         )
         freed += 1
 

@@ -15,6 +15,7 @@ from database.mongo import (
 
 # ─── CHANNEL MANAGEMENT HELPERS ──────────────────────────────────────
 
+
 async def add_creator_channel(
     user_id: int,
     channel_id: int | str,
@@ -42,23 +43,34 @@ async def add_creator_channel(
         upsert=True,
     )
 
+
 async def get_creator_channels(user_id: int) -> list:
     """Get all channels managed by a specific creator."""
     cursor = channels_col.find({"user_id": user_id})
     return [doc async for doc in cursor]
 
+
 async def get_channel_by_id(channel_id: int | str):
     """Get channel details."""
     return await channels_col.find_one({"_id": channel_id})
+
 
 # ─── POST DRAFT HELPERS ──────────────────────────────────────────────
 
 # Builder state classification (shared by the per-message input routers).
 _BUILDER_STATE_PREFIXES = (
-    "awaiting_tmdb_search", "awaiting_manual_caption", "awaiting_manual_movie_details",
-    "awaiting_poster_upload", "awaiting_edited_caption", "awaiting_btn_text",
-    "awaiting_btn_url", "awaiting_btn_edit_text", "awaiting_btn_edit_url",
-    "awaiting_custom_timezone", "awaiting_schedule_time", "awaiting_repost_interval",
+    "awaiting_tmdb_search",
+    "awaiting_manual_caption",
+    "awaiting_manual_movie_details",
+    "awaiting_poster_upload",
+    "awaiting_edited_caption",
+    "awaiting_btn_text",
+    "awaiting_btn_url",
+    "awaiting_btn_edit_text",
+    "awaiting_btn_edit_url",
+    "awaiting_custom_timezone",
+    "awaiting_schedule_time",
+    "awaiting_repost_interval",
     "awaiting_delete_gap",
 )
 _SCHEDULER_INPUT_STATES = ("awaiting_custom_timezone", "awaiting_schedule_time")
@@ -90,9 +102,11 @@ async def save_post_draft(user_id: int, draft: dict):
     )
     _invalidate_builder_context(user_id)
 
+
 async def get_post_draft(user_id: int):
     """Get the active post draft for a user."""
     return await drafts_col.find_one({"user_id": user_id})
+
 
 async def get_active_builder_context(user_id: int) -> dict:
     """Single-fetch builder context shared across the per-message input routers.
@@ -119,12 +133,15 @@ async def get_active_builder_context(user_id: int) -> dict:
     _builder_ctx_cache[user_id] = ctx
     return ctx
 
+
 async def delete_post_draft(user_id: int):
     """Delete a user's post draft session."""
     await drafts_col.delete_one({"user_id": user_id})
     _invalidate_builder_context(user_id)
 
+
 # ─── GLOBAL SETTINGS HELPERS ─────────────────────────────────────────
+
 
 async def get_settings() -> dict:
     """Get global settings, creating default if not exists."""
@@ -136,20 +153,19 @@ async def get_settings() -> dict:
             "tmdb_default_language": "en",
             "tutorial_video_url": None,
             "tutorial_shortened_url": None,
-            "tutorial_show_on_post": False
+            "tutorial_show_on_post": False,
         }
         await settings_col.insert_one(settings)
     return settings
 
+
 async def update_settings(updates: dict):
     """Update global settings fields."""
-    await settings_col.update_one(
-        {"_id": "global"},
-        {"$set": updates},
-        upsert=True
-    )
+    await settings_col.update_one({"_id": "global"}, {"$set": updates}, upsert=True)
+
 
 # ─── SCHEDULED POST HELPERS ──────────────────────────────────────────
+
 
 async def create_scheduled_post(
     user_id: int,
@@ -195,44 +211,71 @@ async def create_scheduled_post(
     result = await scheduled_posts_col.insert_one(doc)
     return str(result.inserted_id)
 
+
 async def get_pending_scheduled_posts() -> list:
     """Fetch scheduled posts that are due to be sent."""
     now = datetime.datetime.now(datetime.timezone.utc)
-    cursor = scheduled_posts_col.find({"status": "pending", "scheduled_time": {"$lte": now}})
+    cursor = scheduled_posts_col.find(
+        {"status": "pending", "scheduled_time": {"$lte": now}}
+    )
     return [doc async for doc in cursor]
+
 
 async def mark_post_sent(post_id: str):
     """Mark scheduled post as completed."""
     await scheduled_posts_col.update_one(
         {"_id": ObjectId(post_id)},
-        {"$set": {"status": "completed", "sent_at": datetime.datetime.now(datetime.timezone.utc)}},
+        {
+            "$set": {
+                "status": "completed",
+                "sent_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        },
     )
+
 
 async def mark_post_failed(post_id: str, error_msg: str):
     """Mark scheduled post as failed after all retries exhausted."""
     await scheduled_posts_col.update_one(
         {"_id": ObjectId(post_id)},
-        {"$set": {"status": "failed", "failure_reason": error_msg, "failed_at": datetime.datetime.now(datetime.timezone.utc)}},
+        {
+            "$set": {
+                "status": "failed",
+                "failure_reason": error_msg,
+                "failed_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        },
     )
+
 
 async def mark_post_retry(post_id: str, retry_count: int, error_msg: str):
     """Increment retry count for a scheduled post (stays pending for retry)."""
     await scheduled_posts_col.update_one(
         {"_id": ObjectId(post_id)},
-        {"$set": {"retry_count": retry_count, "last_error": error_msg, "status": "pending"}},
+        {
+            "$set": {
+                "retry_count": retry_count,
+                "last_error": error_msg,
+                "status": "pending",
+            }
+        },
     )
+
 
 async def get_scheduled_posts_by_user(user_id: int) -> list:
     """Get all scheduled posts for a user."""
     cursor = scheduled_posts_col.find({"user_id": user_id}).sort("scheduled_time", 1)
     return [doc async for doc in cursor]
 
+
 async def delete_scheduled_post(post_id: str) -> bool:
     """Delete a scheduled post."""
     result = await scheduled_posts_col.delete_one({"_id": ObjectId(post_id)})
     return result.deleted_count > 0
 
+
 # ─── REPOST JOB HELPERS ──────────────────────────────────────────────
+
 
 async def create_repost_job(
     user_id: int,
@@ -286,13 +329,17 @@ async def create_repost_job(
     result = await repost_jobs_col.insert_one(doc)
     return str(result.inserted_id)
 
+
 async def get_active_repost_jobs() -> list:
     """Get all active reposting tasks that are ready to trigger."""
     now = datetime.datetime.now(datetime.timezone.utc)
     cursor = repost_jobs_col.find({"status": "active", "next_post_at": {"$lte": now}})
     return [doc async for doc in cursor]
 
-async def update_repost_job_run(job_id: str, last_post_id: int, next_post_at: datetime.datetime):
+
+async def update_repost_job_run(
+    job_id: str, last_post_id: int, next_post_at: datetime.datetime
+):
     """Update active repost task after successful posting."""
     await repost_jobs_col.update_one(
         {"_id": ObjectId(job_id)},
@@ -307,34 +354,56 @@ async def update_repost_job_run(job_id: str, last_post_id: int, next_post_at: da
         },
     )
 
+
 async def mark_repost_job_failed(job_id: str, error_msg: str):
     """Mark repost job as failed after all retries exhausted."""
     await repost_jobs_col.update_one(
         {"_id": ObjectId(job_id)},
-        {"$set": {"status": "failed", "failure_reason": error_msg, "failed_at": datetime.datetime.now(datetime.timezone.utc)}},
+        {
+            "$set": {
+                "status": "failed",
+                "failure_reason": error_msg,
+                "failed_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        },
     )
+
 
 async def mark_repost_job_retry(job_id: str, retry_count: int, error_msg: str):
     """Increment retry count for repost job (schedule retry in 5 minutes)."""
-    next_retry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5)
+    next_retry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+        minutes=5
+    )
     await repost_jobs_col.update_one(
         {"_id": ObjectId(job_id)},
-        {"$set": {"retry_count": retry_count, "last_error": error_msg, "next_post_at": next_retry}},
+        {
+            "$set": {
+                "retry_count": retry_count,
+                "last_error": error_msg,
+                "next_post_at": next_retry,
+            }
+        },
     )
+
 
 async def get_repost_jobs_by_user(user_id: int) -> list:
     """Get all reposting jobs configured by a user."""
     cursor = repost_jobs_col.find({"user_id": user_id})
     return [doc async for doc in cursor]
 
+
 async def delete_repost_job(job_id: str) -> bool:
     """Delete a repost job configuration."""
     result = await repost_jobs_col.delete_one({"_id": ObjectId(job_id)})
     return result.deleted_count > 0
 
+
 # ─── POST TEMPLATES HELPERS ──────────────────────────────────────────
 
-async def save_template(user_id: int, name: str, template_type: str, caption: str | None, buttons: list):
+
+async def save_template(
+    user_id: int, name: str, template_type: str, caption: str | None, buttons: list
+):
     """Save a post template."""
     doc = {
         "user_id": user_id,
@@ -346,10 +415,12 @@ async def save_template(user_id: int, name: str, template_type: str, caption: st
     }
     await templates_col.insert_one(doc)
 
+
 async def get_user_templates(user_id: int) -> list:
     """Get all templates saved by a user."""
     cursor = templates_col.find({"user_id": user_id})
     return [doc async for doc in cursor]
+
 
 async def get_template(template_id: str):
     """Fetch template details."""
@@ -357,6 +428,7 @@ async def get_template(template_id: str):
         return await templates_col.find_one({"_id": ObjectId(template_id)})
     except Exception:
         return None
+
 
 async def delete_template(template_id: str, user_id: int | None = None) -> bool:
     """Delete a saved template. If ``user_id`` is given, deletion is scoped to
@@ -370,7 +442,9 @@ async def delete_template(template_id: str, user_id: int | None = None) -> bool:
     except Exception:
         return False
 
+
 # ─── CHANNEL ANALYTICS HELPERS ───────────────────────────────────────
+
 
 async def increment_channel_stat(channel_id: int | str, stat_name: str, inc: int = 1):
     """Increment published posts, scheduled count, views, or clicks for a channel."""
@@ -381,12 +455,18 @@ async def increment_channel_stat(channel_id: int | str, stat_name: str, inc: int
         upsert=True,
     )
 
+
 async def get_channel_stats(channel_id: int | str, days: int = 30) -> list:
     """Get daily statistics logs for a channel."""
-    cursor = channel_stats_col.find({"channel_id": channel_id}).sort("date", -1).limit(days)
+    cursor = (
+        channel_stats_col.find({"channel_id": channel_id}).sort("date", -1).limit(days)
+    )
     return [doc async for doc in cursor]
 
-async def log_button_click(user_id: int, channel_id: int | str, message_id: int, button_text: str):
+
+async def log_button_click(
+    user_id: int, channel_id: int | str, message_id: int, button_text: str
+):
     """Log a user's click on a post builder URL button."""
     doc = {
         "user_id": user_id,
@@ -410,30 +490,37 @@ async def delete_creator_channel(channel_id: int | str, user_id: int) -> bool:
     return result.deleted_count > 0
 
 
-async def toggle_reaction(chat_id: int, message_id: int, user_id: int, emoji: str) -> dict:
+async def toggle_reaction(
+    chat_id: int, message_id: int, user_id: int, emoji: str
+) -> dict:
     """Toggle user's reaction on a message and return updated counts."""
     from database.mongo import db
+
     votes_col = db["reaction_votes"]
-    existing = await votes_col.find_one({
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "user_id": user_id,
-        "emoji": emoji
-    })
-    if existing:
-        await votes_col.delete_one({"_id": existing["_id"]})
-    else:
-        await votes_col.insert_one({
+    existing = await votes_col.find_one(
+        {
             "chat_id": chat_id,
             "message_id": message_id,
             "user_id": user_id,
             "emoji": emoji,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc)
-        })
-    
+        }
+    )
+    if existing:
+        await votes_col.delete_one({"_id": existing["_id"]})
+    else:
+        await votes_col.insert_one(
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "user_id": user_id,
+                "emoji": emoji,
+                "timestamp": datetime.datetime.now(datetime.timezone.utc),
+            }
+        )
+
     cursor = votes_col.find({"chat_id": chat_id, "message_id": message_id})
     votes = [doc async for doc in cursor]
-    
+
     counts = {}
     for vote in votes:
         e = vote["emoji"]

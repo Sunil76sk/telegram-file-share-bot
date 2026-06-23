@@ -20,8 +20,15 @@ class TestHelpCommand:
         }
 
         required_sections = [
-            "upload", "posts", "movie", "schedule",
-            "repost", "premium", "store", "referral", "settings",
+            "upload",
+            "posts",
+            "movie",
+            "schedule",
+            "repost",
+            "premium",
+            "store",
+            "referral",
+            "settings",
         ]
         for section in required_sections:
             assert section in HELP_SECTIONS, f"Missing section: {section}"
@@ -42,8 +49,15 @@ class TestHelpCommand:
     def test_help_callback_data_format(self):
         """Test that help callback data follows help_{key} format."""
         HELP_SECTIONS = {
-            "upload": {}, "posts": {}, "movie": {}, "schedule": {},
-            "repost": {}, "premium": {}, "store": {}, "referral": {}, "settings": {},
+            "upload": {},
+            "posts": {},
+            "movie": {},
+            "schedule": {},
+            "repost": {},
+            "premium": {},
+            "store": {},
+            "referral": {},
+            "settings": {},
         }
 
         for key in HELP_SECTIONS:

@@ -128,6 +128,7 @@ async def batch_done_cmd(client: Client, message: Message):
         await database.delete_batch(user_id)
 
         from utils.helpers import get_share_link
+
         share_link = await get_share_link(client, token)
 
         await message.reply_text(
@@ -183,6 +184,7 @@ async def batch_cancel_cmd(client: Client, message: Message):
 
         # Clear template creation drafts
         from handlers.templates import template_creation_drafts
+
         if user_id in template_creation_drafts:
             try:
                 del template_creation_drafts[user_id]
@@ -192,13 +194,15 @@ async def batch_cancel_cmd(client: Client, message: Message):
         # Clear state/catalog drafts/shorteners/marketplace/saas states in user document
         await database.users_col.update_one(
             {"_id": user_id},
-            {"$unset": {
-                "state": "",
-                "catalog_draft": "",
-                "marketplace_draft": "",
-                "shortener_draft": "",
-                "saas_pending_plan": ""
-            }}
+            {
+                "$unset": {
+                    "state": "",
+                    "catalog_draft": "",
+                    "marketplace_draft": "",
+                    "shortener_draft": "",
+                    "saas_pending_plan": "",
+                }
+            },
         )
 
         await message.reply_text("✅ Current operation cancelled.")
@@ -223,7 +227,12 @@ async def file_uploader(client: Client, message: Message):
 
     # Creator Studio bypass: Only let the post builder handle it if they are actively in a capturing state
     draft = await database.get_post_draft(user_id)
-    if draft and draft.get("state") in ["awaiting_media", "awaiting_caption", "awaiting_buttons", "awaiting_reactions"]:
+    if draft and draft.get("state") in [
+        "awaiting_media",
+        "awaiting_caption",
+        "awaiting_buttons",
+        "awaiting_reactions",
+    ]:
         return
 
     user_doc = await database.get_user(user_id)
@@ -233,7 +242,9 @@ async def file_uploader(client: Client, message: Message):
 
     pending = await database.get_pending_upi(user_id)
     state = user_doc.get("state", "") if user_doc else ""
-    is_awaiting_upi = state.startswith("awaiting_upi_screenshot") or (pending and pending.get("screenshot_msg_id") is None)
+    is_awaiting_upi = state.startswith("awaiting_upi_screenshot") or (
+        pending and pending.get("screenshot_msg_id") is None
+    )
 
     if is_awaiting_upi:
         is_valid = False
@@ -261,13 +272,21 @@ async def file_uploader(client: Client, message: Message):
             file_id = message.document.file_id
 
         if file_id:
-            payment_id = str(pending["_id"]) if pending else state.replace("awaiting_upi_screenshot_", "")
+            payment_id = (
+                str(pending["_id"])
+                if pending
+                else state.replace("awaiting_upi_screenshot_", "")
+            )
             payment = await database.get_upi_payment(payment_id)
             if not payment:
                 payment = pending
                 if not payment:
-                    await message.reply_text("❌ No pending UPI payment found. Please type /premium or /store to checkout.")
-                    await database.users_col.update_one({"_id": user_id}, {"$unset": {"state": ""}})
+                    await message.reply_text(
+                        "❌ No pending UPI payment found. Please type /premium or /store to checkout."
+                    )
+                    await database.users_col.update_one(
+                        {"_id": user_id}, {"$unset": {"state": ""}}
+                    )
                     message.stop_propagation()
                     return
                 payment_id = str(payment["_id"])
@@ -276,8 +295,7 @@ async def file_uploader(client: Client, message: Message):
 
             # Clear state
             await database.users_col.update_one(
-                {"_id": user_id},
-                {"$unset": {"state": ""}}
+                {"_id": user_id}, {"$unset": {"state": ""}}
             )
 
             await message.reply_text(
@@ -290,8 +308,13 @@ async def file_uploader(client: Client, message: Message):
                 prod_id = plan_desc.replace("prod_", "", 1)
                 try:
                     from bson import ObjectId
+
                     product = await database.get_product_by_id(ObjectId(prod_id))
-                    plan_desc = f"Product: {product['name']}" if product else f"Product ID: {prod_id}"
+                    plan_desc = (
+                        f"Product: {product['name']}"
+                        if product
+                        else f"Product ID: {prod_id}"
+                    )
                 except Exception:
                     plan_desc = f"Product ID: {prod_id}"
             else:

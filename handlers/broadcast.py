@@ -5,7 +5,12 @@ import logging
 import time
 
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from pyrogram.types import (
+    Message,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    CallbackQuery,
+)
 from pyrogram.errors import (
     FloodWait,
     UserIsBlocked,
@@ -33,6 +38,7 @@ async def premium_check(_, client: Client, message: Message):
     if not message or not message.from_user:
         return False
     return await database.is_user_premium(message.from_user.id)
+
 
 premium_filter = filters.create(premium_check)
 
@@ -247,7 +253,7 @@ async def unban_handler(client: Client, message: Message):
 
 def parse_channel_input(input_str: str):
     input_str = input_str.strip()
-    
+
     # 1. Check if it is a numeric ID (integer)
     if input_str.startswith("-") or input_str.isdigit():
         try:
@@ -256,15 +262,20 @@ def parse_channel_input(input_str: str):
             pass
 
     # 2. Check if it is a Telegram URL/Link
-    if "t.me/" in input_str or "telegram.me/" in input_str or input_str.startswith("https://") or input_str.startswith("http://"):
+    if (
+        "t.me/" in input_str
+        or "telegram.me/" in input_str
+        or input_str.startswith("https://")
+        or input_str.startswith("http://")
+    ):
         clean = input_str.replace("https://", "").replace("http://", "")
         clean = clean.replace("telegram.me/", "").replace("t.me/", "")
-        
+
         # Private invite links (e.g., https://t.me/+abc or https://t.me/joinchat/abc)
         if clean.startswith("+") or clean.startswith("joinchat/"):
             invite_link = f"https://t.me/{clean}"
             return invite_link, invite_link
-            
+
         # Public channel links (e.g., https://t.me/channelname)
         username = clean.split("/")[0].split("?")[0].strip()
         if username:
@@ -318,7 +329,7 @@ async def add_channel_handler(client: Client, message: Message):
                 "• Or use `/add_channel [channel_id_or_username_or_invite_link] [optional_invite_link]`"
             )
             return
-        
+
         chat_raw = args[1].strip()
         chat_id, resolved_invite = parse_channel_input(chat_raw)
         if len(args) >= 3:
@@ -328,7 +339,9 @@ async def add_channel_handler(client: Client, message: Message):
 
     # Method 4 & 2/3: Invite link, ID, or Username resolution
     chat_info = None
-    if isinstance(chat_id, str) and (chat_id.startswith("https://t.me/+") or "joinchat" in chat_id):
+    if isinstance(chat_id, str) and (
+        chat_id.startswith("https://t.me/+") or "joinchat" in chat_id
+    ):
         # Private invite link
         try:
             chat_info = await client.join_chat(chat_id)
@@ -362,10 +375,14 @@ async def add_channel_handler(client: Client, message: Message):
         if bot_status not in ["administrator", "owner", "creator"]:
             await message.reply_text("❌ Bot is not an administrator in this channel.")
             return
-            
+
         # Verify required privileges for Creator Studio (Post & Delete messages)
         privileges = bot_member.privileges
-        if not privileges or not privileges.can_post_messages or not privileges.can_delete_messages:
+        if (
+            not privileges
+            or not privileges.can_post_messages
+            or not privileges.can_delete_messages
+        ):
             await message.reply_text(
                 "❌ **Missing Permissions!**\n\n"
                 "The bot must have the following administrator privileges in the channel:\n"
@@ -389,7 +406,9 @@ async def add_channel_handler(client: Client, message: Message):
             try:
                 invite_link = await client.export_chat_invite_link(chat_id)
             except Exception as e:
-                logger.warning(f"Could not export invite link for private channel {chat_id}: {e}")
+                logger.warning(
+                    f"Could not export invite link for private channel {chat_id}: {e}"
+                )
 
     if not invite_link:
         invite_link = f"https://t.me/c/{str(chat_id).replace('-100', '')}/1"
@@ -403,7 +422,7 @@ async def add_channel_handler(client: Client, message: Message):
         invite_link=invite_link,
         permissions_verified=True,
     )
-    
+
     await message.reply_text(
         f"✅ Channel Added to Creator Studio\n"
         f"Channel ID: `{chat_id}`\n"
@@ -431,11 +450,11 @@ async def del_channel_handler(client: Client, message: Message):
         return
 
     chat_raw = args[1].strip()
-    
+
     # Try resolving from the creator's channel list in DB first (in case bot is no longer in channel)
     channels = await database.get_creator_channels(user_id)
     resolved_id = None
-    
+
     clean_username = chat_raw.replace("@", "").lower()
     for chan in channels:
         chan_id_str = str(chan["_id"])
@@ -550,11 +569,11 @@ async def del_admin_handler(client: Client, message: Message):
 @app.on_message(filters.command("broadcast_status") & filters.private & admin_filter)
 async def broadcast_status_handler(client: Client, message: Message):
     global is_broadcasting, broadcast_start_time, broadcast_total_users, broadcast_progress, broadcast_lock_source
-    
+
     start_str = "N/A"
     if broadcast_start_time:
         start_str = broadcast_start_time.strftime("%Y-%m-%d %H:%M:%S UTC")
-        
+
     status_text = (
         "📢 **Broadcast Status Info:**\n\n"
         f"• **Active:** `{is_broadcasting}`\n"
@@ -569,25 +588,28 @@ async def broadcast_status_handler(client: Client, message: Message):
 @app.on_message(filters.command("broadcast_unlock") & filters.private & admin_filter)
 async def broadcast_unlock_handler(client: Client, message: Message):
     global is_broadcasting, broadcast_start_time, broadcast_total_users, broadcast_progress, broadcast_lock_source
-    
+
     async with broadcast_lock:
         is_broadcasting = False
         broadcast_start_time = None
         broadcast_total_users = 0
         broadcast_progress = 0
         broadcast_lock_source = "Unlocked by admin"
-        
+
     await message.reply_text("✅ **Broadcast lock has been forcefully cleared.**")
 
 
 # ─── CREATOR STUDIO CHANNEL SETTINGS ─────────────────────────────────
+
 
 @app.on_message(filters.command("my_channels") & filters.private & ~banned_filter)
 async def my_channels_handler(client: Client, message: Message):
     user_id = message.from_user.id
     channels = await database.get_creator_channels(user_id)
     if not channels:
-        await message.reply_text("❌ You haven't added any channels to Creator Studio yet. Use `/add_channel` to add one.")
+        await message.reply_text(
+            "❌ You haven't added any channels to Creator Studio yet. Use `/add_channel` to add one."
+        )
         return
 
     text = "📂 **Your Managed Channels:**\n\n"
@@ -595,8 +617,15 @@ async def my_channels_handler(client: Client, message: Message):
     for chan in channels:
         title = chan.get("channel_title") or chan.get("title") or str(chan["_id"])
         text += f"• **{title}** (`{chan['_id']}`)\n"
-        buttons.append([InlineKeyboardButton(f"⚙️ Settings: {title}", callback_data=f"chan_settings_{chan['_id']}")])
-        
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"⚙️ Settings: {title}",
+                    callback_data=f"chan_settings_{chan['_id']}",
+                )
+            ]
+        )
+
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
 
@@ -604,17 +633,19 @@ async def my_channels_handler(client: Client, message: Message):
 async def chan_settings_callback_handler(client: Client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     channel_id = callback_query.matches[0].group(1)
-    
+
     try:
         channel_id_val = int(channel_id)
     except ValueError:
         channel_id_val = channel_id
-        
+
     channel = await database.get_channel_by_id(channel_id_val)
     if not channel or channel.get("user_id") != user_id:
-        await callback_query.answer("❌ Channel not found or access denied.", show_alert=True)
+        await callback_query.answer(
+            "❌ Channel not found or access denied.", show_alert=True
+        )
         return
-        
+
     status = "Active ✅" if channel.get("service_enabled", True) else "Disabled ❌"
     title = channel.get("channel_title") or channel.get("title") or str(channel["_id"])
     text = (
@@ -624,17 +655,27 @@ async def chan_settings_callback_handler(client: Client, callback_query: Callbac
         f"Status: **{status}**\n\n"
         f"Choose an option below to configure the channel:"
     )
-    
-    toggle_label = "Disable Service ❌" if channel.get("service_enabled", True) else "Enable Service ✅"
+
+    toggle_label = (
+        "Disable Service ❌"
+        if channel.get("service_enabled", True)
+        else "Enable Service ✅"
+    )
     buttons = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton(toggle_label, callback_data=f"chan_toggle_{channel['_id']}"),
-                InlineKeyboardButton("Demote/Remove 🗑", callback_data=f"chan_remove_{channel['_id']}"),
+                InlineKeyboardButton(
+                    toggle_label, callback_data=f"chan_toggle_{channel['_id']}"
+                ),
+                InlineKeyboardButton(
+                    "Demote/Remove 🗑", callback_data=f"chan_remove_{channel['_id']}"
+                ),
             ],
             [
-                InlineKeyboardButton("🔙 Back to Channels", callback_data="chan_list_back")
-            ]
+                InlineKeyboardButton(
+                    "🔙 Back to Channels", callback_data="chan_list_back"
+                )
+            ],
         ]
     )
     try:
@@ -651,19 +692,25 @@ async def chan_toggle_callback_handler(client: Client, callback_query: CallbackQ
         channel_id_val = int(channel_id)
     except ValueError:
         channel_id_val = channel_id
-        
+
     channel = await database.get_channel_by_id(channel_id_val)
     if not channel or channel.get("user_id") != user_id:
         await callback_query.answer("❌ Access denied.", show_alert=True)
         return
-        
+
     new_state = not channel.get("service_enabled", True)
-    await database.channels_col.update_one({"_id": channel_id_val}, {"$set": {"service_enabled": new_state}})
-    await callback_query.answer(f"Channel service {'enabled' if new_state else 'disabled'}.")
-    
+    await database.channels_col.update_one(
+        {"_id": channel_id_val}, {"$set": {"service_enabled": new_state}}
+    )
+    await callback_query.answer(
+        f"Channel service {'enabled' if new_state else 'disabled'}."
+    )
+
     # Reload settings view
     class FakeMatch:
-        def group(self, i): return channel_id
+        def group(self, i):
+            return channel_id
+
     callback_query.matches = [FakeMatch()]
     await chan_settings_callback_handler(client, callback_query)
 
@@ -676,7 +723,7 @@ async def chan_remove_callback_handler(client: Client, callback_query: CallbackQ
         channel_id_val = int(channel_id)
     except ValueError:
         channel_id_val = channel_id
-        
+
     deleted = await database.delete_creator_channel(channel_id_val, user_id)
     if deleted:
         await callback_query.answer("🗑 Channel removed successfully.", show_alert=True)
@@ -692,7 +739,9 @@ async def chan_remove_callback_handler(client: Client, callback_query: CallbackQ
 
 
 @app.on_callback_query(filters.regex(r"^chan_list_back$"))
-async def chan_list_back_callback_handler(client: Client, callback_query: CallbackQuery):
+async def chan_list_back_callback_handler(
+    client: Client, callback_query: CallbackQuery
+):
     try:
         await callback_query.message.delete()
     except Exception:
@@ -700,5 +749,3 @@ async def chan_list_back_callback_handler(client: Client, callback_query: Callba
     message = callback_query.message
     message.from_user = callback_query.from_user
     await my_channels_handler(client, message)
-
-

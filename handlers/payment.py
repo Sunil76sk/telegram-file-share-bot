@@ -29,7 +29,9 @@ async def _validate_payment_payload(payload: str) -> tuple[bool, str | None]:
     try:
         if payload.startswith("premium_"):
             parts = payload.split("_")
-            duration = parts[2] if len(parts) == 3 else (parts[1] if len(parts) == 2 else "")
+            duration = (
+                parts[2] if len(parts) == 3 else (parts[1] if len(parts) == 2 else "")
+            )
             if duration not in ("weekly", "monthly", "lifetime"):
                 return False, "This subscription plan is no longer available."
             return True, None
@@ -37,6 +39,7 @@ async def _validate_payment_payload(payload: str) -> tuple[bool, str | None]:
         if payload.startswith("prod_buy_"):
             prod_id = payload.split("prod_buy_")[1]
             from bson import ObjectId
+
             try:
                 product = await database.get_product_by_id(ObjectId(prod_id))
             except Exception:
@@ -116,11 +119,13 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
 
                 amount = action.total_amount
                 charge_id = (
-                    getattr(action.charge, "id", None)
-                    if hasattr(action, "charge") and action.charge
-                    else None
-                ) or f"charge_{int(datetime.datetime.now(datetime.timezone.utc).timestamp())}"
-
+                    (
+                        getattr(action.charge, "id", None)
+                        if hasattr(action, "charge") and action.charge
+                        else None
+                    )
+                    or f"charge_{int(datetime.datetime.now(datetime.timezone.utc).timestamp())}"
+                )
 
                 logger.info(
                     f"Successful payment from user {user_id}: payload={payload}, amount={amount} Stars, charge={charge_id}"
@@ -204,9 +209,13 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                     if product:
                         # Prevent duplicate purchases
                         if await database.verify_purchase(user_id, product["_id"]):
-                            purchase = await database.purchases_col.find_one({
-                                "user_id": user_id, "product_id": product["_id"], "status": "completed"
-                            })
+                            purchase = await database.purchases_col.find_one(
+                                {
+                                    "user_id": user_id,
+                                    "product_id": product["_id"],
+                                    "status": "completed",
+                                }
+                            )
                             try:
                                 await client.send_message(
                                     chat_id=user_id,
@@ -216,7 +225,10 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                                 pass
                             if purchase:
                                 from handlers.marketplace import deliver_product_files
-                                await deliver_product_files(client, user_id, purchase, product)
+
+                                await deliver_product_files(
+                                    client, user_id, purchase, product
+                                )
                         else:
                             # Record the purchase and bump the sales counter
                             # atomically so we never mark a user as paid without
@@ -224,17 +236,21 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
                             _purchase_holder: dict = {}
 
                             async def _record_product_purchase(session):
-                                _purchase_holder["purchase"] = await database.record_purchase(
-                                    user_id=user_id,
-                                    product_id=product["_id"],
-                                    product_token=product["token"],
-                                    amount_paid=amount,
-                                    payment_id=charge_id,
-                                    status="completed",
-                                    files_delivered=product["files"],
-                                    session=session,
+                                _purchase_holder["purchase"] = (
+                                    await database.record_purchase(
+                                        user_id=user_id,
+                                        product_id=product["_id"],
+                                        product_token=product["token"],
+                                        amount_paid=amount,
+                                        payment_id=charge_id,
+                                        status="completed",
+                                        files_delivered=product["files"],
+                                        session=session,
+                                    )
                                 )
-                                await database.increment_product_sales(product["_id"], session=session)
+                                await database.increment_product_sales(
+                                    product["_id"], session=session
+                                )
 
                             await database.with_transaction(_record_product_purchase)
                             purchase = _purchase_holder["purchase"]
@@ -248,7 +264,9 @@ async def payment_raw_update_handler(client: Client, update, users, chats):
 
                             from handlers.marketplace import deliver_product_files
 
-                            await deliver_product_files(client, user_id, purchase, product)
+                            await deliver_product_files(
+                                client, user_id, purchase, product
+                            )
                     else:
                         try:
                             await client.send_message(

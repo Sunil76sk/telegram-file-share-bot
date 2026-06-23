@@ -36,8 +36,21 @@ VALID_STATES = {
 }
 
 VALID_TRANSITIONS: dict[str, set[str]] = {
-    "idle": {"awaiting_media", "batch_active", "sh_awaiting_url", "awaiting_template_name", "ad_awaiting_details", "awaiting_password_set", "awaiting_password_entry"},
-    "awaiting_media": {"idle", "awaiting_caption", "awaiting_buttons", "awaiting_reactions"},
+    "idle": {
+        "awaiting_media",
+        "batch_active",
+        "sh_awaiting_url",
+        "awaiting_template_name",
+        "ad_awaiting_details",
+        "awaiting_password_set",
+        "awaiting_password_entry",
+    },
+    "awaiting_media": {
+        "idle",
+        "awaiting_caption",
+        "awaiting_buttons",
+        "awaiting_reactions",
+    },
     "awaiting_caption": {"idle", "awaiting_buttons", "awaiting_reactions"},
     "awaiting_buttons": {"idle", "awaiting_reactions"},
     "awaiting_reactions": {"idle", "awaiting_schedule_time"},
@@ -94,12 +107,14 @@ async def set_state(
 
     await STATE_COL.update_one({"_id": user_id}, {"$set": doc}, upsert=True)
 
-    await STATE_LOG_COL.insert_one({
-        "user_id": user_id,
-        "previous_state": previous_state,
-        "new_state": new_state,
-        "transitioned_at": now,
-    })
+    await STATE_LOG_COL.insert_one(
+        {
+            "user_id": user_id,
+            "previous_state": previous_state,
+            "new_state": new_state,
+            "transitioned_at": now,
+        }
+    )
     logger.info(f"State transition: user={user_id} {previous_state} -> {new_state}")
     return True
 
@@ -107,19 +122,23 @@ async def set_state(
 async def clear_state(user_id: int) -> bool:
     result = await STATE_COL.delete_one({"_id": user_id})
     if result.deleted_count:
-        await STATE_LOG_COL.insert_one({
-            "user_id": user_id,
-            "previous_state": "unknown",
-            "new_state": "idle",
-            "transitioned_at": datetime.datetime.now(datetime.timezone.utc),
-        })
+        await STATE_LOG_COL.insert_one(
+            {
+                "user_id": user_id,
+                "previous_state": "unknown",
+                "new_state": "idle",
+                "transitioned_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        )
         logger.info(f"State cleared for user {user_id}")
         return True
     return False
 
 
 async def cleanup_stale_states(hours: int = 24):
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=hours)
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        hours=hours
+    )
     result = await STATE_COL.delete_many({"updated_at": {"$lt": cutoff}})
     if result.deleted_count:
         logger.info(f"Cleaned {result.deleted_count} stale states older than {hours}h")

@@ -538,7 +538,9 @@ async def ensure_indexes():
                 else:
                     keys = list(keys)
             # Skip _id index as MongoDB manages it automatically
-            if keys == "_id" or (isinstance(keys, list) and len(keys) == 1 and keys[0][0] == "_id"):
+            if keys == "_id" or (
+                isinstance(keys, list) and len(keys) == 1 and keys[0][0] == "_id"
+            ):
                 continue
             if isinstance(options, bool):
                 kwargs: dict = {"unique": options}
@@ -576,10 +578,12 @@ async def run_migrations():
         if name not in applied:
             try:
                 await migration()
-                await migrations_col.insert_one({
-                    "name": name,
-                    "applied_at": datetime.datetime.now(datetime.timezone.utc),
-                })
+                await migrations_col.insert_one(
+                    {
+                        "name": name,
+                        "applied_at": datetime.datetime.now(datetime.timezone.utc),
+                    }
+                )
                 logger.info(f"Migration applied: {name}")
             except Exception as e:
                 logger.error(f"Migration failed {name}: {e}")
@@ -587,33 +591,38 @@ async def run_migrations():
 
 async def _migration_001_add_user_source():
     await db.users.update_many(
-        {"source": {"$exists": False}},
-        {"$set": {"source": "direct", "campaign": None}}
+        {"source": {"$exists": False}}, {"$set": {"source": "direct", "campaign": None}}
     )
 
 
 async def _migration_002_add_referral_fields():
     await db.users.update_many(
         {"points": {"$exists": False}},
-        {"$set": {"points": 0, "referred_by": None, "unlocked_links": []}}
+        {"$set": {"points": 0, "referred_by": None, "unlocked_links": []}},
     )
 
 
 async def _migration_003_add_premium_fields():
     await db.users.update_many(
         {"premium_expiry": {"$exists": False}},
-        {"$set": {"premium_expiry": None, "is_premium_lifetime": False, "premium_tier": None}}
+        {
+            "$set": {
+                "premium_expiry": None,
+                "is_premium_lifetime": False,
+                "premium_tier": None,
+            }
+        },
     )
 
 
 async def _migration_004_add_creator_fields():
     await db.channels.update_many(
         {"service_enabled": {"$exists": False}},
-        {"$set": {"service_enabled": True, "permissions_verified": True}}
+        {"$set": {"service_enabled": True, "permissions_verified": True}},
     )
     await db.drafts.update_many(
         {"updated_at": {"$exists": False}},
-        {"$set": {"updated_at": datetime.datetime.now(datetime.timezone.utc)}}
+        {"$set": {"updated_at": datetime.datetime.now(datetime.timezone.utc)}},
     )
 
 

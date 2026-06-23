@@ -26,11 +26,13 @@ async def run_diagnostics() -> dict[str, Any]:
         "performance": _get_performance_metrics(),
         "collections": await _get_collection_stats(),
     }
-    await DIAG_COL.insert_one({
-        "type": "diagnostic",
-        "results": results,
-        "timestamp": datetime.datetime.now(datetime.timezone.utc),
-    })
+    await DIAG_COL.insert_one(
+        {
+            "type": "diagnostic",
+            "results": results,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc),
+        }
+    )
     return results
 
 
@@ -57,6 +59,7 @@ def _get_python_info() -> dict[str, Any]:
 def _get_memory_usage() -> float:
     try:
         import psutil
+
         process = psutil.Process(os.getpid())
         return round(process.memory_info().rss / (1024 * 1024), 2)
     except ImportError:
@@ -88,13 +91,15 @@ async def _get_worker_info() -> list[dict]:
     workers = []
     cursor = db["worker_status"].find()
     async for doc in cursor:
-        workers.append({
-            "name": doc.get("worker_name"),
-            "status": doc.get("status", "unknown"),
-            "last_heartbeat": doc.get("last_heartbeat"),
-            "tasks_processed": doc.get("tasks_processed", 0),
-            "errors": doc.get("errors", 0),
-        })
+        workers.append(
+            {
+                "name": doc.get("worker_name"),
+                "status": doc.get("status", "unknown"),
+                "last_heartbeat": doc.get("last_heartbeat"),
+                "tasks_processed": doc.get("tasks_processed", 0),
+                "errors": doc.get("errors", 0),
+            }
+        )
     return workers
 
 
@@ -130,7 +135,9 @@ async def check_system_health() -> dict[str, Any]:
         if last_hb:
             if hasattr(last_hb, "tzinfo") and last_hb.tzinfo is None:
                 last_hb = last_hb.replace(tzinfo=datetime.timezone.utc)
-            if (datetime.datetime.now(datetime.timezone.utc) - last_hb).total_seconds() > 120:
+            if (
+                datetime.datetime.now(datetime.timezone.utc) - last_hb
+            ).total_seconds() > 120:
                 issues.append(f"Worker '{w['name']}' heartbeat expired")
 
     memory = _get_memory_usage()

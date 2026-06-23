@@ -359,7 +359,9 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
         return
 
     if payment.get("status") != "pending":
-        await callback_query.answer(f"⚠️ Already {payment.get('status')}.", show_alert=True)
+        await callback_query.answer(
+            f"⚠️ Already {payment.get('status')}.", show_alert=True
+        )
         return
 
     user_id = payment["user_id"]
@@ -372,6 +374,7 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
             if plan_name.startswith("prod_"):
                 prod_id = plan_name.split("_")[1]
                 from bson import ObjectId
+
                 try:
                     product = await database.get_product_by_id(ObjectId(prod_id))
                 except Exception:
@@ -380,6 +383,7 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
                 if product:
                     # Issue 7: Prevent duplicate purchases
                     if not await database.verify_purchase(user_id, product["_id"]):
+
                         async def _record_upi_purchase(session):
                             await database.record_purchase(
                                 user_id=user_id,
@@ -391,16 +395,19 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
                                 files_delivered=product.get("files", []),
                                 session=session,
                             )
-                            await database.increment_product_sales(product["_id"], session=session)
+                            await database.increment_product_sales(
+                                product["_id"], session=session
+                            )
 
                         await database.with_transaction(_record_upi_purchase)
 
                     from handlers.marketplace import deliver_product_files
+
                     await deliver_product_files(client, user_id, payment, product)
                 else:
                     await client.send_message(
                         chat_id=user_id,
-                        text="❌ **UPI Payment Approved, but the product could not be found.** Please contact support."
+                        text="❌ **UPI Payment Approved, but the product could not be found.** Please contact support.",
                     )
             else:
                 parts = plan_name.split("_")
@@ -436,7 +443,9 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
                         ),
                     )
                 except Exception as e:
-                    logger.error(f"Failed to notify user {user_id} of UPI approval: {e}")
+                    logger.error(
+                        f"Failed to notify user {user_id} of UPI approval: {e}"
+                    )
 
             await callback_query.answer("✅ UPI Payment Approved!", show_alert=True)
             try:
@@ -447,7 +456,9 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
             except Exception:
                 pass
         else:
-            await callback_query.answer("❌ Failed to approve payment.", show_alert=True)
+            await callback_query.answer(
+                "❌ Failed to approve payment.", show_alert=True
+            )
 
     elif action == "reject":
         success = await database.reject_upi(payment_id, admin_id)
@@ -457,6 +468,7 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
                 if plan_name.startswith("prod_"):
                     prod_id = plan_name.split("_")[1]
                     from bson import ObjectId
+
                     try:
                         product = await database.get_product_by_id(ObjectId(prod_id))
                         if product:
@@ -464,7 +476,7 @@ async def admin_upi_callback_handler(client: Client, callback_query: CallbackQue
                     except Exception:
                         pass
                 else:
-                    clean_plan_name = plan_name.replace('_', ' ').title()
+                    clean_plan_name = plan_name.replace("_", " ").title()
 
                 await client.send_message(
                     chat_id=user_id,
@@ -500,7 +512,9 @@ async def upi_pending_command_handler(client: Client, message: Message):
         await message.reply_text("✅ **No pending UPI payments to verify.**")
         return
 
-    await message.reply_text(f"⏳ **Found {len(pending_list)} pending UPI payment verification requests:**")
+    await message.reply_text(
+        f"⏳ **Found {len(pending_list)} pending UPI payment verification requests:**"
+    )
 
     for payment in pending_list:
         pay_id = str(payment["_id"])
@@ -510,8 +524,13 @@ async def upi_pending_command_handler(client: Client, message: Message):
             prod_id = plan_name.split("_")[1]
             try:
                 from bson import ObjectId
+
                 product = await database.get_product_by_id(ObjectId(prod_id))
-                plan_desc = f"Product: `{product['name']}`" if product else f"Product ID: `{prod_id}`"
+                plan_desc = (
+                    f"Product: `{product['name']}`"
+                    if product
+                    else f"Product ID: `{prod_id}`"
+                )
             except Exception:
                 plan_desc = f"Product ID: `{prod_id}`"
         else:
@@ -519,7 +538,7 @@ async def upi_pending_command_handler(client: Client, message: Message):
 
         amount_desc = f"Amount: `₹{payment['amount_inr']}`"
         created_str = payment["created_at"].strftime("%Y-%m-%d %H:%M:%S UTC")
-        
+
         caption = (
             f"🔔 **Pending UPI Payment Request**\n\n"
             f"👤 **User:** {user_info}\n"
@@ -527,16 +546,20 @@ async def upi_pending_command_handler(client: Client, message: Message):
             f"💰 **Amount:** {amount_desc}\n"
             f"🕒 **Submitted:** {created_str}\n"
         )
-        
+
         buttons = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Approve ✅", callback_data=f"admin_upi_approve_{pay_id}"),
-                    InlineKeyboardButton("Reject ❌", callback_data=f"admin_upi_reject_{pay_id}"),
+                    InlineKeyboardButton(
+                        "Approve ✅", callback_data=f"admin_upi_approve_{pay_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "Reject ❌", callback_data=f"admin_upi_reject_{pay_id}"
+                    ),
                 ]
             ]
         )
-        
+
         msg_id = payment.get("screenshot_msg_id")
         if msg_id:
             try:
@@ -549,7 +572,8 @@ async def upi_pending_command_handler(client: Client, message: Message):
                 )
                 continue
             except Exception as e:
-                logger.error(f"Failed to copy screenshot for pending payment {pay_id}: {e}")
-                
-        await message.reply_text(caption, reply_markup=buttons)
+                logger.error(
+                    f"Failed to copy screenshot for pending payment {pay_id}: {e}"
+                )
 
+        await message.reply_text(caption, reply_markup=buttons)

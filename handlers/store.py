@@ -3,7 +3,12 @@ from __future__ import annotations
 import logging
 
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery,
+)
 from bson import ObjectId
 from bot import app
 from database.products import (
@@ -52,12 +57,14 @@ async def show_store_home(client: Client, msg: Message, user_id: int):
         "• `/store categories` — Browse by category\n\n"
         "Select an option below:"
     )
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⭐ Featured", callback_data="store_featured")],
-        [InlineKeyboardButton("🆕 Newest", callback_data="store_new")],
-        [InlineKeyboardButton("🏆 Top Selling", callback_data="store_top")],
-        [InlineKeyboardButton("📂 Categories", callback_data="store_categories")],
-    ])
+    buttons = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("⭐ Featured", callback_data="store_featured")],
+            [InlineKeyboardButton("🆕 Newest", callback_data="store_new")],
+            [InlineKeyboardButton("🏆 Top Selling", callback_data="store_top")],
+            [InlineKeyboardButton("📂 Categories", callback_data="store_categories")],
+        ]
+    )
     await msg.reply_text(text, reply_markup=buttons)
 
 
@@ -80,7 +87,9 @@ async def store_callback_handler(client: Client, callback_query: CallbackQuery):
     await callback_query.answer()
 
 
-async def show_featured_products(client: Client, msg: Message, user_id: int, edit: bool = False):
+async def show_featured_products(
+    client: Client, msg: Message, user_id: int, edit: bool = False
+):
     products = await get_featured_products(limit=10)
     text = "⭐ **Featured Products**\n\n"
     buttons = []
@@ -88,7 +97,13 @@ async def show_featured_products(client: Client, msg: Message, user_id: int, edi
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
             text += f"{i}. {icon} **{escape_markdown(p['name'])}** — {p['price']} ⭐️\n"
-            buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}"
+                    )
+                ]
+            )
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
         text += "_No featured products yet._"
@@ -101,7 +116,9 @@ async def show_featured_products(client: Client, msg: Message, user_id: int, edi
         await msg.reply_text(text, reply_markup=reply_markup)
 
 
-async def show_newest_products(client: Client, msg: Message, user_id: int, edit: bool = False):
+async def show_newest_products(
+    client: Client, msg: Message, user_id: int, edit: bool = False
+):
     products = await get_newest_products(limit=10)
     text = "🆕 **Newest Products**\n\n"
     buttons = []
@@ -109,7 +126,13 @@ async def show_newest_products(client: Client, msg: Message, user_id: int, edit:
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
             text += f"{i}. {icon} **{escape_markdown(p['name'])}** — {p['price']} ⭐️\n"
-            buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}"
+                    )
+                ]
+            )
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
         text += "_No products yet._"
@@ -122,7 +145,9 @@ async def show_newest_products(client: Client, msg: Message, user_id: int, edit:
         await msg.reply_text(text, reply_markup=reply_markup)
 
 
-async def show_top_products(client: Client, msg: Message, user_id: int, edit: bool = False):
+async def show_top_products(
+    client: Client, msg: Message, user_id: int, edit: bool = False
+):
     products = await get_top_selling_products(limit=10)
     text = "🏆 **Top Selling Products**\n\n"
     buttons = []
@@ -130,7 +155,13 @@ async def show_top_products(client: Client, msg: Message, user_id: int, edit: bo
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
             text += f"{i}. {icon} **{escape_markdown(p['name'])}** — {p['price']} ⭐️ ({p.get('sales_count', 0)} sold)\n"
-            buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}"
+                    )
+                ]
+            )
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
     else:
         text += "_No sales data yet._"
@@ -143,13 +174,21 @@ async def show_top_products(client: Client, msg: Message, user_id: int, edit: bo
         await msg.reply_text(text, reply_markup=reply_markup)
 
 
-async def show_categories_menu(client: Client, msg: Message, user_id: int, edit: bool = False):
+async def show_categories_menu(
+    client: Client, msg: Message, user_id: int, edit: bool = False
+):
     categories = await get_all_categories()
     text = "📂 **Product Categories**\n\n"
     buttons = []
     for cat in categories:
         icon = cat.get("icon", "📁")
-        buttons.append([InlineKeyboardButton(f"{icon} {cat['name']}", callback_data=f"store_cat_{cat['_id']}")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"{icon} {cat['name']}", callback_data=f"store_cat_{cat['_id']}"
+                )
+            ]
+        )
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="store_back")])
 
     reply_markup = InlineKeyboardMarkup(buttons)
@@ -160,7 +199,9 @@ async def show_categories_menu(client: Client, msg: Message, user_id: int, edit:
 
 
 @app.on_callback_query(filters.regex(r"^store_cat_(.+)"))
-async def store_category_callback_handler(client: Client, callback_query: CallbackQuery):
+async def store_category_callback_handler(
+    client: Client, callback_query: CallbackQuery
+):
     user_id = callback_query.from_user.id
     cat_id = callback_query.matches[0].group(1)
     await callback_query.answer()
@@ -176,10 +217,30 @@ async def store_category_callback_handler(client: Client, callback_query: Callba
         for i, p in enumerate(products, 1):
             icon = PRODUCT_TYPE_ICONS.get(p.get("product_type", ""), "📦")
             text += f"{i}. {icon} **{escape_markdown(p['name'])}** — {p['price']} ⭐️\n"
-            buttons.append([InlineKeyboardButton(f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}")])
-        buttons.append([InlineKeyboardButton("🔙 Back to Categories", callback_data="store_categories")])
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"🛒 Buy {p['name']}", callback_data=f"buy_prod_{p['_id']}"
+                    )
+                ]
+            )
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "🔙 Back to Categories", callback_data="store_categories"
+                )
+            ]
+        )
     else:
         text += "_No products in this category._"
-        buttons = [[InlineKeyboardButton("🔙 Back to Categories", callback_data="store_categories")]]
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    "🔙 Back to Categories", callback_data="store_categories"
+                )
+            ]
+        ]
 
-    await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    await callback_query.message.edit_text(
+        text, reply_markup=InlineKeyboardMarkup(buttons)
+    )

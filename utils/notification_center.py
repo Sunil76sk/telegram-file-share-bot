@@ -43,7 +43,9 @@ async def send_notification(
     if pref:
         disabled = pref.get("disabled_notifications", [])
         if notification_type in disabled:
-            logger.debug(f"User {user_id} has disabled {notification_type} notifications")
+            logger.debug(
+                f"User {user_id} has disabled {notification_type} notifications"
+            )
             return
 
     doc = {
@@ -58,13 +60,20 @@ async def send_notification(
         "sent_at": None,
     }
     await NOTIFICATION_COL.insert_one(doc)
-    logger.info(f"Notification queued: type={notification_type} user={user_id} title={title}")
+    logger.info(
+        f"Notification queued: type={notification_type} user={user_id} title={title}"
+    )
 
 
 async def mark_notification_sent(notification_id: str) -> bool:
     result = await NOTIFICATION_COL.update_one(
         {"_id": notification_id},
-        {"$set": {"status": "sent", "sent_at": datetime.datetime.now(datetime.timezone.utc)}}
+        {
+            "$set": {
+                "status": "sent",
+                "sent_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        },
     )
     return result.modified_count > 0
 
@@ -72,12 +81,20 @@ async def mark_notification_sent(notification_id: str) -> bool:
 async def mark_notification_failed(notification_id: str, error: str):
     await NOTIFICATION_COL.update_one(
         {"_id": notification_id},
-        {"$set": {"status": "failed", "error": error, "sent_at": datetime.datetime.now(datetime.timezone.utc)}}
+        {
+            "$set": {
+                "status": "failed",
+                "error": error,
+                "sent_at": datetime.datetime.now(datetime.timezone.utc),
+            }
+        },
     )
 
 
 async def get_pending_notifications(limit: int = 50) -> list[dict]:
-    cursor = NOTIFICATION_COL.find({"status": "pending"}).sort("priority", -1).limit(limit)
+    cursor = (
+        NOTIFICATION_COL.find({"status": "pending"}).sort("priority", -1).limit(limit)
+    )
     return [doc async for doc in cursor]
 
 
@@ -97,7 +114,9 @@ async def get_user_notifications(
 async def clear_user_notifications(user_id: int):
     result = await NOTIFICATION_COL.delete_many({"user_id": user_id, "status": "sent"})
     if result.deleted_count:
-        logger.info(f"Cleared {result.deleted_count} sent notifications for user {user_id}")
+        logger.info(
+            f"Cleared {result.deleted_count} sent notifications for user {user_id}"
+        )
 
 
 async def get_user_preferences(user_id: int) -> dict:
@@ -140,7 +159,9 @@ async def get_user_notification_preferences(user_id: int) -> bool:
     return len(disabled) == 0
 
 
-async def set_user_notification_preference(user_id: int, notification_type: str, enabled: bool):
+async def set_user_notification_preference(
+    user_id: int, notification_type: str, enabled: bool
+):
     """Enable or disable a notification type (or 'all' for all)."""
     if notification_type == "all":
         if enabled:
@@ -162,7 +183,11 @@ async def set_user_notification_preference(user_id: int, notification_type: str,
 
 
 async def cleanup_old_notifications(days: int = 30):
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        days=days
+    )
     result = await NOTIFICATION_COL.delete_many({"created_at": {"$lt": cutoff}})
     if result.deleted_count:
-        logger.info(f"Cleaned {result.deleted_count} notifications older than {days} days")
+        logger.info(
+            f"Cleaned {result.deleted_count} notifications older than {days} days"
+        )

@@ -13,31 +13,79 @@ logger = logging.getLogger(__name__)
 BACKUP_COL = db["backup_jobs"]
 
 EXPORT_COLLECTIONS = [
-    "users", "files", "channels", "shorteners", "ads", "analytics_events",
-    "payments", "upi_pending", "sub_bots", "scheduled_posts", "templates",
-    "repost_jobs", "channel_stats", "transactions", "premium_users",
-    "premium_plans", "referrals", "referral_rewards", "store_products",
-    "store_orders", "coupons", "ad_impressions", "ad_clicks",
-    "published_posts", "translations", "user_language",
+    "users",
+    "files",
+    "channels",
+    "shorteners",
+    "ads",
+    "analytics_events",
+    "payments",
+    "upi_pending",
+    "sub_bots",
+    "scheduled_posts",
+    "templates",
+    "repost_jobs",
+    "channel_stats",
+    "transactions",
+    "premium_users",
+    "premium_plans",
+    "referrals",
+    "referral_rewards",
+    "store_products",
+    "store_orders",
+    "coupons",
+    "ad_impressions",
+    "ad_clicks",
+    "published_posts",
+    "translations",
+    "user_language",
 ]
 
 IMPORT_COLLECTIONS = [
-    "users", "files", "channels", "shorteners", "ads",
-    "payments", "upi_pending", "sub_bots", "scheduled_posts", "templates",
-    "repost_jobs", "channel_stats", "transactions", "premium_users",
-    "premium_plans", "referrals", "referral_rewards", "store_products",
-    "store_orders", "coupons", "published_posts", "translations", "user_language",
+    "users",
+    "files",
+    "channels",
+    "shorteners",
+    "ads",
+    "payments",
+    "upi_pending",
+    "sub_bots",
+    "scheduled_posts",
+    "templates",
+    "repost_jobs",
+    "channel_stats",
+    "transactions",
+    "premium_users",
+    "premium_plans",
+    "referrals",
+    "referral_rewards",
+    "store_products",
+    "store_orders",
+    "coupons",
+    "published_posts",
+    "translations",
+    "user_language",
 ]
 
 BACKUP_EXCLUDE_COLLECTIONS = {
-    "processed_updates", "runtime_lock", "active_deliveries",
-    "callback_tokens", "callback_execution_log", "state_transitions",
-    "notification_queue", "queue_tasks", "diagnostics_logs",
-    "error_audit_log", "event_audit_log", "admin_audit_log",
+    "processed_updates",
+    "runtime_lock",
+    "active_deliveries",
+    "callback_tokens",
+    "callback_execution_log",
+    "state_transitions",
+    "notification_queue",
+    "queue_tasks",
+    "diagnostics_logs",
+    "error_audit_log",
+    "event_audit_log",
+    "admin_audit_log",
 }
 
 
-async def create_backup(created_by: int | None = None, include_all: bool = False) -> dict[str, Any]:
+async def create_backup(
+    created_by: int | None = None, include_all: bool = False
+) -> dict[str, Any]:
     backup_id = f"backup_{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     backup_data: dict[str, Any] = {
         "backup_id": backup_id,
@@ -53,7 +101,8 @@ async def create_backup(created_by: int | None = None, include_all: bool = False
     export_list = list(EXPORT_COLLECTIONS)
     if include_all:
         export_list = [
-            c async for c in db.list_collection_names()
+            c
+            async for c in db.list_collection_names()
             if c not in BACKUP_EXCLUDE_COLLECTIONS
         ]
 
@@ -70,14 +119,16 @@ async def create_backup(created_by: int | None = None, include_all: bool = False
         except Exception as e:
             logger.error(f"Failed to backup collection {col_name}: {e}")
 
-    await BACKUP_COL.insert_one({
-        "backup_id": backup_id,
-        "status": "completed",
-        "collections_count": len(backup_data["collections"]),
-        "total_documents": sum(len(v) for v in backup_data["collections"].values()),
-        "created_at": backup_data["created_at"],
-        "created_by": created_by,
-    })
+    await BACKUP_COL.insert_one(
+        {
+            "backup_id": backup_id,
+            "status": "completed",
+            "collections_count": len(backup_data["collections"]),
+            "total_documents": sum(len(v) for v in backup_data["collections"].values()),
+            "created_at": backup_data["created_at"],
+            "created_by": created_by,
+        }
+    )
 
     filepath = os.path.join("backups", f"{backup_id}.json")
     os.makedirs("backups", exist_ok=True)
@@ -94,7 +145,9 @@ async def create_backup(created_by: int | None = None, include_all: bool = False
     return backup_data
 
 
-async def restore_backup(backup_data: dict[str, Any], dry_run: bool = True) -> dict[str, Any]:
+async def restore_backup(
+    backup_data: dict[str, Any], dry_run: bool = True
+) -> dict[str, Any]:
     results: dict[str, Any] = {
         "collections_restored": 0,
         "documents_restored": 0,
@@ -103,7 +156,9 @@ async def restore_backup(backup_data: dict[str, Any], dry_run: bool = True) -> d
 
     for col_name, docs in backup_data.get("collections", {}).items():
         if col_name not in IMPORT_COLLECTIONS:
-            logger.warning(f"Skipping restore of {col_name}: not in allowed import list")
+            logger.warning(
+                f"Skipping restore of {col_name}: not in allowed import list"
+            )
             continue
 
         try:
@@ -114,16 +169,18 @@ async def restore_backup(backup_data: dict[str, Any], dry_run: bool = True) -> d
                     doc["_id"] = str(doc["_id"])
                 try:
                     if not dry_run:
-                        await col.replace_one(
-                            {"_id": doc["_id"]}, doc, upsert=True
-                        )
+                        await col.replace_one({"_id": doc["_id"]}, doc, upsert=True)
                     restored += 1
                 except Exception as doc_err:
-                    results["errors"].append(f"Failed to restore doc in {col_name}: {doc_err}")
+                    results["errors"].append(
+                        f"Failed to restore doc in {col_name}: {doc_err}"
+                    )
 
             results["collections_restored"] += 1
             results["documents_restored"] += restored
-            logger.info(f"Restored {restored} documents to {col_name} (dry_run={dry_run})")
+            logger.info(
+                f"Restored {restored} documents to {col_name} (dry_run={dry_run})"
+            )
         except Exception as e:
             results["errors"].append(f"Failed to restore collection {col_name}: {e}")
 

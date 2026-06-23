@@ -147,7 +147,7 @@ class TestLayoutSystem:
         """Layout D: download + comments + reactions."""
         layout = "layout_d"
         download_files = [{"label": "Download", "token": "dl_a"}]
-        reactions = ["\u2764\uFE0F", "\U0001F525"]
+        reactions = ["\u2764\ufe0f", "\U0001f525"]
         comments_url = "https://t.me/discussion"
         assert layout == "layout_d"
         assert len(download_files) == 1
