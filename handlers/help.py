@@ -24,15 +24,14 @@ HELP_SECTIONS = {
     "posts": {
         "title": "📝 Create Posts",
         "text": (
-            "**Post Builder V2:**\n\n"
-            "• `/newpost` — Start creating a new channel post\n"
-            "• Select target channel\n"
-            "• Upload poster (photo or video)\n"
-            "• Add caption with formatting\n"
-            "• Attach download files (auto-generates deep links)\n"
-            "• Choose layout (A/B/C/D)\n"
-            "• Configure reactions and comments\n"
-            "• Preview and publish or schedule"
+            "**Post Builder Studio:**\n\n"
+            "• `/newpost` or `/postbuilder` — Launch the visual Post Builder Web App\n"
+            "• Select target channel(s)\n"
+            "• Upload poster (JPG, PNG, WEBP)\n"
+            "• Auto-Fit Image: Choose ratios (1:1, 9:16, 16:9, 4:5) with custom Blur Background or Center Crop\n"
+            "• Add movie details & description\n"
+            "• Build up to 8 redirect click-tracking buttons (deep links / URLs)\n"
+            "• Publish directly, schedule for later, or enable recurring Auto-Reposts"
         ),
     },
     "movie": {

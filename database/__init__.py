@@ -26,6 +26,7 @@ from database.mongo import (
     scheduled_posts_col,
     templates_col,
     repost_jobs_col,
+    posts_col,
     init_db,
 )
 from database.links import (
@@ -243,6 +244,7 @@ __all__ = [
     "scheduled_posts_col",
     "templates_col",
     "repost_jobs_col",
+    "posts_col",
     "init_db",
     "create_ad",
     "get_ad",

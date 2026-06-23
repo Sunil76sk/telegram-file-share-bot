@@ -16,6 +16,7 @@ DEFAULT_COMMANDS = [
     {"command": "referral", "description": "View referral link and rewards"},
     {"command": "share", "description": "Alias for /referral"},
     {"command": "newpost", "description": "Create a new channel post"},
+    {"command": "postbuilder", "description": "Open Post Builder Studio"},
     {"command": "schedule", "description": "View scheduled posts"},
     {"command": "reposts", "description": "View auto-reposting jobs"},
     {"command": "templates", "description": "Manage post templates"},

@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Post Builder — Creator Studio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-grad: linear-gradient(135deg, #090613 0%, #0d091a 50%, #05030a 100%);
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.06);
+            --accent-primary: #8a2be2;
+            --accent-secondary: #00ffff;
+            --accent-grad: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            --text-primary: #ffffff;
+            --text-secondary: #9f9baa;
+            --text-muted: #6b677a;
+            --success: #00e676;
+            --error: #ff1744;
+            --panel-width: 580px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-grad);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 20px;
+            overflow-x: hidden;
+        }
+
+        /* Scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.01);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .app-container {
+            width: 1200px;
+            max-width: 100%;
+            display: flex;
+            gap: 30px;
+            margin: 0 auto;
+        }
+
+        /* Left Edit Panel */
+        .edit-panel {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 35px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Right Preview Panel */
+        .preview-panel-container {
+            width: 440px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            position: sticky;
+            top: 40px;
+        }
+
+        .header-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 35px;
+        }
+
+        .logo-container {
+            width: 48px;
+            height: 48px;
+            border-radius: 14px;
+            background: rgba(138, 43, 226, 0.15);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-container svg {
+            width: 26px;
+            height: 26px;
+            fill: url(#logo-grad);
+        }
+
+        .logo-text h1 {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+            background: var(--accent-grad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-text p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Step Card styling */
+        .step-section {
+            margin-bottom: 35px;
+            position: relative;
+        }
+
+        .step-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .step-num {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--accent-grad);
+            color: #0c0914;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        /* Media Uploader */
+        .uploader-area {
+            border: 2px dashed rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: rgba(255, 255, 255, 0.01);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .uploader-area:hover {
+            border-color: var(--accent-primary);
+            background: rgba(138, 43, 226, 0.03);
+        }
+
+        .uploader-area svg {
+            width: 48px;
+            height: 48px;
+            stroke: var(--text-secondary);
+            stroke-width: 1.5;
+            fill: none;
+            transition: stroke 0.3s;
+        }
+
+        .uploader-area:hover svg {
+            stroke: var(--accent-secondary);
+        }
+
+        .uploader-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .uploader-subtext {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Aspect ratio selection */
+        .ratio-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn-ratio {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 14px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-ratio:hover {
+            border-color: rgba(255, 255, 255, 0.15);
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+        }
+
+        .btn-ratio.active {
+            background: rgba(138, 43, 226, 0.15);
+            border-color: var(--accent-primary);
+            color: #ffffff;
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.2);
+        }
+
+        /* Form Inputs */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-group.full-width {
+            grid-column: span 2;
+        }
+
+        label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        input, textarea, select {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            border-color: var(--accent-secondary);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.1);
+        }
+
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+
+        /* Buttons Manager */
+        .btn-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+
+        .btn-row input {
+            flex: 1;
+        }
+
+        .btn-icon {
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
+            border-radius: 12px;
+            background: rgba(255, 23, 68, 0.1);
+            border: 1px solid rgba(255, 23, 68, 0.2);
+            color: var(--error);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-icon:hover {
+            background: var(--error);
+            color: #ffffff;
+            transform: scale(1.05);
+        }
+
+        .btn-add {
+            background: rgba(0, 255, 255, 0.06);
+            border: 1px dashed rgba(0, 255, 255, 0.2);
+            color: var(--accent-secondary);
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-add:hover {
+            background: rgba(0, 255, 255, 0.1);
+            border-color: var(--accent-secondary);
+        }
+
+        /* Actions Grid */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .actions-grid.full-width {
+            grid-template-columns: 1fr;
+        }
+
+        .btn-action {
+            padding: 16px 20px;
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-grad);
+            color: #0c0914;
+            box-shadow: 0 4px 20px rgba(138, 43, 226, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 255, 255, 0.3), 0 0 15px rgba(138, 43, 226, 0.3);
+            color: #ffffff;
+        }
+
+        .btn-secondary-action {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-secondary);
+        }
+
+        .btn-secondary-action:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+        }
+
+        .btn-danger {
+            background: rgba(255, 23, 68, 0.1);
+            border: 1px solid rgba(255, 23, 68, 0.2);
+            color: var(--error);
+        }
+
+        .btn-danger:hover {
+            background: var(--error);
+            color: #ffffff;
+        }
+
+        /* Telegram Mock Preview style */
+        .telegram-preview {
+            background: #182533;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            padding: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .preview-header {
+            font-size: 15px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 2px;
+        }
+
+        .telegram-channel-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 12px;
+        }
+
+        .channel-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #0088cc, #005580);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .channel-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .channel-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #5288c1;
+        }
+
+        .channel-status {
+            font-size: 11px;
+            color: #7f91a4;
+        }
+
+        .post-body {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .post-text {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #e5edf5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .post-image-container {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            display: none;
+            background: #0d1218;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .post-image {
+            width: 100%;
+            height: auto;
+            max-height: 380px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .preview-buttons-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .preview-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 12px;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: background 0.2s;
+        }
+
+        .preview-btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+        }
+
+        /* Features List Box */
+        .features-box {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 22px 25px;
+        }
+
+        .features-box h3 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--accent-secondary);
+            margin-bottom: 15px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+        }
+
+        .feature-check {
+            color: var(--success);
+            font-weight: 800;
+        }
+
+        /* Modal dialog for scheduling */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            backdrop-filter: blur(8px);
+        }
+
+        .modal-content {
+            background: #0f0c1b;
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 30px;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);
+            animation: modalScale 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes modalScale {
+            from { transform: scale(0.9) translateY(10px); opacity: 0; }
+            to { transform: scale(1) translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            background: var(--accent-grad);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: rgba(13, 9, 26, 0.95);
+            border: 1px solid var(--accent-primary);
+            border-radius: 12px;
+            padding: 16px 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast-icon {
+            font-size: 18px;
+        }
+
+        .toast-success { border-color: var(--success); }
+        .toast-success .toast-icon { color: var(--success); }
+        .toast-error { border-color: var(--error); }
+        .toast-error .toast-icon { color: var(--error); }
+
+        /* Hidden elements */
+        #media-input {
+            display: none;
+        }
+
+        .drafts-list {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .draft-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .draft-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .draft-name {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .draft-date {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* Auto-fit layout list */
+        .preview-layouts-section {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 22px 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .preview-layouts-section h3 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--accent-secondary);
+        }
+
+        .layout-thumbnails {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .layout-thumbnail {
+            background: #0d1218;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            aspect-ratio: 1/1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .layout-thumbnail.story { aspect-ratio: 9/16; }
+        .layout-thumbnail.square { aspect-ratio: 1/1; }
+        .layout-thumbnail.landscape { aspect-ratio: 16/9; }
+        .layout-thumbnail.portrait { aspect-ratio: 4/5; }
+
+        .layout-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .layout-thumbnail span {
+            position: absolute;
+            bottom: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 2px 5px;
+            border-radius: 4px;
+            color: #ffffff;
+            pointer-events: none;
+        }
+
+        .layout-thumbnail:hover {
+            border-color: var(--accent-secondary);
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- SVG Definitions for Gradients -->
+        <svg style="width:0;height:0;position:absolute;">
+            <defs>
+                <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#00ffff;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#8a2be2;stop-opacity:1" />
+                </linearGradient>
+            </defs>
+        </svg>
+
+        <!-- Left Form Panel -->
+        <div class="edit-panel">
+            <div class="header-section">
+                <div class="logo-container">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.02-1.96 1.25-5.54 3.69-.52.36-.99.53-1.41.52-.46-.01-1.35-.26-2.01-.48-.81-.27-1.46-.42-1.4-.88.03-.24.37-.49 1.02-.75 3.99-1.74 6.66-2.88 7.99-3.43 3.8-1.57 4.59-1.84 5.1-.19-.04.09-.13.31-.2.53z"/>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>Post Builder</h1>
+                    <p>Create professional channel posts with deep links & auto-fit images</p>
+                </div>
+            </div>
+
+            <!-- Form -->
+            <form id="builder-form" onsubmit="event.preventDefault();">
+                <!-- Step 1: Select Media -->
+                <div class="step-section">
+                    <div class="step-title">
+                        <div class="step-num">1</div>
+                        Select Media
+                    </div>
+                    <div class="uploader-area" onclick="document.getElementById('media-input').click();" id="uploader-box">
+                        <svg viewBox="0 0 24 24">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        <div class="uploader-text" id="uploader-main-text">Upload Poster Image</div>
+                        <div class="uploader-subtext">Supports JPG, PNG, WEBP. Max size 10MB</div>
+                        <input type="file" id="media-input" accept="image/*">
+                    </div>
+                </div>
+
+                <!-- Step 2: Image Fit & Aspect Ratio -->
+                <div class="step-section">
+                    <div class="step-title">
+                        <div class="step-num">2</div>
+                        Image Fit & Aspect Ratio
+                    </div>
+                    <div class="ratio-grid">
+                        <button type="button" class="btn-ratio active" data-ratio="original">Original</button>
+                        <button type="button" class="btn-ratio" data-ratio="9:16">9:16 (Story)</button>
+                        <button type="button" class="btn-ratio" data-ratio="1:1">1:1 (Square)</button>
+                        <button type="button" class="btn-ratio" data-ratio="16:9">16:9 (Landscape)</button>
+                        <button type="button" class="btn-ratio" data-ratio="4:5">4:5 (Portrait)</button>
+                    </div>
+
+                    <div style="display:flex;gap:20px;align-items:center;">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+                            <input type="radio" name="fit_style" value="blur" checked style="width:18px;height:18px;">
+                            Auto Blur Background (Best Fit)
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+                            <input type="radio" name="fit_style" value="crop" style="width:18px;height:18px;">
+                            Auto Center Crop
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Step 3: Post Content -->
+                <div class="step-section">
+                    <div class="step-title">
+                        <div class="step-num">3</div>
+                        Post Content (Movie Template)
+                    </div>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label>Movie Name</label>
+                            <input type="text" id="movie-name" placeholder="e.g. Bhooth Bangla" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Release Year</label>
+                            <input type="text" id="movie-year" placeholder="e.g. 2026">
+                        </div>
+                        <div class="input-group">
+                            <label>Rating (Out of 10)</label>
+                            <input type="text" id="movie-rating" placeholder="e.g. 8.5">
+                        </div>
+                        <div class="input-group">
+                            <label>Language</label>
+                            <input type="text" id="movie-lang" placeholder="e.g. Hindi, English">
+                        </div>
+                        <div class="input-group">
+                            <label>Genre</label>
+                            <input type="text" id="movie-genre" placeholder="e.g. Action, Sci-Fi">
+                        </div>
+                        <div class="input-group">
+                            <label>Duration</label>
+                            <input type="text" id="movie-duration" placeholder="e.g. 2h 15min">
+                        </div>
+                        <div class="input-group full-width">
+                            <label>Description / Review</label>
+                            <textarea id="movie-desc" placeholder="Write a short summary or review here..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Buttons Builder -->
+                <div class="step-section">
+                    <div class="step-title">
+                        <div class="step-num">4</div>
+                        Buttons (Deep Links / URLs)
+                    </div>
+                    <div id="buttons-container">
+                        <!-- Dynamic buttons will be added here -->
+                    </div>
+                    <button type="button" class="btn-add" onclick="addButtonRow();">
+                        <span>➕</span> Add Button
+                    </button>
+                </div>
+
+                <!-- Step 5: Publish / Save -->
+                <div class="step-section">
+                    <div class="step-title">
+                        <div class="step-num">5</div>
+                        Preview & Publish
+                    </div>
+                    
+                    <div class="input-group" style="margin-bottom: 20px;">
+                        <label>Target Channel(s)</label>
+                        <select id="channel-selector" multiple style="height: 100px;">
+                            <!-- Dynamic channels -->
+                        </select>
+                        <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Hold Ctrl (or Cmd) to select multiple channels.</p>
+                    </div>
+
+                    <div class="actions-grid">
+                        <button type="button" class="btn-action btn-secondary-action" onclick="saveDraft();">💾 Save Draft</button>
+                        <button type="button" class="btn-action btn-primary" onclick="publishPost();">🚀 Publish Now</button>
+                        <button type="button" class="btn-action btn-secondary-action" onclick="openScheduleModal();">📅 Schedule Post</button>
+                        <button type="button" class="btn-action btn-secondary-action" onclick="openRepostModal();">🔄 Auto Repost</button>
+                    </div>
+                </div>
+
+                <!-- Saved Drafts Section -->
+                <div class="step-section" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top:25px;">
+                    <label>Saved Drafts</label>
+                    <div class="drafts-list" id="drafts-list-container">
+                        <!-- Dynamic drafts -->
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Right Preview Column -->
+        <div class="preview-panel-container">
+            <div class="preview-header">Preview (Telegram Style)</div>
+            <div class="telegram-preview">
+                <div class="telegram-channel-header">
+                    <div class="channel-avatar">🎬</div>
+                    <div class="channel-info">
+                        <div class="channel-name" id="preview-channel-name">Movie Channel</div>
+                        <div class="channel-status">forwarded message</div>
+                    </div>
+                </div>
+                <div class="post-body">
+                    <div class="post-text" id="preview-post-text">
+<!-- Dynamic text template output -->
+                    </div>
+                    <div class="post-image-container" id="preview-image-box">
+                        <img src="" class="post-image" id="preview-img-element" alt="Poster Preview">
+                    </div>
+                </div>
+                <div class="preview-buttons-grid" id="preview-buttons-container">
+                    <!-- Dynamic preview buttons -->
+                </div>
+            </div>
+
+            <!-- Auto Fit Aspect Ratio Thumbnails -->
+            <div class="preview-layouts-section">
+                <h3>Auto-Fit Aspect Ratios</h3>
+                <div class="layout-thumbnails">
+                    <div class="layout-thumbnail square" onclick="setRatio('1:1')">
+                        <img src="" class="ratio-thumb-img" id="thumb-1-1" style="display:none;">
+                        <span>1:1</span>
+                    </div>
+                    <div class="layout-thumbnail story" onclick="setRatio('9:16')">
+                        <img src="" class="ratio-thumb-img" id="thumb-9-16" style="display:none;">
+                        <span>9:16</span>
+                    </div>
+                    <div class="layout-thumbnail landscape" onclick="setRatio('16:9')">
+                        <img src="" class="ratio-thumb-img" id="thumb-16-9" style="display:none;">
+                        <span>16:9</span>
+                    </div>
+                    <div class="layout-thumbnail portrait" onclick="setRatio('4:5')">
+                        <img src="" class="ratio-thumb-img" id="thumb-4-5" style="display:none;">
+                        <span>4:5</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Features Box -->
+            <div class="features-box">
+                <h3>Key Features</h3>
+                <div class="feature-item">
+                    <span class="feature-check">✓</span> Upload any image (JPG, PNG, WEBP)
+                </div>
+                <div class="feature-item">
+                    <span class="feature-check">✓</span> Auto-fit to 9:16, 1:1, 16:9, 4:5 or custom
+                </div>
+                <div class="feature-item">
+                    <span class="feature-check">✓</span> Deep link buttons support
+                </div>
+                <div class="feature-item">
+                    <span class="feature-check">✓</span> Live preview in Telegram style
+                </div>
+                <div class="feature-item">
+                    <span class="feature-check">✓</span> Save as draft or schedule
+                </div>
+                <div class="feature-item">
+                    <span class="feature-check">✓</span> Auto blur-background logic (no stretching)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Modal -->
+    <div class="modal" id="schedule-modal" onclick="if(event.target===this) closeScheduleModal();">
+        <div class="modal-content">
+            <div class="modal-header">📅 Schedule Post</div>
+            <div class="input-group" style="margin-bottom: 20px;">
+                <label>Date & Time (UTC)</label>
+                <input type="datetime-local" id="schedule-time" required>
+            </div>
+            <div class="actions-grid">
+                <button class="btn-action btn-secondary-action" onclick="closeScheduleModal();">Cancel</button>
+                <button class="btn-action btn-primary" onclick="confirmSchedule();">Schedule</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Repost Modal -->
+    <div class="modal" id="repost-modal" onclick="if(event.target===this) closeRepostModal();">
+        <div class="modal-content">
+            <div class="modal-header">🔄 Configure Auto Repost</div>
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>Repost Interval</label>
+                <select id="repost-interval">
+                    <option value="60">Every 1 Hour</option>
+                    <option value="180">Every 3 Hours</option>
+                    <option value="360">Every 6 Hours</option>
+                    <option value="720">Every 12 Hours</option>
+                    <option value="1440">Every 24 Hours</option>
+                    <option value="custom">Custom Minutes...</option>
+                </select>
+            </div>
+            <div class="input-group" id="custom-repost-group" style="margin-bottom: 15px; display: none;">
+                <label>Custom Interval (Minutes)</label>
+                <input type="number" id="repost-custom-minutes" min="10" placeholder="e.g. 45">
+            </div>
+            <div class="input-group" style="margin-bottom: 20px; flex-direction: row; align-items: center; gap: 8px;">
+                <input type="checkbox" id="repost-delete-old" checked style="width:18px;height:18px;">
+                <label for="repost-delete-old" style="cursor:pointer; text-transform:none;">Delete previous post before reposting</label>
+            </div>
+            <div class="actions-grid">
+                <button class="btn-action btn-secondary-action" onclick="closeRepostModal();">Cancel</button>
+                <button class="btn-action btn-primary" onclick="confirmRepost();">Enable Repost</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast" id="toast">
+        <span class="toast-icon">✓</span>
+        <span id="toast-text">Success message goes here</span>
+    </div>
+
+    <!-- JavaScript logic -->
+    <script>
+        // Extract parameters from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const userId = parseInt(urlParams.get('user_id') || "0");
+        
+        let currentDraftId = null;
+        let uploadedImageFilename = null;
+        let fittedImageFilename = null;
+        let selectedRatio = 'original';
+
+        // Prepopulate default button rows
+        window.addEventListener('DOMContentLoaded', () => {
+            addButtonRow("📂 CLICK HERE TO DOWNLOAD", "t.me/yourbot?start=dl_123456");
+            addButtonRow("🎬 WATCH TUTORIAL VIDEO", "https://t.me/yourchannel/123");
+            loadChannels();
+            loadDrafts();
+            bindFormInputs();
+            updatePreview();
+        });
+
+        function showToast(text, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toast-text');
+            const toastIcon = toast.querySelector('.toast-icon');
+
+            toast.className = `toast ${type === 'success' ? 'toast-success' : 'toast-error'} show`;
+            toastText.textContent = text;
+            toastIcon.textContent = type === 'success' ? '✓' : '❌';
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Form bindings for live preview
+        function bindFormInputs() {
+            const inputs = ['movie-name', 'movie-year', 'movie-rating', 'movie-lang', 'movie-genre', 'movie-duration', 'movie-desc'];
+            inputs.forEach(id => {
+                document.getElementById(id).addEventListener('input', updatePreview);
+            });
+            document.querySelectorAll('input[name="fit_style"]').forEach(el => {
+                el.addEventListener('change', () => {
+                    if (uploadedImageFilename) {
+                        applyImageFit();
+                    }
+                });
+            });
+        }
+
+        // Add Button row dynamically
+        function addButtonRow(text = "", link = "") {
+            const container = document.getElementById('buttons-container');
+            const index = container.children.length;
+            if (index >= 8) {
+                showToast("Maximum 8 URL buttons allowed.", "error");
+                return;
+            }
+
+            const row = document.createElement('div');
+            row.className = 'btn-row';
+            row.innerHTML = `
+                <input type="text" placeholder="Button Label (e.g. Download)" value="${text}" class="btn-label-input" oninput="updatePreview();">
+                <input type="text" placeholder="Link/Deep-Link URL" value="${link}" class="btn-link-input" oninput="updatePreview();">
+                <button type="button" class="btn-icon" onclick="this.parentElement.remove(); updatePreview();">🗑</button>
+            `;
+            container.appendChild(row);
+            updatePreview();
+        }
+
+        // Generate Telegram Style preview text
+        function updatePreview() {
+            const name = document.getElementById('movie-name').value || "Bhooth Bangla";
+            const year = document.getElementById('movie-year').value || "2026";
+            const rating = document.getElementById('movie-rating').value || "6";
+            const lang = document.getElementById('movie-lang').value || "Hindi";
+            const genre = document.getElementById('movie-genre').value || "Comedy, Horror";
+            const duration = document.getElementById('movie-duration').value || "2h 53min";
+            const desc = document.getElementById('movie-desc').value || "An exciting cinematic experience packed with thrills, laughter, and high-energy drama.";
+
+            let text = `🎬 **Movie:** ${name} [${year}]\n`;
+            if (rating) text += `⭐ **Rating:** ${rating}/10\n`;
+            if (lang) {
+                const langTags = lang.split(',').map(l => `#${l.trim()}`).join(' ');
+                text += `🌍 **Language:** ${langTags}\n`;
+            }
+            if (genre) {
+                const genreTags = genre.split(',').map(g => `#${g.trim()}`).join(' ');
+                text += `🎭 **Genre:** ${genreTags}\n`;
+            }
+            if (duration) text += `⏱ **Duration:** ${duration}\n`;
+            text += `\n${desc}\n\n👇 **Download Below:**`;
+
+            // Replace Pyrogram markup with HTML formatting for HTML container preview
+            let formattedHtml = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>');
+
+            document.getElementById('preview-post-text').innerHTML = formattedHtml;
+
+            // Update Preview Buttons
+            const buttonsContainer = document.getElementById('preview-buttons-container');
+            buttonsContainer.innerHTML = '';
+            
+            const btnRows = document.querySelectorAll('.btn-row');
+            btnRows.forEach(row => {
+                const label = row.querySelector('.btn-label-input').value;
+                const link = row.querySelector('.btn-link-input').value;
+                if (label && link) {
+                    const btn = document.createElement('a');
+                    btn.href = link;
+                    btn.className = 'preview-btn';
+                    btn.target = '_blank';
+                    btn.innerHTML = `${label} ↗`;
+                    buttonsContainer.appendChild(btn);
+                }
+            });
+        }
+
+        // Image Handling
+        const mediaInput = document.getElementById('media-input');
+        mediaInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                document.getElementById('uploader-main-text').textContent = "Uploading image...";
+                const res = await fetch('/api/builder/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    uploadedImageFilename = data.filename;
+                    fittedImageFilename = data.filename;
+                    showToast("Image uploaded successfully!");
+                    
+                    // Show in preview and aspect ratio grid
+                    setPreviewImage(`/api/builder/image?name=${data.filename}`);
+                    applyImageFit();
+                } else {
+                    showToast(data.message || "Failed to upload image.", "error");
+                    document.getElementById('uploader-main-text').textContent = "Upload Poster Image";
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Network error uploading image.", "error");
+                document.getElementById('uploader-main-text').textContent = "Upload Poster Image";
+            }
+        });
+
+        function setPreviewImage(url) {
+            const imgBox = document.getElementById('preview-image-box');
+            const img = document.getElementById('preview-img-element');
+            img.src = url;
+            imgBox.style.display = 'block';
+
+            // Update ratio grid thumbnails
+            document.querySelectorAll('.ratio-thumb-img').forEach(el => {
+                el.src = url;
+                el.style.display = 'block';
+            });
+            document.getElementById('uploader-main-text').textContent = "Change Poster Image";
+        }
+
+        async function setRatio(ratio) {
+            selectedRatio = ratio;
+            document.querySelectorAll('.btn-ratio').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-ratio') === ratio);
+            });
+            if (uploadedImageFilename) {
+                await applyImageFit();
+            }
+        }
+
+        // Add ratio click bindings
+        document.querySelectorAll('.btn-ratio').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setRatio(btn.getAttribute('data-ratio'));
+            });
+        });
+
+        async function applyImageFit() {
+            if (!uploadedImageFilename) return;
+            const style = document.querySelector('input[name="fit_style"]:checked').value;
+
+            try {
+                const res = await fetch('/api/builder/fit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: uploadedImageFilename,
+                        ratio: selectedRatio,
+                        style: style
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    fittedImageFilename = data.filename;
+                    document.getElementById('preview-img-element').src = `/api/builder/image?name=${data.filename}`;
+                } else {
+                    showToast(data.message || "Fitting error", "error");
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("Error fitting image", "error");
+            }
+        }
+
+        // Channels fetch
+        async function loadChannels() {
+            try {
+                const res = await fetch(`/api/builder/channels?user_id=${userId}`);
+                const channels = await res.json();
+                const selector = document.getElementById('channel-selector');
+                selector.innerHTML = '';
+                channels.forEach(ch => {
+                    const opt = document.createElement('option');
+                    opt.value = ch.channel_id;
+                    opt.textContent = ch.channel_title || ch.title || ch.channel_id;
+                    selector.appendChild(opt);
+                });
+                if (channels.length > 0) {
+                    document.getElementById('preview-channel-name').textContent = channels[0].channel_title || channels[0].title;
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Drafts management
+        async function loadDrafts() {
+            try {
+                const res = await fetch(`/api/builder/drafts?user_id=${userId}`);
+                const drafts = await res.json();
+                const container = document.getElementById('drafts-list-container');
+                container.innerHTML = '';
+                if (drafts.length === 0) {
+                    container.innerHTML = '<div style="font-size:12px;color:var(--text-muted)">No saved drafts.</div>';
+                    return;
+                }
+                drafts.forEach(d => {
+                    const el = document.createElement('div');
+                    el.className = 'draft-item';
+                    const date = new Date(d.updated_at).toLocaleDateString();
+                    el.innerHTML = `
+                        <div>
+                            <div class="draft-name">${d.post_data.title || "Untitled Draft"}</div>
+                            <div class="draft-date">Saved on ${date}</div>
+                        </div>
+                        <button type="button" class="btn-icon" style="width:32px;height:32px;min-width:32px;border-radius:8px;" onclick="event.stopPropagation(); deleteDraft('${d._id}');">🗑</button>
+                    `;
+                    el.addEventListener('click', () => loadDraftIntoForm(d));
+                    container.appendChild(el);
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function loadDraftIntoForm(draft) {
+            currentDraftId = draft._id;
+            const data = draft.post_data;
+            document.getElementById('movie-name').value = data.movie_name || '';
+            document.getElementById('movie-year').value = data.movie_year || '';
+            document.getElementById('movie-rating').value = data.movie_rating || '';
+            document.getElementById('movie-lang').value = data.movie_lang || '';
+            document.getElementById('movie-genre').value = data.movie_genre || '';
+            document.getElementById('movie-duration').value = data.movie_duration || '';
+            document.getElementById('movie-desc').value = data.description || '';
+            
+            uploadedImageFilename = data.image_path;
+            fittedImageFilename = data.fitted_image_path || data.image_path;
+            selectedRatio = data.ratio || 'original';
+
+            if (uploadedImageFilename) {
+                setPreviewImage(`/api/builder/image?name=${fittedImageFilename}`);
+            } else {
+                document.getElementById('preview-image-box').style.display = 'none';
+            }
+
+            document.querySelectorAll('.btn-ratio').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-ratio') === selectedRatio);
+            });
+
+            const container = document.getElementById('buttons-container');
+            container.innerHTML = '';
+            if (data.buttons && data.buttons.length > 0) {
+                data.buttons.forEach(btn => {
+                    addButtonRow(btn.text, btn.url);
+                });
+            } else {
+                addButtonRow("📂 CLICK HERE TO DOWNLOAD", "t.me/yourbot?start=dl_123456");
+                addButtonRow("🎬 WATCH TUTORIAL VIDEO", "https://t.me/yourchannel/123");
+            }
+
+            showToast("Draft loaded into form!");
+            updatePreview();
+        }
+
+        async function saveDraft() {
+            const name = document.getElementById('movie-name').value;
+            if (!name) {
+                showToast("Movie Name is required to save a draft.", "error");
+                return;
+            }
+
+            const buttons = [];
+            document.querySelectorAll('.btn-row').forEach(row => {
+                const label = row.querySelector('.btn-label-input').value;
+                const link = row.querySelector('.btn-link-input').value;
+                if (label && link) buttons.push({ text: label, url: link });
+            });
+
+            const style = document.querySelector('input[name="fit_style"]:checked').value;
+
+            const postData = {
+                title: name,
+                movie_name: name,
+                movie_year: document.getElementById('movie-year').value,
+                movie_rating: document.getElementById('movie-rating').value,
+                movie_lang: document.getElementById('movie-lang').value,
+                movie_genre: document.getElementById('movie-genre').value,
+                movie_duration: document.getElementById('movie-duration').value,
+                description: document.getElementById('movie-desc').value,
+                image_path: uploadedImageFilename,
+                fitted_image_path: fittedImageFilename,
+                ratio: selectedRatio,
+                style: style,
+                buttons: buttons
+            };
+
+            try {
+                const res = await fetch('/api/builder/draft', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        draft_id: currentDraftId,
+                        post_data: postData
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("Draft saved successfully!");
+                    loadDrafts();
+                } else {
+                    showToast(data.message || "Failed to save draft.", "error");
+                }
+            } catch (err) {
+                showToast("Error saving draft.", "error");
+            }
+        }
+
+        async function deleteDraft(draftId) {
+            try {
+                const res = await fetch(`/api/builder/draft?user_id=${userId}&draft_id=${draftId}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("Draft deleted.");
+                    if (currentDraftId === draftId) currentDraftId = null;
+                    loadDrafts();
+                } else {
+                    showToast(data.message || "Failed to delete.", "error");
+                }
+            } catch (err) {
+                showToast("Error deleting draft.", "error");
+            }
+        }
+
+        // Publish action
+        async function publishPost() {
+            const selector = document.getElementById('channel-selector');
+            const selectedChannels = Array.from(selector.selectedOptions).map(opt => parseInt(opt.value));
+            if (selectedChannels.length === 0) {
+                showToast("Please select at least one channel.", "error");
+                return;
+            }
+
+            const name = document.getElementById('movie-name').value;
+            if (!name) {
+                showToast("Movie Name is required.", "error");
+                return;
+            }
+
+            const buttons = [];
+            document.querySelectorAll('.btn-row').forEach(row => {
+                const label = row.querySelector('.btn-label-input').value;
+                const link = row.querySelector('.btn-link-input').value;
+                if (label && link) buttons.push({ text: label, url: link });
+            });
+
+            try {
+                showToast("Publishing post now...");
+                const res = await fetch('/api/builder/publish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        channel_ids: selectedChannels,
+                        title: name,
+                        caption: document.getElementById('preview-post-text').innerText,
+                        image_path: fittedImageFilename,
+                        buttons: buttons
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("Post published successfully! 🚀");
+                    if (window.Telegram && window.Telegram.WebApp) {
+                        setTimeout(() => window.Telegram.WebApp.close(), 1500);
+                    }
+                } else {
+                    showToast(data.message || "Failed to publish post.", "error");
+                }
+            } catch (err) {
+                showToast("Error publishing post.", "error");
+            }
+        }
+
+        // Scheduling Modal logic
+        function openScheduleModal() {
+            const selector = document.getElementById('channel-selector');
+            if (Array.from(selector.selectedOptions).length === 0) {
+                showToast("Please select target channels first.", "error");
+                return;
+            }
+            document.getElementById('schedule-modal').style.display = 'flex';
+        }
+
+        function closeScheduleModal() {
+            document.getElementById('schedule-modal').style.display = 'none';
+        }
+
+        async function confirmSchedule() {
+            const timeStr = document.getElementById('schedule-time').value;
+            if (!timeStr) {
+                showToast("Please choose date & time.", "error");
+                return;
+            }
+
+            const publishTime = new Date(timeStr).toISOString();
+
+            const selector = document.getElementById('channel-selector');
+            const selectedChannels = Array.from(selector.selectedOptions).map(opt => parseInt(opt.value));
+            const name = document.getElementById('movie-name').value;
+
+            const buttons = [];
+            document.querySelectorAll('.btn-row').forEach(row => {
+                const label = row.querySelector('.btn-label-input').value;
+                const link = row.querySelector('.btn-link-input').value;
+                if (label && link) buttons.push({ text: label, url: link });
+            });
+
+            try {
+                const res = await fetch('/api/builder/schedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        channel_ids: selectedChannels,
+                        title: name,
+                        caption: document.getElementById('preview-post-text').innerText,
+                        image_path: fittedImageFilename,
+                        buttons: buttons,
+                        publish_time: publishTime
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("Post scheduled successfully! 📅");
+                    closeScheduleModal();
+                    if (window.Telegram && window.Telegram.WebApp) {
+                        setTimeout(() => window.Telegram.WebApp.close(), 1500);
+                    }
+                } else {
+                    showToast(data.message || "Failed to schedule.", "error");
+                }
+            } catch (err) {
+                showToast("Error scheduling post.", "error");
+            }
+        }
+
+        // Repost Modal logic
+        const repostIntervalSelect = document.getElementById('repost-interval');
+        repostIntervalSelect.addEventListener('change', (e) => {
+            document.getElementById('custom-repost-group').style.display = e.target.value === 'custom' ? 'block' : 'none';
+        });
+
+        function openRepostModal() {
+            const selector = document.getElementById('channel-selector');
+            if (Array.from(selector.selectedOptions).length === 0) {
+                showToast("Please select target channels first.", "error");
+                return;
+            }
+            document.getElementById('repost-modal').style.display = 'flex';
+        }
+
+        function closeRepostModal() {
+            document.getElementById('repost-modal').style.display = 'none';
+        }
+
+        async function confirmRepost() {
+            const selector = document.getElementById('channel-selector');
+            const selectedChannels = Array.from(selector.selectedOptions).map(opt => parseInt(opt.value));
+            const name = document.getElementById('movie-name').value;
+            
+            let interval = repostIntervalSelect.value;
+            if (interval === 'custom') {
+                interval = parseInt(document.getElementById('repost-custom-minutes').value);
+                if (!interval || interval < 10) {
+                    showToast("Interval must be at least 10 minutes.", "error");
+                    return;
+                }
+            } else {
+                interval = parseInt(interval);
+            }
+
+            const deleteOld = document.getElementById('repost-delete-old').checked;
+
+            const buttons = [];
+            document.querySelectorAll('.btn-row').forEach(row => {
+                const label = row.querySelector('.btn-label-input').value;
+                const link = row.querySelector('.btn-link-input').value;
+                if (label && link) buttons.push({ text: label, url: link });
+            });
+
+            try {
+                const res = await fetch('/api/builder/repost', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        channel_ids: selectedChannels,
+                        title: name,
+                        caption: document.getElementById('preview-post-text').innerText,
+                        image_path: fittedImageFilename,
+                        buttons: buttons,
+                        interval_minutes: interval,
+                        delete_old: deleteOld
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast("Auto repost configured and enabled! 🔄");
+                    closeRepostModal();
+                    if (window.Telegram && window.Telegram.WebApp) {
+                        setTimeout(() => window.Telegram.WebApp.close(), 1500);
+                    }
+                } else {
+                    showToast(data.message || "Failed to configure repost.", "error");
+                }
+            } catch (err) {
+                showToast("Error configuring repost.", "error");
+            }
+        }
+    </script>
+</body>
+</html>

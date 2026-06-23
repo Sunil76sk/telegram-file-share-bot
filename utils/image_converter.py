@@ -14,15 +14,6 @@ class ImageConverter:
     ) -> bytes:
         """
         Convert any image to 1080x1080 square.
-        
-        Steps:
-        1. Open image
-        2. Calculate aspect ratio
-        3. Resize to fit within 1080x1080 (keep ratio)
-        4. Create 1080x1080 background
-        5. Paste resized image centered
-        6. Apply background style
-        7. Return as JPEG bytes
         """
         def _process():
             # Open the original image
@@ -63,42 +54,115 @@ class ImageConverter:
 
         return await asyncio.to_thread(_process)
 
+    async def fit_image(
+        self,
+        image_bytes: bytes,
+        ratio: str,  # "1:1" | "9:16" | "16:9" | "4:5" | "original"
+        style: str,  # "crop" | "blur"
+    ) -> bytes:
+        """
+        Resize, crop, or blur-fit an image to a target aspect ratio.
+        """
+        def _process():
+            original = Image.open(io.BytesIO(image_bytes))
+            if original.mode != "RGB":
+                original = original.convert("RGB")
+
+            if ratio == "original":
+                out_io = io.BytesIO()
+                original.save(out_io, format="JPEG", quality=90)
+                return out_io.getvalue()
+
+            # Target dimensions
+            dimensions = {
+                "1:1": (1080, 1080),
+                "9:16": (1080, 1920),
+                "16:9": (1920, 1080),
+                "4:5": (1080, 1350)
+            }
+            target_w, target_h = dimensions.get(ratio, (1080, 1080))
+            target_ratio = target_w / target_h
+
+            w, h = original.size
+            orig_ratio = w / h
+
+            if style == "crop":
+                # Crop to fill the target container
+                if orig_ratio > target_ratio:
+                    new_h = target_h
+                    new_w = int(target_h * orig_ratio)
+                    resized = original.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    left = (new_w - target_w) // 2
+                    bg = resized.crop((left, 0, left + target_w, target_h))
+                else:
+                    new_w = target_w
+                    new_h = int(target_w / orig_ratio)
+                    resized = original.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    top = (new_h - target_h) // 2
+                    bg = resized.crop((0, top, target_w, top + target_h))
+            else:
+                # Blur background and contain original image inside target container
+                if orig_ratio > target_ratio:
+                    new_h = target_h
+                    new_w = int(target_h * orig_ratio)
+                    resized = original.resize((new_w, new_h), Image.Resampling.BILINEAR)
+                    left = (new_w - target_w) // 2
+                    cropped = resized.crop((left, 0, left + target_w, target_h))
+                else:
+                    new_w = target_w
+                    new_h = int(target_w / orig_ratio)
+                    resized = original.resize((new_w, new_h), Image.Resampling.BILINEAR)
+                    top = (new_h - target_h) // 2
+                    cropped = resized.crop((0, top, target_w, top + target_h))
+                
+                blurred = cropped.filter(ImageFilter.GaussianBlur(radius=25))
+                enhancer = ImageEnhance.Brightness(blurred)
+                bg = enhancer.enhance(0.5)
+
+                # Fit original inside target container
+                if orig_ratio > target_ratio:
+                    fit_w = target_w
+                    fit_h = int(target_w / orig_ratio)
+                else:
+                    fit_h = target_h
+                    fit_w = int(target_h * orig_ratio)
+                
+                resized_orig = original.resize((fit_w, fit_h), Image.Resampling.LANCZOS)
+                
+                # Paste centered
+                offset_x = (target_w - fit_w) // 2
+                offset_y = (target_h - fit_h) // 2
+                bg.paste(resized_orig, (offset_x, offset_y))
+
+            out_io = io.BytesIO()
+            bg.save(out_io, format="JPEG", quality=90)
+            return out_io.getvalue()
+
+        return await asyncio.to_thread(_process)
+
     def _create_black_bg(self, size: tuple) -> Image.Image:
         """Pure black background RGB(0,0,0)"""
         return Image.new("RGB", size, (0, 0, 0))
 
     def _create_blur_bg(self, original: Image.Image, size: tuple) -> Image.Image:
-        """
-        Steps:
-        1. Resize original to fill 1080x1080 (cover, not contain)
-        2. Apply GaussianBlur radius=20
-        3. Reduce brightness by 40%
-        4. Return as background
-        """
         w, h = original.size
         aspect = w / h
         target_w, target_h = size
 
-        if aspect > 1:  # original is wider than square
-            # Match height to target, scale width larger
+        if aspect > 1:
             new_h = target_h
             new_w = int(target_h * aspect)
             resized = original.resize((new_w, new_h), Image.Resampling.BILINEAR)
-            # Crop width centered
             left = (new_w - target_w) // 2
             cropped = resized.crop((left, 0, left + target_w, target_h))
-        else:  # original is taller than square
-            # Match width to target, scale height larger
+        else:
             new_w = target_w
             new_h = int(target_w / aspect)
             resized = original.resize((new_w, new_h), Image.Resampling.BILINEAR)
-            # Crop height centered
             top = (new_h - target_h) // 2
             cropped = resized.crop((0, top, target_w, top + target_h))
 
-        # Apply blur
         blurred = cropped.filter(ImageFilter.GaussianBlur(radius=20))
-        # Reduce brightness by 40% (factor = 0.6)
         enhancer = ImageEnhance.Brightness(blurred)
         bg = enhancer.enhance(0.6)
         return bg
