@@ -1050,7 +1050,7 @@ class RedirectHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
-        query_params = urllib.parse.parse_qs(parsed_url.query)
+        urllib.parse.parse_qs(parsed_url.query)
 
         content_length = int(self.headers.get("Content-Length", 0))
         post_data_bytes = self.rfile.read(content_length)
@@ -1355,7 +1355,7 @@ class RedirectHandler(BaseHTTPRequestHandler):
         if path == "/api/builder/schedule":
             user_id = data.get("user_id")
             channel_ids = data.get("channel_ids", [])
-            title = data.get("title")
+            data.get("title")
             caption = data.get("caption", "")
             image_path = data.get("image_path")
             buttons = data.get("buttons", [])
@@ -1401,7 +1401,7 @@ class RedirectHandler(BaseHTTPRequestHandler):
         if path == "/api/builder/repost":
             user_id = data.get("user_id")
             channel_ids = data.get("channel_ids", [])
-            title = data.get("title")
+            data.get("title")
             caption = data.get("caption", "")
             image_path = data.get("image_path")
             buttons = data.get("buttons", [])

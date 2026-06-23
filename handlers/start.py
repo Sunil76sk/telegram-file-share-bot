@@ -44,7 +44,7 @@ async def start_handler(client: Client, message: Message):
             ad = await database.get_ad(ad_id)
             if ad and ad.get("button_url"):
                 await message.reply_text(
-                    f"✨ **Redirecting to Sponsor**\n\nClick the button below to visit the link:",
+                    "✨ **Redirecting to Sponsor**\n\nClick the button below to visit the link:",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [

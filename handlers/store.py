@@ -202,7 +202,6 @@ async def show_categories_menu(
 async def store_category_callback_handler(
     client: Client, callback_query: CallbackQuery
 ):
-    user_id = callback_query.from_user.id
     cat_id = callback_query.matches[0].group(1)
     await callback_query.answer()
 

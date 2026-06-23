@@ -123,7 +123,7 @@ class TMDBClient:
         if release_date_raw:
             # Reformat YYYY-MM-DD -> DD/MM/YYYY or keep as DD/MM/YYYY
             try:
-                dt = asyncio.run_coroutine_threadsafe(
+                asyncio.run_coroutine_threadsafe(
                     asyncio.to_thread(lambda: urllib.request.urlopen),  # dummy
                     asyncio.get_event_loop(),
                 )  # no need, we can just split

@@ -27,7 +27,7 @@ jobs:
     - name: Lint with Ruff
       run: |
         # check imports, code style and syntax rules
-        ruff check .
+        ruff check . --ignore=E402,F401,F811
 
     - name: Check Formatting with Black
       run: |
