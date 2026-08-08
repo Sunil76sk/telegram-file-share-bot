@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "bot": "tsx scripts/bot-runner.ts",
-    "build": "vite build",
+    "build": "vite build && node -e \"import('fs').then(fs => { fs.copyFileSync('index.html', 'dist/client/index.html'); fs.copyFileSync('public/_redirects', 'dist/client/_redirects'); })\"",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
