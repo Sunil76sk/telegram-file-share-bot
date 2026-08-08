@@ -1,6 +1,7 @@
 [build]
   command = "npm run build"
   publish = "dist/client"
+  SECRETS_SCAN_OMIT_PATHS = "handlers/__pycache__"
 
 [[redirects]]
   from = "/*"
