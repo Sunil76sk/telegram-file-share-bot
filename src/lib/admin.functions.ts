@@ -168,7 +168,9 @@ export const getConfig = createServerFn({ method: "GET" })
       backup_join_channel_username: data?.backup_join_channel_username ?? "kannadanewmovie_sk",
       storage_chat_id: data?.storage_chat_id ?? -1003931975466,
       backup_storage_chat_id: data?.backup_storage_chat_id ?? -1003650568162,
-      admin_telegram_ids: data?.admin_telegram_ids?.length ? data.admin_telegram_ids : [846049642],
+      admin_telegram_ids: data?.admin_telegram_ids?.length
+        ? data.admin_telegram_ids
+        : (process.env.ADMIN_IDS ?? "").split(",").map(Number).filter((n) => !isNaN(n) && n > 0),
       bot_username: data?.bot_username ?? "myfileshareskbot",
     };
 
