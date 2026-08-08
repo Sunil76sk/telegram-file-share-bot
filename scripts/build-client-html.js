@@ -6,9 +6,10 @@ const assetsDir = path.resolve("dist/client/assets");
 
 if (fs.existsSync(assetsDir)) {
   const files = fs.readdirSync(assetsDir);
-  const jsFile =
-    files.find((f) => f.startsWith("index-s3-") && f.endsWith(".js")) ||
-    files.find((f) => f.startsWith("index-") && f.endsWith(".js"));
+  const jsFiles = files
+    .filter((f) => f.endsWith(".js") && !f.endsWith(".map"))
+    .sort((a, b) => fs.statSync(path.join(assetsDir, b)).size - fs.statSync(path.join(assetsDir, a)).size);
+  const jsFile = jsFiles[0];
   const cssFile = files.find((f) => f.endsWith(".css"));
 
   const html = `<!DOCTYPE html>
