@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "bot": "tsx scripts/bot-runner.ts",
-    "build": "vite build && node scripts/build-client-html.js",
+    "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",

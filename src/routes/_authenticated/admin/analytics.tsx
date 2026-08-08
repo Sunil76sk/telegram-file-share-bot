@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@/lib/use-server-fn";
 import { useQuery } from "@tanstack/react-query";
 import { AdminShell } from "@/components/AdminShell";
 import { getAdvancedAnalytics } from "@/lib/admin.functions";
